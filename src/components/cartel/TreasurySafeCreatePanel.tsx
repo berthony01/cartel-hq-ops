@@ -334,7 +334,8 @@ export function TreasurySafeCreatePanel({
     !sendAttempted &&
     !!account &&
     review?.preflight.ok === true &&
-    !!predicted;
+    !!predicted &&
+    onRobinhood;
 
   return (
     <div className="min-w-0 space-y-3 rounded-lg border border-border-subtle bg-surface-raised/30 p-4">
@@ -369,6 +370,23 @@ export function TreasurySafeCreatePanel({
               Connect one of your 3 signer wallets to create the treasury Safe.
             </p>
           ) : null}
+          {!account && embedded ? (
+            <div className="min-w-0 space-y-1 rounded-md border border-border-subtle p-2">
+              <p className="text-xs text-foreground">
+                Open CARTEL HQ in Safari or Chrome, or in your wallet’s dapp browser, to connect a wallet.
+              </p>
+              {standaloneUrl ? (
+                <a
+                  href={standaloneUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs font-semibold text-primary underline"
+                >
+                  Open standalone
+                </a>
+              ) : null}
+            </div>
+          ) : null}
 
           {!isWorkspaceOwner ? (
             <p className="text-xs text-muted-foreground">Only the workspace owner can create the Safe.</p>
@@ -378,8 +396,15 @@ export function TreasurySafeCreatePanel({
               Verify existing Safe
             </Button>
           ) : !account ? (
-            <Button size="sm" variant="outline" className="w-full sm:w-auto" onClick={() => void connect()}>
-              Connect wallet
+            <Button
+              size="sm"
+              variant="outline"
+              className="w-full sm:w-auto"
+              disabled={connecting}
+              onClick={() => void connect()}
+            >
+              {connecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : null}
+              {connecting ? "Connecting…" : "Connect wallet"}
             </Button>
           ) : sendAttempted ? (
             <Button
@@ -406,6 +431,34 @@ export function TreasurySafeCreatePanel({
                 Used only to approve this creation transaction. It must be one of your 3 signer
                 wallets. It is not added as another owner.
               </p>
+            </div>
+          ) : null}
+          {account && !onRobinhood && !sendAttempted ? (
+            <div className="min-w-0 space-y-1">
+              <p className="text-xs text-muted-foreground">
+                Your wallet is not on Robinhood Chain. Switch networks before creating the Safe.
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                className="w-full sm:w-auto"
+                disabled={switching || busy}
+                onClick={() => void switchNetwork()}
+              >
+                {switching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" aria-hidden /> : null}
+                {switching ? "Switching…" : "Switch to Robinhood Chain"}
+              </Button>
+            </div>
+          ) : null}
+          {switchNotice ? <p className="text-xs text-destructive">{SWITCH_NOTICE_COPY[switchNotice]}</p> : null}
+          {connectNotice ? (
+            <div className="min-w-0 space-y-0.5">
+              <p className="text-xs text-destructive">{CONNECT_NOTICE_COPY[connectNotice]}</p>
+              {connectNotice === "REOWN_ORIGIN_NOT_ALLOWED" && getConnectorOrigin() ? (
+                <p className="break-all text-[11px] text-muted-foreground">
+                  Website address to allow: {getConnectorOrigin()}
+                </p>
+              ) : null}
             </div>
           ) : null}
           {phase === "awaiting_wallet" ? (
