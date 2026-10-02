@@ -1491,5 +1491,22 @@ check(
   check("WR-12", /html,\s*body \{\s*max-width: 100%;\s*overflow-x: clip;/.test(css) && !/zoom:/.test(css), "horizontal overflow guard, no zoom hack");
 }
 
+{
+  // WR-4c failed instance cleared; WR-5b no raw errors; WR-6b/7b dependencies
+  const ens = appkitCode.slice(appkitCode.indexOf("export async function ensureAppKit"), appkitCode.indexOf("export function getAppKitIfInitialized"));
+  check("WR-4c", /if \(outcome\.appKit\) \{\s*appKitHandle = outcome\.appKit;\s*\} else \{\s*appKitHandle = null;\s*appKitInitPromise = null;/.test(ens) && /wagmiAdapterHandle = null;\s*return \{ appKit: null, notice: "REOWN_WALLETCONNECT_UNAVAILABLE" \}/.test(appkitCode), "failed instance and adapter handle cleared for a fresh explicit retry");
+  const prove = appkitCode.slice(appkitCode.indexOf("export function hasWalletConnectConnector"), appkitCode.indexOf("export async function ensureAppKit"));
+  check("WR-5b", !/console\.|\.message|\.stack/.test(prove), "readiness path never logs or surfaces raw errors");
+  const pkg = JSON.parse(readFileSync("package.json", "utf8"));
+  const ver = (n: string) => JSON.parse(readFileSync(`node_modules/${n}/package.json`, "utf8")).version as string;
+  const [bMaj, bMin] = ver("@base-org/account").split(".").map(Number);
+  const [mMaj, mMin] = ver("@metamask/connect-evm").split(".").map(Number);
+  check("WR-6b", pkg.dependencies["@base-org/account"] === "2.5.13" && pkg.dependencies["@metamask/connect-evm"] === "2.1.1" && bMaj === 2 && (bMin ?? 0) >= 5 && mMaj === 2 && (mMin ?? 0) >= 1, "optional helpers pinned and inside @wagmi/connectors peer ranges");
+  const reown = Object.entries(pkg.dependencies as Record<string, string>).filter(([k]) => k.startsWith("@reown/"));
+  const lock = readFileSync("bun.lock", "utf8");
+  const appkitCopies = (lock.match(/"@reown\/appkit@[^"]+"/g) ?? []).filter((v, i, a) => a.indexOf(v) === i);
+  check("WR-7c", reown.length > 0 && reown.every(([, v]) => v === "1.8.24") && appkitCopies.length === 1 && appkitCopies[0] === '"@reown/appkit@1.8.24"', "all @reown pinned 1.8.24, single AppKit copy in lockfile");
+}
+
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);
