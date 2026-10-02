@@ -1065,3 +1065,20 @@ export async function connectWalletConnectOnRobinhoodChain(): Promise<{
   return { connect, switched };
 }
 
+
+/**
+ * FILE PRELOAD ONLY (browser). Warms the chooser library files after hydration.
+ * Never creates AppKit, never connects, never touches wallet state. Returns a
+ * sanitized boolean; failures are silent because the explicit Connect click
+ * remains authoritative.
+ */
+export async function preloadWalletChooserLibraries(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  try {
+    const { preloadAppKitLibraries } = await import("./reown-appkit-wallet");
+    const result = await preloadAppKitLibraries();
+    return result.ok;
+  } catch {
+    return false;
+  }
+}
