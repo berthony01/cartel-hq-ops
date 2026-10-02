@@ -392,7 +392,14 @@ export async function ensureAppKit(): Promise<{
   }
   const projectId = getReownProjectId();
   if (!projectId) return { appKit: null, notice: "REOWN_NOT_CONFIGURED" };
-  if (appKitHandle) return { appKit: appKitHandle, notice: null };
+  if (appKitHandle) {
+    // Re-prove on every explicit click: a cached chooser is never reopened
+    // with dead WalletConnect tiles.
+    if (!hasWalletConnectConnector(wagmiAdapterHandle)) {
+      return { appKit: null, notice: "REOWN_WALLETCONNECT_UNAVAILABLE" };
+    }
+    return { appKit: appKitHandle, notice: null };
+  }
   if (!appKitInitPromise) appKitInitPromise = runCreateAppKit(projectId);
   const outcome = await appKitInitPromise;
   if (outcome.appKit) {

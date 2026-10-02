@@ -68,6 +68,8 @@ const NOTICE_COPY: Record<WalletConnectorNotice, string> = {
     "Diagnostic code REOWN_MODULE_EVAL_FAILED — the wallet chooser loaded but could not start in this browser. Nothing was connected. Try Chrome or your wallet's dapp browser.",
   REOWN_CUSTOM_ELEMENT_CONFLICT:
     "Diagnostic code REOWN_CUSTOM_ELEMENT_CONFLICT — the wallet interface did not initialize cleanly. Nothing was connected. Reload this page once and try again.",
+  REOWN_WALLETCONNECT_UNAVAILABLE:
+    "Diagnostic code REOWN_WALLETCONNECT_UNAVAILABLE — WalletConnect could not start on this browser. Nothing was connected. Reload the page once and try again, or open CARTEL HQ in your wallet's browser.",
   REOWN_ADAPTER_LOAD_FAILED:
     "Diagnostic code REOWN_ADAPTER_LOAD_FAILED — the wallet connection adapter could not load. Nothing was connected. Reload the page and try again.",
   REOWN_ORIGIN_NOT_ALLOWED:

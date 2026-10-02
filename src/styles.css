@@ -156,6 +156,12 @@
     border-color: var(--color-border);
   }
 
+  html,
+  body {
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
   body {
     background:
       linear-gradient(color-mix(in oklab, var(--gold) 2%, transparent) 1px, transparent 1px),
