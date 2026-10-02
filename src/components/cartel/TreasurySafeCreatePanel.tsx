@@ -92,7 +92,7 @@ const CONNECT_NOTICE_COPY: Record<WalletConnectorNotice, string> = {
   REOWN_CHUNK_FETCH_FAILED: "The wallet connection files are out of date or could not be loaded. Reload this page and try again.",
   REOWN_MODULE_EVAL_FAILED: "The wallet chooser loaded but could not start in this browser. Try Chrome or your wallet's dapp browser.",
   REOWN_CUSTOM_ELEMENT_CONFLICT: "The wallet interface did not initialize cleanly. Reload this page once and try again.",
-  REOWN_WALLETCONNECT_UNAVAILABLE: "WalletConnect could not start on this browser. Reload the page once and try again. If it still fails, open CARTEL HQ in your wallet's browser or another mobile browser.",
+  REOWN_WALLETCONNECT_UNAVAILABLE: "WalletConnect could not start on this device. Reload the page and try again. If it still fails, open CARTEL HQ in your wallet's browser or Chrome.",
   REOWN_ADAPTER_LOAD_FAILED: "The wallet connection adapter could not load. Reload the page and try again.",
   REOWN_ORIGIN_NOT_ALLOWED: "The wallet service refused this website address. It must be allowed in the Reown dashboard.",
   REOWN_PROJECT_ID_INVALID_OR_MISSING: "The wallet service rejected this site's configuration. Nothing was connected.",
