@@ -148,7 +148,8 @@ const CHUNK_FETCH_PATTERNS: readonly RegExp[] = [
 export function isLazyChunkFetchFailure(error: unknown): boolean {
   try {
     if (!(error instanceof TypeError)) return false;
-    const text = String(error.message ?? "");
+    // String(TypeError) yields "TypeError: <message>"; inspected and discarded.
+    const text = String(error);
     return CHUNK_FETCH_PATTERNS.some((pattern) => pattern.test(text));
   } catch {
     return false;
