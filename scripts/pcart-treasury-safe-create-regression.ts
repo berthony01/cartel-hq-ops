@@ -346,6 +346,31 @@ check(
   check("MW-7", !/eth_sendTransaction/.test(p) && /finally\s*\{\s*setConnecting\(false\)/.test(p), "no send in panel; connect guarded by busy state");
 }
 
+// ---- ML: mobile wallet library load-failure recovery ----
+{
+  const r = strip(read("src/lib/reown-appkit-wallet.ts"));
+  const wc = strip(read("src/lib/wallet-connector.ts"));
+  const p = strip(read("src/components/cartel/TreasurySafeCreatePanel.tsx"));
+  const loader = r.slice(r.indexOf("async function loadAppKitLibraries"), r.indexOf("export async function preloadAppKitLibraries"));
+  const i1 = loader.indexOf('await import("@reown/appkit")');
+  const i2 = loader.indexOf('await import("@reown/appkit-adapter-ethers")');
+  const between = loader.slice(i1, i2);
+  check("ML-1", i1 > 0 && i2 > i1 && /catch \(error\)/.test(between) && /REOWN_MODULE_EVAL_FAILED/.test(between) && /REOWN_ADAPTER_LOAD_FAILED/.test(loader.slice(i2)) && (loader.match(/REOWN_CHUNK_FETCH_FAILED/g) ?? []).length === 2, "two imports separately caught and classified");
+  check("ML-2", !/console\.|\.stack|return[^;]*error\.message|localStorage|sessionStorage/.test(r.slice(r.indexOf("CHUNK_FETCH_PATTERNS"), r.indexOf("async function runCreateAppKit"))), "classifier/loader never logs, stores or returns raw error text");
+  const pre = r.slice(r.indexOf("export async function preloadAppKitLibraries"), r.indexOf("async function runCreateAppKit"));
+  check("ML-3", pre.length > 0 && !/createAppKit\(|\.ready\(|\.open\(|connect|getWalletProvider|Storage|request\(/.test(pre), "preload helper is file-load only");
+  const wpre = wc.slice(wc.indexOf("export async function preloadWalletChooserLibraries"));
+  check("ML-4", /typeof window === "undefined"/.test(wpre) && !/ensureAppKit|openAppKitConnect|connect\w*\(/.test(wpre.replace("preloadWalletChooserLibraries", "")), "connector preload wrapper browser-only, no connect");
+  check("ML-5", ["REOWN_CHUNK_FETCH_FAILED","REOWN_MODULE_EVAL_FAILED","REOWN_ADAPTER_LOAD_FAILED"].every((n) => new RegExp(`case "${n}":\\s*return "${n}"`).test(wc) && new RegExp(`${n}:\\s*"`).test(p)), "new notices mapped and copied");
+  check("ML-6", /useEffect\(\(\) => \{\s*if \(!isWalletConnectConfigured\(\)\) return;/.test(p) && /requestIdleCallback/.test(p) && /preloadWalletChooserLibraries\(\)/.test(p), "treasury warmup in useEffect, configured only, idle-scheduled");
+  check("ML-7", /connectNotice === "REOWN_CHUNK_FETCH_FAILED"/.test(p) && /Reload and retry/.test(p) && /Reload already tried/.test(p), "chunk failure shows Reload and retry");
+  const rr = p.slice(p.indexOf("function reloadAndRetry()"), p.indexOf("function reloadAndRetry()") + 400);
+  check("ML-8", /if \(readReloadRecoveryFlag\(\)\)/.test(rr) && (p.match(/window\.location\.reload\(\)/g) ?? []).length === 1 && !/connect/i.test(rr), "reload at most once per flag, no auto-connect");
+  const cb = p.slice(p.indexOf("async function connect()"), p.indexOf("async function switchNetwork()"));
+  check("ML-9", /clearReloadRecoveryFlag\(\);\s*setReloadAlreadyTried\(false\);\s*await refreshWalletState\(\)/.test(cb), "successful connect clears recovery flag");
+  check("ML-10", !p.slice(p.indexOf("CHOOSER_UNAVAILABLE"), p.indexOf("RELOAD_RECOVERY_KEY")).includes('"REOWN_CHUNK_FETCH_FAILED"'), "chunk fetch failure never triggers silent injected fallback");
+}
+
 if (failures > 0) {
   console.error(`\n${failures} CHECK(S) FAILED`);
   process.exit(1);
