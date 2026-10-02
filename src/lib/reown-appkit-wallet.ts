@@ -239,10 +239,35 @@ async function runCreateAppKit(
 ): Promise<{ appKit: AppKitHandle | null; notice: AppKitNotice | null }> {
   const loaded = await loadAppKitLibraries();
   if (!loaded.ok) return { appKit: null, notice: loaded.notice };
-  const { createAppKit, WagmiAdapter } = loaded.libs;
+  const { createAppKit, WagmiAdapter, UniversalProvider } = loaded.libs;
 
   try {
     const origin = getCurrentOrigin() ?? "";
+    const metadata = {
+      name: "CARTEL HQ",
+      description: "CARTEL HQ deployment wallet connection",
+      url: origin,
+      icons: origin ? [`${origin}/favicon.ico`] : [],
+    };
+    /**
+     * EXPLICIT ISOLATED WALLETCONNECT PROVIDER. AppKit 1.8.24 swallows its own
+     * UniversalProvider init failures and keeps a rejected promise, so we init
+     * the provider ourselves exactly ONCE per explicit attempt, in a CARTEL HQ
+     * storage namespace (isolation only — old keys are never touched), and pass
+     * the proven provider to AppKit. Init only: no session, chains or connect.
+     */
+    let universalProvider: Awaited<ReturnType<typeof UniversalProvider.init>>;
+    try {
+      universalProvider = await UniversalProvider.init({
+        projectId,
+        metadata,
+        customStoragePrefix: "cartel-hq-appkit-v1",
+        storageOptions: { database: "cartel-hq-walletconnect-v1" },
+      });
+    } catch {
+      wagmiAdapterHandle = null;
+      return { appKit: null, notice: "REOWN_WALLETCONNECT_UNAVAILABLE" };
+    }
     // Official Reown EVM adapter (WagmiAdapter 1.8.24): injected / EIP-6963 /
     // Coinbase-Base / WalletConnect connectors. Browser-only, so ssr: false.
     const wagmiAdapter = new WagmiAdapter({
@@ -268,6 +293,8 @@ async function runCreateAppKit(
       ],
       allWallets: "SHOW",
       enableMobileFullScreen: true,
+      // Our own proven provider — AppKit never runs its silent internal init.
+      universalProvider,
       projectId,
       networks: [ROBINHOOD_APPKIT_NETWORK],
       defaultNetwork: ROBINHOOD_APPKIT_NETWORK,
@@ -296,12 +323,7 @@ async function runCreateAppKit(
         pay: false,
         allWallets: true,
       },
-      metadata: {
-        name: "CARTEL HQ",
-        description: "CARTEL HQ deployment wallet connection",
-        url: origin,
-        icons: origin ? [`${origin}/favicon.ico`] : [],
-      },
+      metadata,
     });
     /**
      * PROVEN READINESS GAP. `createAppKit` returns before its internal
@@ -313,13 +335,10 @@ async function runCreateAppKit(
      */
     await instance.ready();
     /**
-     * WALLETCONNECT READINESS PROOF. Installed AppKit 1.8.24 `getUniversalProvider()`
-     * swallows UniversalProvider init errors, so `ready()` can resolve while
-     * `setUniversalProvider()` never ran and every WalletConnect tile is dead
-     * ("WalletConnectConnector not found"). The chooser is never returned —
-     * and so never opened — until BOTH connector lists are proven.
+     * WALLETCONNECT READINESS PROOF. The chooser is never returned — and so
+     * never opened — until BOTH connector lists contain "walletConnect".
      */
-    const proven = await proveWalletConnectReady(instance, wagmiAdapter);
+    const proven = await proveWalletConnectReady(universalProvider, wagmiAdapter);
     if (!proven) {
       wagmiAdapterHandle = null;
       return { appKit: null, notice: "REOWN_WALLETCONNECT_UNAVAILABLE" };
@@ -355,24 +374,17 @@ export function hasWalletConnectConnector(adapter: WalletConnectProbe | null | u
 }
 
 /**
- * Exactly ONE public recovery attempt, only when the connector is missing:
- * AppKit's own `getUniversalProvider()` once, then WagmiAdapter's own
- * `setUniversalProvider()` once if a provider exists. No loop, no timer.
+ * Exactly ONE recovery, only when a connector is missing: hand our already
+ * initialized provider to WagmiAdapter's public `setUniversalProvider()` once,
+ * then re-prove both lists. No loop, no timer, no AppKit internal getter.
  */
 export async function proveWalletConnectReady<P>(
-  instance: { getUniversalProvider: () => Promise<P | undefined> },
+  universalProvider: P,
   adapter: WalletConnectProbe & { setUniversalProvider: (provider: P) => Promise<void> },
 ): Promise<boolean> {
   if (hasWalletConnectConnector(adapter)) return true;
-  let provider: P | undefined;
   try {
-    provider = await instance.getUniversalProvider();
-  } catch {
-    return false;
-  }
-  if (!provider) return false;
-  try {
-    await adapter.setUniversalProvider(provider);
+    await adapter.setUniversalProvider(universalProvider);
   } catch {
     return false;
   }

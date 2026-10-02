@@ -1464,24 +1464,22 @@ check(
     !m.hasWalletConnectConnector({ connectors: wc, wagmiConfig: { connectors: [] } }) &&
     !m.hasWalletConnectConnector({ connectors: [], wagmiConfig: { connectors: wc } }) &&
     !m.hasWalletConnectConnector(null), "readiness requires BOTH adapter and wagmi connectors");
-  const mk = (provider: unknown, installs: boolean) => {
-    const calls = { get: 0, set: 0 };
+  const mk = (installs: boolean) => {
+    const calls = { set: 0, arg: null as unknown };
     const adapter = { connectors: [] as { id: string }[], wagmiConfig: { connectors: [] as { id: string }[] },
-      setUniversalProvider: async () => { calls.set++; if (installs) { adapter.connectors.push(...wc); adapter.wagmiConfig.connectors.push(...wc); } } };
-    const inst = { getUniversalProvider: async () => { calls.get++; return provider; } };
-    return { adapter, inst, calls };
+      setUniversalProvider: async (p: unknown) => { calls.set++; calls.arg = p; if (installs) { adapter.connectors.push(...wc); adapter.wagmiConfig.connectors.push(...wc); } } };
+    return { adapter, calls };
   };
-  const ok = mk({}, true); const okR = await m.proveWalletConnectReady(ok.inst, ok.adapter);
-  check("WR-3", okR && ok.calls.get === 1 && ok.calls.set === 1, "missing connector => exactly one recovery that can succeed");
-  const none = mk(undefined, true); const noneR = await m.proveWalletConnectReady(none.inst, none.adapter);
-  check("WR-4", !noneR && none.calls.get === 1 && none.calls.set === 0, "no provider => setUniversalProvider never called");
-  const pres = mk({}, true); pres.adapter.connectors.push(...wc); pres.adapter.wagmiConfig.connectors.push(...wc);
-  const presR = await m.proveWalletConnectReady(pres.inst, pres.adapter);
-  check("WR-4b", presR && pres.calls.get === 0 && pres.calls.set === 0, "already present => no recovery, no duplicate setUniversalProvider");
-  const bad = mk({}, false); const badR = await m.proveWalletConnectReady(bad.inst, bad.adapter);
-  check("WR-5", !badR && bad.calls.get === 1 && bad.calls.set === 1, "still missing after one recovery => fail");
+  const prov = { tag: "provider" };
+  const ok = mk(true); const okR = await m.proveWalletConnectReady(prov, ok.adapter);
+  check("WR-3", okR && ok.calls.set === 1 && ok.calls.arg === prov, "missing connector => exactly one setUniversalProvider(our provider) that can succeed");
+  const pres = mk(true); pres.adapter.connectors.push(...wc); pres.adapter.wagmiConfig.connectors.push(...wc);
+  const presR = await m.proveWalletConnectReady(prov, pres.adapter);
+  check("WR-4b", presR && pres.calls.set === 0, "already present => no recovery, no duplicate setUniversalProvider");
+  const bad = mk(false); const badR = await m.proveWalletConnectReady(prov, bad.adapter);
+  check("WR-5", !badR && bad.calls.set === 1, "still missing after one recovery => fail");
   const run = appkitCode.slice(appkitCode.indexOf("async function runCreateAppKit"), appkitCode.indexOf("type WalletConnectProbe"));
-  check("WR-1", /await instance\.ready\(\);[\s\S]*proveWalletConnectReady\(instance, wagmiAdapter\)[\s\S]*if \(!proven\)[\s\S]*REOWN_WALLETCONNECT_UNAVAILABLE[\s\S]*return \{ appKit: instance/.test(run) &&
+  check("WR-1", /await instance\.ready\(\);[\s\S]*proveWalletConnectReady\(universalProvider, wagmiAdapter\)[\s\S]*if \(!proven\)[\s\S]*REOWN_WALLETCONNECT_UNAVAILABLE[\s\S]*return \{ appKit: instance/.test(run) &&
     /if \(!hasWalletConnectConnector\(wagmiAdapterHandle\)\)/.test(appkitCode) &&
     /const \{ appKit, notice \} = await ensureAppKit\(\);\s*if \(!appKit\) return/.test(appkitCode), "open() unreachable until WalletConnect readiness is proven");
   const prove = appkitCode.slice(appkitCode.indexOf("export async function proveWalletConnectReady"), appkitCode.indexOf("export async function ensureAppKit"));
@@ -1506,6 +1504,26 @@ check(
   const lock = readFileSync("bun.lock", "utf8");
   const appkitCopies = (lock.match(/"@reown\/appkit@[^"]+"/g) ?? []).filter((v, i, a) => a.indexOf(v) === i);
   check("WR-7c", reown.length > 0 && reown.every(([, v]) => v === "1.8.24") && appkitCopies.length === 1 && appkitCopies[0] === '"@reown/appkit@1.8.24"', "all @reown pinned 1.8.24, single AppKit copy in lockfile");
+}
+
+{
+  // UP-* explicit isolated UniversalProvider
+  const pkg = JSON.parse(readFileSync("package.json", "utf8"));
+  const inst = JSON.parse(readFileSync("node_modules/@walletconnect/universal-provider/package.json", "utf8")).version;
+  check("UP-1", pkg.dependencies["@walletconnect/universal-provider"] === "2.23.7" && inst === "2.23.7", "direct dependency exact 2.23.7 matching installed");
+  const bridge = readFileSync("src/lib/reown-appkit-browser.ts", "utf8");
+  const bridgeCode = bridge.replace(/\/\*[\s\S]*?\*\//g, "");
+  check("UP-2", /export \{ UniversalProvider \} from "@walletconnect\/universal-provider";/.test(bridge) && !/\.init\(|createAppKit\(|new /.test(bridgeCode), "bridge exports UniversalProvider, no module-scope init");
+  const pre = appkitCode.slice(appkitCode.indexOf("export async function preloadAppKitLibraries"), appkitCode.indexOf("async function runCreateAppKit"));
+  check("UP-3", /loadAppKitLibraries\(\)/.test(pre) && !/\.init\(|createAppKit\(|\.open\(|connect/i.test(pre.replace(/\/\*[\s\S]*?\*\//g, "")), "preload only loads the bridge");
+  const run = appkitCode.slice(appkitCode.indexOf("async function runCreateAppKit"), appkitCode.indexOf("type WalletConnectProbe"));
+  const iInit = run.indexOf("UniversalProvider.init("), iCreate = run.indexOf("createAppKit({"), iAdapter = run.indexOf("new WagmiAdapter(");
+  check("UP-4", iInit > 0 && iInit < iAdapter && iAdapter < iCreate && (run.match(/UniversalProvider\.init\(/g) ?? []).length === 1, "exactly one provider init, before WagmiAdapter/createAppKit");
+  check("UP-5", /UniversalProvider\.init\(\{\s*projectId,\s*metadata,\s*customStoragePrefix: "cartel-hq-appkit-v1",\s*storageOptions: \{ database: "cartel-hq-walletconnect-v1" \},\s*\}\)/.test(run) && !/session:|chains:|methods:/.test(run.slice(iInit, iInit + 300)), "init options: projectId, metadata, CARTEL storage prefix + database only");
+  check("UP-6", /\n      universalProvider,\n/.test(run) && /\n      metadata,\n    \}\);/.test(run), "createAppKit receives our provider and the same metadata");
+  check("UP-7", !/getUniversalProvider/.test(appkitCode), "no AppKit internal getUniversalProvider recovery");
+  check("UP-8", /\} catch \{\s*wagmiAdapterHandle = null;\s*return \{ appKit: null, notice: "REOWN_WALLETCONNECT_UNAVAILABLE" \};/.test(run), "provider init failure => sanitized notice, no modal");
+  check("UP-9", !/setTimeout|setInterval|while \(|wallet_switchEthereumChain|wallet_addEthereumChain|reconnect\(/.test(run), "no timers/loops/switch/add-chain/reconnect in init path");
 }
 
 console.log(failures === 0 ? "\nALL CHECKS PASSED" : `\n${failures} CHECK(S) FAILED`);
