@@ -327,6 +327,25 @@ check(
   check("SC-9", forbidden.length === 0, `no deployment-control / token / liquidity / Telegram files changed (${forbidden.join(", ") || "none"})`);
 }
 
+// ---- MW: mobile treasury wallet connection ----
+{
+  const p = strip(read("src/components/cartel/TreasurySafeCreatePanel.tsx"));
+  const connectBody = p.slice(p.indexOf("async function connect()"), p.indexOf("async function switchNetwork()"));
+  check("MW-1", /enabled:\s*!!savedSignerConfig,/.test(p) && /enabled:\s*!!savedSignerConfig && isWorkspaceOwner/.test(p) && /savedSignerConfig\?\.updatedAt/.test(p) && !/enabled:\s*!!signerQuery\.data/.test(p), "status/preflight query gates use savedSignerConfig");
+  check("MW-1b", (p.match(/const savedSignerConfig =/g) ?? []).length === 1, "savedSignerConfig declared once");
+  check("MW-2", !/connectWalletConnectOnRobinhoodChain/.test(p), "panel no longer uses the bundled connect+switch helper");
+  const wcIdx = connectBody.indexOf("connectWalletConnect()");
+  const injIdx = connectBody.indexOf("connectInjected()");
+  check("MW-3", wcIdx > 0 && injIdx > wcIdx && /CHOOSER_UNAVAILABLE\.includes\(result\.notice\)\s*&&\s*isInjectedWalletAvailable\(\)/.test(connectBody), "chooser first, limited injected fallback");
+  check("MW-3b", ["WALLETCONNECT_NOT_CONFIGURED", "REOWN_LIBRARY_LOAD_FAILED", "REOWN_APPKIT_INIT_FAILED", "REOWN_CONNECT_FAILED"].every((n) => p.slice(p.indexOf("CHOOSER_UNAVAILABLE"), p.indexOf("CONNECT_NOTICE_COPY")).includes(`"${n}"`)), "fallback limited to the four chooser-unavailable notices");
+  check("MW-4", !/requestRobinhoodChainSwitch|wallet_switchEthereumChain/.test(connectBody) && /onClick=\{\(\) => void switchNetwork\(\)\}/.test(p) && /Switch to Robinhood Chain/.test(p), "switch only via explicit button, never from connect()");
+  check("MW-4b", /!!predicted &&\s*onRobinhood/.test(p), "Create requires Robinhood Chain");
+  check("MW-5", /isEmbeddedBrowserContext\(\)/.test(p) && /Safari or Chrome, or in your wallet’s dapp browser/.test(p) && /Open standalone/.test(p), "embedded guidance present");
+  const notices = ["WALLETCONNECT_NOT_CONFIGURED","REOWN_LIBRARY_LOAD_FAILED","REOWN_ORIGIN_NOT_ALLOWED","REOWN_PROJECT_ID_INVALID_OR_MISSING","REOWN_CONFIG_SERVER_ERROR","REOWN_RATE_LIMITED","REOWN_APPKIT_INIT_FAILED","REOWN_CONNECT_FAILED","STALE_SESSION_TEARDOWN_FAILED","STALE_SESSION_REUSE_REFUSED","WALLET_ACCOUNT_MISMATCH","WALLET_ACCOUNT_AMBIGUOUS","ACTIVE_ACCOUNT_CHANGED","WALLETCONNECT_TIMEOUT","CONNECTION_REJECTED_OR_FAILED","NO_ACCOUNT","NO_INJECTED_PROVIDER"];
+  check("MW-6", notices.every((n) => new RegExp(`${n}:\\s*"`).test(p)) && /REOWN_ORIGIN_NOT_ALLOWED" && getConnectorOrigin\(\)/.test(p) && !/getReownProjectId|VITE_WALLETCONNECT/.test(p) && !/The wallet could not be connected/.test(p), "sanitized notice mapping; origin only for origin error; no project id");
+  check("MW-7", !/eth_sendTransaction/.test(p) && /finally\s*\{\s*setConnecting\(false\)/.test(p), "no send in panel; connect guarded by busy state");
+}
+
 if (failures > 0) {
   console.error(`\n${failures} CHECK(S) FAILED`);
   process.exit(1);
