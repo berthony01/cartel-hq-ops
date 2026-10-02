@@ -503,16 +503,18 @@ check(
     /REOWN_CONNECT_FAILED/.test(panelCode),
   "chunk-load, init and connect failures have distinct sanitized codes with distinct UI copy",
 );
-const importCatch =
-  /await import\("@reown\/appkit-adapter-ethers"\)[\s\S]{0,200}?\} catch \{([\s\S]{0,240}?)\n  \}/.exec(
-    appkitCode,
-  )?.[1];
+// Superseded by the mobile load-failure fix: each lazy import is now caught
+// separately and classified into sanitized chunk-fetch / module-eval /
+// adapter-load codes. None of them may fall through to the init code.
+const importLoader = /async function loadAppKitLibraries[\s\S]*?\n\}/.exec(appkitCode)?.[0];
 check(
   "M5",
-  importCatch !== undefined &&
-    /REOWN_LIBRARY_LOAD_FAILED/.test(importCatch) &&
-    !/REOWN_APPKIT_INIT_FAILED/.test(importCatch),
-  "a failed dynamic import returns the library-load code, not the init code",
+  importLoader !== undefined &&
+    /REOWN_CHUNK_FETCH_FAILED/.test(importLoader) &&
+    /REOWN_MODULE_EVAL_FAILED/.test(importLoader) &&
+    /REOWN_ADAPTER_LOAD_FAILED/.test(importLoader) &&
+    !/REOWN_APPKIT_INIT_FAILED/.test(importLoader),
+  "a failed dynamic import returns a sanitized library-load code, not the init code",
 );
 check(
   "M6",

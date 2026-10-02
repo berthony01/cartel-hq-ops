@@ -32,6 +32,7 @@ import {
   isEmbeddedBrowserContext,
   isInjectedWalletAvailable,
   isWalletConnectConfigured,
+  preloadWalletChooserLibraries,
   readWalletConnectorState,
   requestRobinhoodChainSwitch,
   type WalletConnectorNotice,
@@ -40,18 +41,57 @@ import {
 } from "@/lib/wallet-connector";
 import { ROBINHOOD_MAINNET_CHAIN_ID } from "@/lib/chain-mainnet-registry";
 
-/** Chooser-unavailable notices that justify the limited injected fallback. */
+/**
+ * Chooser-unavailable notices that justify the limited injected fallback.
+ * REOWN_CHUNK_FETCH_FAILED is deliberately EXCLUDED: a stale chunk is
+ * recovered with an explicit Reload and retry, never a silent fallback.
+ * MODULE_EVAL / ADAPTER_LOAD are the split successors of LIBRARY_LOAD_FAILED.
+ */
 const CHOOSER_UNAVAILABLE: readonly WalletConnectorNotice[] = [
   "WALLETCONNECT_NOT_CONFIGURED",
   "REOWN_LIBRARY_LOAD_FAILED",
+  "REOWN_MODULE_EVAL_FAILED",
+  "REOWN_ADAPTER_LOAD_FAILED",
   "REOWN_APPKIT_INIT_FAILED",
   "REOWN_CONNECT_FAILED",
 ];
+
+/** One-time explicit reload recovery flag (sessionStorage, guarded). */
+const RELOAD_RECOVERY_KEY = "cartel_reown_reload_recovery_v1";
+
+function readReloadRecoveryFlag(): boolean {
+  try {
+    return typeof window !== "undefined" && window.sessionStorage.getItem(RELOAD_RECOVERY_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function writeReloadRecoveryFlag(): boolean {
+  try {
+    if (typeof window === "undefined") return false;
+    window.sessionStorage.setItem(RELOAD_RECOVERY_KEY, "1");
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function clearReloadRecoveryFlag(): void {
+  try {
+    if (typeof window !== "undefined") window.sessionStorage.removeItem(RELOAD_RECOVERY_KEY);
+  } catch {
+    // Never fatal.
+  }
+}
 
 /** Sanitized, plain-language copy. Never includes project id or error text. */
 const CONNECT_NOTICE_COPY: Record<WalletConnectorNotice, string> = {
   WALLETCONNECT_NOT_CONFIGURED: "The wallet chooser is not set up for this site. Nothing was connected.",
   REOWN_LIBRARY_LOAD_FAILED: "The wallet chooser could not load in this browser. Try Safari or Chrome, or another network.",
+  REOWN_CHUNK_FETCH_FAILED: "The wallet connection files are out of date or could not be loaded. Reload this page and try again.",
+  REOWN_MODULE_EVAL_FAILED: "The wallet chooser loaded but could not start in this browser. Try Chrome or your wallet's dapp browser.",
+  REOWN_ADAPTER_LOAD_FAILED: "The wallet connection adapter could not load. Reload the page and try again.",
   REOWN_ORIGIN_NOT_ALLOWED: "The wallet service refused this website address. It must be allowed in the Reown dashboard.",
   REOWN_PROJECT_ID_INVALID_OR_MISSING: "The wallet service rejected this site's configuration. Nothing was connected.",
   REOWN_CONFIG_SERVER_ERROR: "The wallet service is temporarily unavailable. Try again shortly.",
@@ -161,6 +201,7 @@ export function TreasurySafeCreatePanel({
   const [switchNotice, setSwitchNotice] = useState<WalletSwitchNotice | null>(null);
   const [embedded, setEmbedded] = useState(false);
   const [standaloneUrl, setStandaloneUrl] = useState<string | null>(null);
+  const [reloadAlreadyTried, setReloadAlreadyTried] = useState(false);
 
   useEffect(() => {
     setAccount(getActiveAccount());
@@ -175,6 +216,50 @@ export function TreasurySafeCreatePanel({
         .catch(() => undefined);
     }
   }, []);
+
+  /**
+   * Browser-only FILE PRELOAD after hydration. Never creates AppKit, never
+   * connects, never touches wallet state. A failure here is silent; the
+   * explicit Connect click remains authoritative.
+   */
+  useEffect(() => {
+    if (!isWalletConnectConfigured()) return;
+    let cancelled = false;
+    const run = () => {
+      void preloadWalletChooserLibraries().then((ok) => {
+        if (!cancelled && ok) clearReloadRecoveryFlag();
+      });
+    };
+    const w = window as Window & {
+      requestIdleCallback?: (cb: () => void, opts?: { timeout: number }) => number;
+      cancelIdleCallback?: (id: number) => void;
+    };
+    if (typeof w.requestIdleCallback === "function") {
+      const id = w.requestIdleCallback(run, { timeout: 4000 });
+      return () => {
+        cancelled = true;
+        w.cancelIdleCallback?.(id);
+      };
+    }
+    const timer = setTimeout(run, 1500);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, []);
+
+  /** Explicit click only. Reloads at most once per session flag; never auto-connects. */
+  function reloadAndRetry() {
+    if (readReloadRecoveryFlag()) {
+      setReloadAlreadyTried(true);
+      return;
+    }
+    if (!writeReloadRecoveryFlag()) {
+      setReloadAlreadyTried(true);
+      return;
+    }
+    window.location.reload();
+  }
 
   const signers = savedSignerConfig?.signers ?? null;
   const review: TreasurySafePreflightResponse | undefined = reviewQuery.data;
@@ -225,6 +310,9 @@ export function TreasurySafeCreatePanel({
         setConnectNotice(result.notice);
         return;
       }
+      // Successful connection: a later deployment may recover again.
+      clearReloadRecoveryFlag();
+      setReloadAlreadyTried(false);
       await refreshWalletState();
     } catch {
       setAccount(null);
@@ -458,6 +546,18 @@ export function TreasurySafeCreatePanel({
                 <p className="break-all text-[11px] text-muted-foreground">
                   Website address to allow: {getConnectorOrigin()}
                 </p>
+              ) : null}
+              {connectNotice === "REOWN_CHUNK_FETCH_FAILED" ? (
+                <div className="space-y-1 pt-1">
+                  <Button type="button" size="sm" variant="outline" onClick={reloadAndRetry}>
+                    Reload and retry
+                  </Button>
+                  {reloadAlreadyTried ? (
+                    <p className="text-xs text-muted-foreground">
+                      Reload already tried. Close this tab, reopen CARTEL HQ in Chrome or your wallet browser, and try again.
+                    </p>
+                  ) : null}
+                </div>
               ) : null}
             </div>
           ) : null}

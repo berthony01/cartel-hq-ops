@@ -70,6 +70,9 @@ export type WalletConnectorNotice =
   | "NO_INJECTED_PROVIDER"
   | "WALLETCONNECT_NOT_CONFIGURED"
   | "REOWN_LIBRARY_LOAD_FAILED"
+  | "REOWN_CHUNK_FETCH_FAILED"
+  | "REOWN_MODULE_EVAL_FAILED"
+  | "REOWN_ADAPTER_LOAD_FAILED"
   | "REOWN_ORIGIN_NOT_ALLOWED"
   | "REOWN_PROJECT_ID_INVALID_OR_MISSING"
   | "REOWN_CONFIG_SERVER_ERROR"
@@ -682,6 +685,12 @@ function mapAppKitNotice(notice: AppKitNotice): WalletConnectorNotice {
       return "WALLETCONNECT_NOT_CONFIGURED";
     case "REOWN_LIBRARY_LOAD_FAILED":
       return "REOWN_LIBRARY_LOAD_FAILED";
+    case "REOWN_CHUNK_FETCH_FAILED":
+      return "REOWN_CHUNK_FETCH_FAILED";
+    case "REOWN_MODULE_EVAL_FAILED":
+      return "REOWN_MODULE_EVAL_FAILED";
+    case "REOWN_ADAPTER_LOAD_FAILED":
+      return "REOWN_ADAPTER_LOAD_FAILED";
     case "REOWN_ORIGIN_NOT_ALLOWED":
       return "REOWN_ORIGIN_NOT_ALLOWED";
     case "REOWN_PROJECT_ID_INVALID_OR_MISSING":
@@ -1056,3 +1065,20 @@ export async function connectWalletConnectOnRobinhoodChain(): Promise<{
   return { connect, switched };
 }
 
+
+/**
+ * FILE PRELOAD ONLY (browser). Warms the chooser library files after hydration.
+ * Never creates AppKit, never connects, never touches wallet state. Returns a
+ * sanitized boolean; failures are silent because the explicit Connect click
+ * remains authoritative.
+ */
+export async function preloadWalletChooserLibraries(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+  try {
+    const { preloadAppKitLibraries } = await import("./reown-appkit-wallet");
+    const result = await preloadAppKitLibraries();
+    return result.ok;
+  } catch {
+    return false;
+  }
+}
