@@ -25,11 +25,66 @@ import {
 } from "@/lib/treasury-signers";
 import {
   connectInjected,
-  connectWalletConnectOnRobinhoodChain,
+  connectWalletConnect,
   getActiveAccount,
+  getConnectorOrigin,
+  getStandaloneAppUrl,
+  isEmbeddedBrowserContext,
   isInjectedWalletAvailable,
   isWalletConnectConfigured,
+  readWalletConnectorState,
+  requestRobinhoodChainSwitch,
+  type WalletConnectorNotice,
+  type WalletConnectorResult,
+  type WalletSwitchNotice,
 } from "@/lib/wallet-connector";
+import { ROBINHOOD_MAINNET_CHAIN_ID } from "@/lib/chain-mainnet-registry";
+
+/** Chooser-unavailable notices that justify the limited injected fallback. */
+const CHOOSER_UNAVAILABLE: readonly WalletConnectorNotice[] = [
+  "WALLETCONNECT_NOT_CONFIGURED",
+  "REOWN_LIBRARY_LOAD_FAILED",
+  "REOWN_APPKIT_INIT_FAILED",
+  "REOWN_CONNECT_FAILED",
+];
+
+/** Sanitized, plain-language copy. Never includes project id or error text. */
+const CONNECT_NOTICE_COPY: Record<WalletConnectorNotice, string> = {
+  WALLETCONNECT_NOT_CONFIGURED: "The wallet chooser is not set up for this site. Nothing was connected.",
+  REOWN_LIBRARY_LOAD_FAILED: "The wallet chooser could not load in this browser. Try Safari or Chrome, or another network.",
+  REOWN_ORIGIN_NOT_ALLOWED: "The wallet service refused this website address. It must be allowed in the Reown dashboard.",
+  REOWN_PROJECT_ID_INVALID_OR_MISSING: "The wallet service rejected this site's configuration. Nothing was connected.",
+  REOWN_CONFIG_SERVER_ERROR: "The wallet service is temporarily unavailable. Try again shortly.",
+  REOWN_RATE_LIMITED: "The wallet service is busy. Wait a moment and try again.",
+  REOWN_APPKIT_INIT_FAILED: "The wallet chooser could not start. Reload the page and try again.",
+  REOWN_CONNECT_FAILED: "The wallet chooser could not be opened. Reload the page and try again.",
+  STALE_SESSION_TEARDOWN_FAILED: "An earlier wallet session could not be cleared. Reload the page and try again.",
+  STALE_SESSION_REUSE_REFUSED: "An earlier wallet session was refused for safety. Connect again.",
+  WALLET_ACCOUNT_MISMATCH: "The wallet reported conflicting accounts. Disconnect in your wallet and connect again.",
+  WALLET_ACCOUNT_AMBIGUOUS: "The wallet shared more than one account. Share only one signer wallet and try again.",
+  ACTIVE_ACCOUNT_CHANGED: "The wallet account changed. Connect again.",
+  WALLETCONNECT_TIMEOUT: "The wallet did not respond in time. Try again.",
+  CONNECTION_REJECTED_OR_FAILED: "The connection was declined or did not finish. Nothing was connected.",
+  NO_ACCOUNT: "The wallet did not share an account. Nothing was connected.",
+  NO_INJECTED_PROVIDER: "No wallet was found in this browser.",
+};
+
+const SWITCH_NOTICE_COPY: Record<WalletSwitchNotice, string> = {
+  NO_ACTIVE_CONNECTOR: "Connect a wallet first.",
+  NETWORK_SWITCH_REJECTED: "The network switch was declined in your wallet.",
+  NETWORK_SWITCH_UNSUPPORTED: "This wallet cannot switch networks from here. Switch to Robinhood Chain in the wallet.",
+  NETWORK_UNKNOWN_TO_WALLET: "This wallet does not know Robinhood Chain. Add it in the wallet, then try again.",
+  NETWORK_SWITCH_FAILED: "The network switch did not complete. Try again in your wallet.",
+};
+
+function isRobinhoodChain(chainId: string | null): boolean {
+  if (!chainId) return false;
+  try {
+    return BigInt(chainId) === BigInt(ROBINHOOD_MAINNET_CHAIN_ID);
+  } catch {
+    return false;
+  }
+}
 
 /**
  * PCART treasury Safe creation card. One explicit wallet confirmation, no
@@ -81,15 +136,16 @@ export function TreasurySafeCreatePanel({
     queryFn: () => getLaunchTreasurySigners(launchId),
     enabled: !signerConfig,
   });
+  const savedSignerConfig = signerConfig ?? signerQuery.data ?? null;
   const statusQuery = useQuery({
     queryKey: treasurySafeStatusQueryKey(launchId),
     queryFn: () => statusFn({ data: { launchId } }),
-    enabled: !!signerQuery.data,
+    enabled: !!savedSignerConfig,
   });
   const reviewQuery = useQuery({
-    queryKey: ["treasury-safe-preflight", launchId, signerQuery.data?.updatedAt ?? "none"],
+    queryKey: ["treasury-safe-preflight", launchId, savedSignerConfig?.updatedAt ?? "none"],
     queryFn: () => preflightFn({ data: { launchId } }),
-    enabled: !!signerQuery.data && isWorkspaceOwner && statusQuery.data?.ready !== true,
+    enabled: !!savedSignerConfig && isWorkspaceOwner && statusQuery.data?.ready !== true,
     staleTime: 30_000,
   });
 
@@ -98,12 +154,28 @@ export function TreasurySafeCreatePanel({
   const [txHash, setTxHash] = useState<string | null>(null);
   const [sendAttempted, setSendAttempted] = useState(false);
   const [account, setAccount] = useState<string | null>(null);
+  const [chainId, setChainId] = useState<string | null>(null);
+  const [connecting, setConnecting] = useState(false);
+  const [switching, setSwitching] = useState(false);
+  const [connectNotice, setConnectNotice] = useState<WalletConnectorNotice | null>(null);
+  const [switchNotice, setSwitchNotice] = useState<WalletSwitchNotice | null>(null);
+  const [embedded, setEmbedded] = useState(false);
+  const [standaloneUrl, setStandaloneUrl] = useState<string | null>(null);
 
   useEffect(() => {
     setAccount(getActiveAccount());
+    setEmbedded(isEmbeddedBrowserContext());
+    setStandaloneUrl(getStandaloneAppUrl());
+    if (getActiveAccount()) {
+      void readWalletConnectorState()
+        .then((s) => {
+          setAccount(s.account);
+          setChainId(s.chainId);
+        })
+        .catch(() => undefined);
+    }
   }, []);
 
-  const savedSignerConfig = signerConfig ?? signerQuery.data ?? null;
   const signers = savedSignerConfig?.signers ?? null;
   const review: TreasurySafePreflightResponse | undefined = reviewQuery.data;
   const predicted = review?.preflight.predictedAddress ?? null;
@@ -111,22 +183,75 @@ export function TreasurySafeCreatePanel({
 
   if (!signers) return null;
 
-  async function connect() {
-    setMessage(null);
-    if (isInjectedWalletAvailable()) {
-      const r = await connectInjected();
-      setAccount(r.ok ? r.state.account : null);
-      if (!r.ok) setMessage("The wallet could not be connected.");
-      return;
+  async function refreshWalletState() {
+    try {
+      const s = await readWalletConnectorState();
+      setAccount(s.account);
+      setChainId(s.chainId);
+    } catch {
+      setChainId(null);
     }
-    if (isWalletConnectConfigured()) {
-      const r = await connectWalletConnectOnRobinhoodChain();
-      setAccount(r.connect.ok ? r.connect.state.account : null);
-      if (!r.connect.ok) setMessage("The wallet could not be connected.");
-      return;
-    }
-    setMessage("No wallet is available on this device.");
   }
+
+  /**
+   * Explicit click only. Official chooser FIRST on every device; injected is a
+   * limited fallback when the chooser is unavailable. Never switches networks,
+   * never retries, never sends.
+   */
+  async function connect() {
+    if (connecting) return;
+    setConnecting(true);
+    setMessage(null);
+    setConnectNotice(null);
+    setSwitchNotice(null);
+    try {
+      let result: WalletConnectorResult | null = null;
+      if (isWalletConnectConfigured()) {
+        result = await connectWalletConnect();
+        if (!result.ok && result.notice && CHOOSER_UNAVAILABLE.includes(result.notice) && isInjectedWalletAvailable()) {
+          result = await connectInjected();
+        }
+      } else if (isInjectedWalletAvailable()) {
+        result = await connectInjected();
+      }
+      if (!result) {
+        setAccount(null);
+        setMessage("No wallet is available on this device. Open this page in your wallet's browser or in Safari or Chrome.");
+        return;
+      }
+      if (!result.ok) {
+        setAccount(null);
+        setChainId(null);
+        setConnectNotice(result.notice);
+        return;
+      }
+      await refreshWalletState();
+    } catch {
+      setAccount(null);
+      setChainId(null);
+      setConnectNotice("CONNECTION_REJECTED_OR_FAILED");
+    } finally {
+      setConnecting(false);
+    }
+  }
+
+  /** Explicit click only — the single network switch call in this card. */
+  async function switchNetwork() {
+    if (switching) return;
+    setSwitching(true);
+    setSwitchNotice(null);
+    try {
+      const r = await requestRobinhoodChainSwitch();
+      if (!r.ok) setSwitchNotice(r.notice ?? "NETWORK_SWITCH_FAILED");
+    } catch {
+      setSwitchNotice("NETWORK_SWITCH_FAILED");
+    } finally {
+      await refreshWalletState();
+      setSwitching(false);
+    }
+  }
+
+  const onRobinhood = isRobinhoodChain(chainId);
 
   async function verifyOnly(hash: string | null) {
     setPhase("verifying");
