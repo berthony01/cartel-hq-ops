@@ -385,12 +385,12 @@ check(
   check("ML-10", !p.slice(p.indexOf("CHOOSER_UNAVAILABLE"), p.indexOf("RELOAD_RECOVERY_KEY")).includes('"REOWN_CHUNK_FETCH_FAILED"'), "chunk fetch failure never triggers silent injected fallback");
 }
 
-if (failures > 0) {
-  console.error(`\n${failures} CHECK(S) FAILED`);
-  process.exit(1);
-}
 {
   const p = readFileSync("src/components/cartel/TreasurySafeCreatePanel.tsx", "utf8");
   check("WR-7b", /REOWN_WALLETCONNECT_UNAVAILABLE: "WalletConnect could not start on this device\. Reload the page and try again\. If it still fails, open CARTEL HQ in your wallet's browser or Chrome\."/.test(p) && !/CHOOSER_UNAVAILABLE[^\]]*REOWN_WALLETCONNECT_UNAVAILABLE/.test(p) && /Connection code: \{connectNotice\}/.test(p), "persistent copy, no injected fallback, sanitized code only");
+}
+if (failures > 0) {
+  console.error(`\n${failures} CHECK(S) FAILED`);
+  process.exit(1);
 }
 console.log("\nALL CHECKS PASSED");
