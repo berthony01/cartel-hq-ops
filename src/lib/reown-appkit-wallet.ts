@@ -32,6 +32,7 @@ export type AppKitNotice =
   | "REOWN_LIBRARY_LOAD_FAILED"
   | "REOWN_CHUNK_FETCH_FAILED"
   | "REOWN_MODULE_EVAL_FAILED"
+  | "REOWN_CUSTOM_ELEMENT_CONFLICT"
   /** Legacy only: the single-bridge path never emits this. */
   | "REOWN_ADAPTER_LOAD_FAILED"
   | "REOWN_ORIGIN_NOT_ALLOWED"
@@ -132,37 +133,75 @@ export function classifyAppKitError(error: unknown): AppKitNotice {
 }
 
 /**
- * SANITIZED lazy-module failure classifier. Returns TRUE only for the generic
- * browser wording used when a dynamic module file could not be FETCHED (stale
- * hashed chunk after a deployment, network drop). The message is inspected
+ * SANITIZED lazy-module failure classifier. The error text is inspected
  * locally and discarded; it is never returned, logged, stored or rendered.
+ *
+ *  - REOWN_CHUNK_FETCH_FAILED: dynamic-module fetch TypeErrors AND Vite's
+ *    generic preload Errors (stale hashed files after a deployment).
+ *  - REOWN_CUSTOM_ELEMENT_CONFLICT: duplicate custom-element registration
+ *    (DOMException / NotSupportedError "already been defined/used").
+ *  - REOWN_MODULE_EVAL_FAILED: any other bridge evaluation failure.
  */
 const CHUNK_FETCH_PATTERNS: readonly RegExp[] = [
   /failed to fetch dynamically imported module/i,
   /error loading dynamically imported module/i,
   /importing a module script failed/i,
+  /unable to preload css/i,
+  /failed to preload/i,
   /failed to fetch/i,
   /load failed/i,
-  /unable to preload css/i,
 ];
 
-export function isLazyChunkFetchFailure(error: unknown): boolean {
+const CUSTOM_ELEMENT_PATTERNS: readonly RegExp[] = [
+  /has already been (defined|used)/i,
+  /already been used with this registry/i,
+  /customelementregistry/i,
+];
+
+function safeErrorText(error: unknown): string {
   try {
-    if (!(error instanceof TypeError)) return false;
-    // String(TypeError) yields "TypeError: <message>"; inspected and discarded.
-    const text = String(error);
-    return CHUNK_FETCH_PATTERNS.some((pattern) => pattern.test(text));
+    return String(error ?? "");
   } catch {
-    return false;
+    return "";
   }
+}
+
+function safeErrorName(error: unknown): string {
+  try {
+    const name = (error as { name?: unknown } | null)?.name;
+    return typeof name === "string" ? name : "";
+  } catch {
+    return "";
+  }
+}
+
+export function isLazyChunkFetchFailure(error: unknown): boolean {
+  const text = safeErrorText(error);
+  if (error instanceof TypeError || error instanceof Error) {
+    return CHUNK_FETCH_PATTERNS.some((pattern) => pattern.test(text));
+  }
+  return false;
+}
+
+export function isCustomElementConflict(error: unknown): boolean {
+  const name = safeErrorName(error);
+  const text = safeErrorText(error);
+  const domish = name === "NotSupportedError" || name === "DOMException" ||
+    (typeof DOMException !== "undefined" && error instanceof DOMException);
+  return domish && CUSTOM_ELEMENT_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+export function classifyLazyLoadFailure(error: unknown): AppKitNotice {
+  if (isCustomElementConflict(error)) return "REOWN_CUSTOM_ELEMENT_CONFLICT";
+  if (isLazyChunkFetchFailure(error)) return "REOWN_CHUNK_FETCH_FAILED";
+  return "REOWN_MODULE_EVAL_FAILED";
 }
 
 type AppKitBridge = typeof import("./reown-appkit-browser");
 
 /**
- * The SINGLE lazy import: the local browser-only bridge that bundles AppKit and
- * the official Ethers EVM adapter together. Chunk-fetch vs module-evaluation
- * failures stay separately classified.
+ * The SINGLE lazy import: the local browser-only bridge that bundles the full
+ * AppKit 1.8.24 runtime and the official WagmiAdapter together.
  */
 async function loadAppKitLibraries(): Promise<
   { ok: true; libs: AppKitBridge } | { ok: false; notice: AppKitNotice }
@@ -171,10 +210,7 @@ async function loadAppKitLibraries(): Promise<
   try {
     bridge = await import("./reown-appkit-browser");
   } catch (error) {
-    return {
-      ok: false,
-      notice: isLazyChunkFetchFailure(error) ? "REOWN_CHUNK_FETCH_FAILED" : "REOWN_MODULE_EVAL_FAILED",
-    };
+    return { ok: false, notice: classifyLazyLoadFailure(error) };
   }
   return { ok: true, libs: bridge };
 }
@@ -197,17 +233,20 @@ async function runCreateAppKit(
 ): Promise<{ appKit: AppKitHandle | null; notice: AppKitNotice | null }> {
   const loaded = await loadAppKitLibraries();
   if (!loaded.ok) return { appKit: null, notice: loaded.notice };
-  const { createAppKit, EthersAdapter } = loaded.libs;
+  const { createAppKit, WagmiAdapter } = loaded.libs;
 
   try {
     const origin = getCurrentOrigin() ?? "";
-    // Official EVM adapter: registers injected / EIP-6963 / Coinbase connectors.
-    const ethersAdapter = new EthersAdapter();
+    // Official Reown EVM adapter (WagmiAdapter 1.8.24): injected / EIP-6963 /
+    // Coinbase-Base / WalletConnect connectors. Browser-only, so ssr: false.
+    const wagmiAdapter = new WagmiAdapter({
+      projectId,
+      networks: [ROBINHOOD_APPKIT_NETWORK],
+      ssr: false,
+    });
     // THE ONLY `createAppKit` CALL IN THE APPLICATION.
     const instance = createAppKit({
-      // Same documented cast as the pre-core build: Reown 1.8.23 types its
-      // adapter `namespace` optional, which exactOptionalPropertyTypes rejects.
-      adapters: [ethersAdapter as never],
+      adapters: [wagmiAdapter],
       coinbasePreference: "all",
       projectId,
       networks: [ROBINHOOD_APPKIT_NETWORK],
