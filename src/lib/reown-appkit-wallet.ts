@@ -30,6 +30,9 @@ import {
 export type AppKitNotice =
   | "REOWN_NOT_CONFIGURED"
   | "REOWN_LIBRARY_LOAD_FAILED"
+  | "REOWN_CHUNK_FETCH_FAILED"
+  | "REOWN_MODULE_EVAL_FAILED"
+  | "REOWN_ADAPTER_LOAD_FAILED"
   | "REOWN_ORIGIN_NOT_ALLOWED"
   | "REOWN_PROJECT_ID_INVALID_OR_MISSING"
   | "REOWN_CONFIG_SERVER_ERROR"
@@ -127,17 +130,80 @@ export function classifyAppKitError(error: unknown): AppKitNotice {
   }
 }
 
+/**
+ * SANITIZED lazy-module failure classifier. Returns TRUE only for the generic
+ * browser wording used when a dynamic module file could not be FETCHED (stale
+ * hashed chunk after a deployment, network drop). The message is inspected
+ * locally and discarded; it is never returned, logged, stored or rendered.
+ */
+const CHUNK_FETCH_PATTERNS: readonly RegExp[] = [
+  /failed to fetch dynamically imported module/i,
+  /error loading dynamically imported module/i,
+  /importing a module script failed/i,
+  /failed to fetch/i,
+  /load failed/i,
+  /unable to preload css/i,
+];
+
+export function isLazyChunkFetchFailure(error: unknown): boolean {
+  try {
+    if (!(error instanceof TypeError)) return false;
+    const text = String(error.message ?? "");
+    return CHUNK_FETCH_PATTERNS.some((pattern) => pattern.test(text));
+  } catch {
+    return false;
+  }
+}
+
+type AppKitLibraries = {
+  createAppKit: typeof import("@reown/appkit").createAppKit;
+  EthersAdapter: typeof import("@reown/appkit-adapter-ethers").EthersAdapter;
+};
+
+/** The two lazy imports, each separately caught and classified. */
+async function loadAppKitLibraries(): Promise<
+  { ok: true; libs: AppKitLibraries } | { ok: false; notice: AppKitNotice }
+> {
+  let createAppKit: AppKitLibraries["createAppKit"];
+  try {
+    ({ createAppKit } = await import("@reown/appkit"));
+  } catch (error) {
+    return {
+      ok: false,
+      notice: isLazyChunkFetchFailure(error) ? "REOWN_CHUNK_FETCH_FAILED" : "REOWN_MODULE_EVAL_FAILED",
+    };
+  }
+  let EthersAdapter: AppKitLibraries["EthersAdapter"];
+  try {
+    ({ EthersAdapter } = await import("@reown/appkit-adapter-ethers"));
+  } catch (error) {
+    return {
+      ok: false,
+      notice: isLazyChunkFetchFailure(error) ? "REOWN_CHUNK_FETCH_FAILED" : "REOWN_ADAPTER_LOAD_FAILED",
+    };
+  }
+  return { ok: true, libs: { createAppKit, EthersAdapter } };
+}
+
+/**
+ * FILE PRELOAD ONLY. Downloads/evaluates the two chooser libraries so a later
+ * explicit Connect click does not depend on fetching them. It never creates
+ * AppKit, never opens anything and never touches a wallet, storage or network.
+ */
+export async function preloadAppKitLibraries(): Promise<
+  { ok: true } | { ok: false; notice: AppKitNotice }
+> {
+  if (typeof window === "undefined") return { ok: false, notice: "REOWN_MODULE_EVAL_FAILED" };
+  const result = await loadAppKitLibraries();
+  return result.ok ? { ok: true } : { ok: false, notice: result.notice };
+}
+
 async function runCreateAppKit(
   projectId: string,
 ): Promise<{ appKit: AppKitHandle | null; notice: AppKitNotice | null }> {
-  let createAppKit: typeof import("@reown/appkit").createAppKit;
-  let EthersAdapter: typeof import("@reown/appkit-adapter-ethers").EthersAdapter;
-  try {
-    ({ createAppKit } = await import("@reown/appkit"));
-    ({ EthersAdapter } = await import("@reown/appkit-adapter-ethers"));
-  } catch {
-    return { appKit: null, notice: "REOWN_LIBRARY_LOAD_FAILED" };
-  }
+  const loaded = await loadAppKitLibraries();
+  if (!loaded.ok) return { appKit: null, notice: loaded.notice };
+  const { createAppKit, EthersAdapter } = loaded.libs;
 
   try {
     const origin = getCurrentOrigin() ?? "";

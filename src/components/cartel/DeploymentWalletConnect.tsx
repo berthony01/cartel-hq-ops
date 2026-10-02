@@ -62,6 +62,12 @@ const NOTICE_COPY: Record<WalletConnectorNotice, string> = {
     "The wallet chooser is not configured for this deployment. A public project id must be present in the environment before mobile connection is possible.",
   REOWN_LIBRARY_LOAD_FAILED:
     "Diagnostic code REOWN_LIBRARY_LOAD_FAILED — the wallet chooser component could not be downloaded in this browser. Nothing was connected. Try a standalone browser tab or a different network, or report this code.",
+  REOWN_CHUNK_FETCH_FAILED:
+    "Diagnostic code REOWN_CHUNK_FETCH_FAILED — the wallet connection files are out of date or could not be loaded. Nothing was connected. Reload this page and try again.",
+  REOWN_MODULE_EVAL_FAILED:
+    "Diagnostic code REOWN_MODULE_EVAL_FAILED — the wallet chooser loaded but could not start in this browser. Nothing was connected. Try Chrome or your wallet's dapp browser.",
+  REOWN_ADAPTER_LOAD_FAILED:
+    "Diagnostic code REOWN_ADAPTER_LOAD_FAILED — the wallet connection adapter could not load. Nothing was connected. Reload the page and try again.",
   REOWN_ORIGIN_NOT_ALLOWED:
     "Diagnostic code REOWN_ORIGIN_NOT_ALLOWED — the wallet service refused this website address. Nothing was connected. The exact origin shown below must be listed under Project Domains in the Reown dashboard; this is external configuration and cannot be fixed in the app code.",
   REOWN_PROJECT_ID_INVALID_OR_MISSING:
