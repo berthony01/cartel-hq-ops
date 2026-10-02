@@ -192,7 +192,7 @@ export function TreasurySafeCreatePanel({
     if (!result.ok || !result.txHash) {
       setPhase("ambiguous");
       setMessage(
-        "The wallet did not return a clear result. Nothing will be resent. Check the predicted Safe address below.",
+        `The wallet did not return a clear result. Nothing will be resent. Check the predicted Safe address: ${predicted ?? "unavailable"}.`,
       );
       return;
     }
@@ -227,11 +227,10 @@ export function TreasurySafeCreatePanel({
             <CheckCircle2 className="h-4 w-4 shrink-0 text-primary" aria-hidden />
             Safe verified just now on Robinhood Chain.
           </p>
-          <p className="font-semibold text-foreground">Safe contract address</p>
+          <p className="font-semibold text-foreground">Treasury Safe address</p>
           <p className="break-all font-mono text-foreground">{show(statusQuery.data.persistedSafeAddress)}</p>
           <p className="text-[11px]">
-            This is a new contract address for the treasury. It is not a wallet and it is not a
-            fourth signer.
+            This is the treasury contract address. It is not a signer wallet.
           </p>
         </div>
       ) : (
@@ -239,38 +238,12 @@ export function TreasurySafeCreatePanel({
           <ul className="min-w-0 space-y-1 text-xs leading-relaxed text-muted-foreground">
             <li>Network: Robinhood Chain mainnet</li>
             <li>3 owners, 2 approvals required</li>
-            <li>Official Safe v1.4.1 with its standard fallback handler</li>
-            <li>No modules, no guard</li>
           </ul>
-          <div className="min-w-0 space-y-1">
-            <p className="text-xs font-semibold text-foreground">Owners (your 3 signer wallets)</p>
-            {signers.map((s) => (
-              <p key={s} className="break-all font-mono text-xs text-muted-foreground">
-                {show(s)}
-              </p>
-            ))}
-          </div>
-          <div className="min-w-0 space-y-1">
-            <p className="text-xs font-semibold text-foreground">Predicted Safe contract address</p>
-            <p className="text-[11px] text-muted-foreground">
-              This is a new contract address for the treasury. It is not a wallet and it is not a
-              fourth signer.
+          {!account ? (
+            <p className="text-xs text-muted-foreground">
+              Connect one of your 3 signer wallets to create the treasury Safe.
             </p>
-            {reviewQuery.isLoading ? (
-              <p className="text-xs text-muted-foreground">Checking Robinhood Chain…</p>
-            ) : predicted ? (
-              <p className="break-all font-mono text-xs text-foreground">{show(predicted)}</p>
-            ) : (
-              <p className="text-xs text-destructive">
-                {review?.preflight.message ?? "The Safe could not be prepared."}
-              </p>
-            )}
-            {review?.preflight.alreadyDeployed ? (
-              <p className="text-xs text-muted-foreground">
-                A Safe already exists here. It will be checked; nothing will be sent.
-              </p>
-            ) : null}
-          </div>
+          ) : null}
 
           {!isWorkspaceOwner ? (
             <p className="text-xs text-muted-foreground">Only the workspace owner can create the Safe.</p>
@@ -322,12 +295,44 @@ export function TreasurySafeCreatePanel({
 
       <details className="min-w-0 text-[11px] text-muted-foreground">
         <summary className="cursor-pointer">Technical details</summary>
-        <div className="mt-2 min-w-0 space-y-1 break-all font-mono">
+        <div className="mt-2 min-w-0 space-y-3">
+          <div className="min-w-0 space-y-1">
+            <p className="font-semibold text-foreground">Owners (your 3 signer wallets)</p>
+            {signers.map((s) => (
+              <p key={s} className="break-all font-mono text-foreground">{show(s)}</p>
+            ))}
+          </div>
+          {!ready ? (
+            <div className="min-w-0 space-y-1">
+              <p className="font-semibold text-foreground">Predicted Safe contract address</p>
+              <p>
+                This is a new contract address for the treasury. It is not a wallet and it is not a
+                fourth signer.
+              </p>
+              {reviewQuery.isLoading ? (
+                <p>Checking Robinhood Chain…</p>
+              ) : predicted ? (
+                <p className="break-all font-mono text-foreground">{show(predicted)}</p>
+              ) : (
+                <p className="text-destructive">
+                  {review?.preflight.message ?? "The Safe could not be prepared."}
+                </p>
+              )}
+              {review?.preflight.alreadyDeployed ? (
+                <p>A Safe already exists here. It will be checked; nothing will be sent.</p>
+              ) : null}
+            </div>
+          ) : null}
+          <div className="min-w-0 space-y-1 break-all font-mono">
+            <p>Safe: Official v1.4.1 with its standard fallback handler</p>
+            <p>Modules: None</p>
+            <p>Guard: None</p>
           <p>Factory: {SAFE_PROXY_FACTORY}</p>
           <p>Singleton (SafeL2 1.4.1): {SAFE_CREATE_SINGLETON}</p>
           <p>Fallback handler: {SAFE_FALLBACK_HANDLER}</p>
           {review ? <p>Salt nonce: {review.plan.saltNonce}</p> : null}
           {review?.preflight.blockNumber ? <p>Preflight block: {review.preflight.blockNumber}</p> : null}
+          </div>
         </div>
       </details>
     </div>

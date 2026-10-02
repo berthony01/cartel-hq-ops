@@ -88,9 +88,9 @@ check(
   "canonical PCART with saved signers renders the Safe card before the protected checkpoint",
 );
 const tail = LAUNCH_CONTROL.slice(safePanelIndex);
-check("S16b", /Historical test\/generic records\.[\s\S]*<VerifiedDeploymentEvidencePanel/.test(tail) &&
-  /"Advanced \/ Audit history" : "Technical deployment evidence"/.test(LAUNCH_CONTROL),
-  "PCART history only inside collapsed Advanced / Audit; generic label unchanged");
+check("S16b", /!selectedIsCanonicalPcart \? \(\s*<details[\s\S]*Technical deployment evidence[\s\S]*<VerifiedDeploymentEvidencePanel/.test(tail) &&
+  !/Advanced \/ Audit history|Historical test\/generic records/.test(tail),
+  "PCART omits historical evidence from the current-step flow; generic evidence remains");
 check("S16c", /pcartSafeReady \? \([\s\S]{0,200}Next step: Test PCART before launch[\s\S]{0,120}<PcartProductionBlockedCheckpoint \/>/.test(LAUNCH_CONTROL),
   "PCART checkpoint renders only after Safe verified, framed as next step");
 check("S16d", /\{!selectedIsCanonicalPcart \? \(\s*<>\s*<dl/.test(LAUNCH_CONTROL) &&
@@ -99,9 +99,14 @@ check("S16d", /\{!selectedIsCanonicalPcart \? \(\s*<>\s*<dl/.test(LAUNCH_CONTROL
 check("S16e", /compact=\{selectedIsCanonicalPcart\}/.test(LAUNCH_CONTROL) && /PCART setup progress/.test(LAUNCH_CONTROL),
   "PCART progress card + compact signer summary");
 const SAFE_UI = readFileSync("src/components/cartel/TreasurySafeCreatePanel.tsx", "utf8");
-check("S16f", SAFE_UI.includes("Owners (your 3 signer wallets)") && SAFE_UI.includes("Predicted Safe contract address") &&
-  SAFE_UI.includes("it is not a\n              fourth signer") && SAFE_UI.includes("Connected signer wallet") &&
-  SAFE_UI.includes("It is not added as another owner."), "address labels distinguish owners, Safe contract, connected wallet");
+const technicalDetailsIndex = SAFE_UI.indexOf('<summary className="cursor-pointer">Technical details</summary>');
+check("S16f", SAFE_UI.includes("Treasury Safe address") && SAFE_UI.includes("Connected signer wallet") &&
+  SAFE_UI.includes("It is not added as another owner.") &&
+  SAFE_UI.indexOf("Owners (your 3 signer wallets)") > technicalDetailsIndex &&
+  SAFE_UI.indexOf("Predicted Safe contract address") > technicalDetailsIndex,
+  "pre-creation owner and predicted addresses live only under Technical details");
+check("S16g", /isWorkspaceOwner && !selectedIsCanonicalPcart && internalTestLaunches\.length > 0/.test(LAUNCH_CONTROL),
+  "internal test launches stay hidden while canonical PCART is selected");
 
 const FORBIDDEN = [
   "contracts/", "artifacts/", "src/lib/launch-artifact-registry.ts", "src/lib/chain-mainnet-registry.ts",

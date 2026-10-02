@@ -1524,7 +1524,7 @@ function LaunchControlPage() {
           {/* Owner-only. Internal chain-test records are never part of the
               product surface: the database keeps them permanently DRAFT,
               tokenless and unable to bind an official contract. */}
-          {isWorkspaceOwner && internalTestLaunches.length > 0 ? (
+          {isWorkspaceOwner && !selectedIsCanonicalPcart && internalTestLaunches.length > 0 ? (
             <details className="surface-quiet min-w-0 rounded-lg">
               <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
                 <span className="min-w-0 [overflow-wrap:anywhere]">Internal test launches ({internalTestLaunches.length})</span>
@@ -3128,24 +3128,16 @@ function LaunchControlPage() {
                 ) : null}
 
 
-                {/* Full technical evidence stays mounted and read-only, using
-                    the same evaluation object as the panels above. Canonical
-                    PCART history is audit-only and closed by default. */}
-                <details className="surface-quiet min-w-0 rounded-lg">
+                {/* Generic launch evidence remains available exactly as before.
+                    Canonical PCART omits this historical material from its
+                    current-step flow without changing the underlying data. */}
+                {!selectedIsCanonicalPcart ? (
+                  <details className="surface-quiet min-w-0 rounded-lg">
                   <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-2 px-3.5 type-eyebrow text-muted-foreground transition-colors hover:text-foreground">
-                <span className="min-w-0 [overflow-wrap:anywhere]">
-                  {selectedIsCanonicalPcart ? "Advanced / Audit history" : "Technical deployment evidence"}
-                </span>
-                <ChevronDown className="size-4 shrink-0 transition-transform [[open]_&]:rotate-180" aria-hidden="true" />
-              </summary>
+                    <span className="min-w-0 [overflow-wrap:anywhere]">Technical deployment evidence</span>
+                    <ChevronDown className="size-4 shrink-0 transition-transform [[open]_&]:rotate-180" aria-hidden="true" />
+                  </summary>
                   <div className="min-w-0 px-3 pb-3">
-                    {selectedIsCanonicalPcart ? (
-                      <p className="mb-3 text-xs leading-relaxed text-muted-foreground">
-                        Historical test/generic records. These are not the PCART treasury Safe, not
-                        the PCART exact-artifact rehearsal, and not the official PCART mainnet
-                        deployment.
-                      </p>
-                    ) : null}
                     <VerifiedDeploymentEvidencePanel
                       evaluation={deploymentEvidence}
                       loading={deploymentEvidenceQuery.isLoading}
@@ -3156,7 +3148,8 @@ function LaunchControlPage() {
                       }
                     />
                   </div>
-                </details>
+                  </details>
+                ) : null}
             </WorkingView>
             </>
           ) : null}
