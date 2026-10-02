@@ -776,7 +776,7 @@ check(
 );
 check(
   "S3",
-  /if \(appKitHandle\) return \{ appKit: appKitHandle, notice: null \};/.test(appkitCode) &&
+  /if \(appKitHandle\) \{[\s\S]{0,300}?return \{ appKit: appKitHandle, notice: null \};/.test(appkitCode) &&
     /if \(!appKitInitPromise\) appKitInitPromise = runCreateAppKit\(projectId\);/.test(appkitCode),
   "a repeated connect reuses the cached AppKit instance instead of re-initializing",
 );

@@ -359,12 +359,12 @@ export function hasWalletConnectConnector(adapter: WalletConnectProbe | null | u
  * AppKit's own `getUniversalProvider()` once, then WagmiAdapter's own
  * `setUniversalProvider()` once if a provider exists. No loop, no timer.
  */
-export async function proveWalletConnectReady(
-  instance: { getUniversalProvider: () => Promise<unknown> },
-  adapter: WalletConnectProbe & { setUniversalProvider: (provider: never) => Promise<void> },
+export async function proveWalletConnectReady<P>(
+  instance: { getUniversalProvider: () => Promise<P | undefined> },
+  adapter: WalletConnectProbe & { setUniversalProvider: (provider: P) => Promise<void> },
 ): Promise<boolean> {
   if (hasWalletConnectConnector(adapter)) return true;
-  let provider: unknown;
+  let provider: P | undefined;
   try {
     provider = await instance.getUniversalProvider();
   } catch {
@@ -372,7 +372,7 @@ export async function proveWalletConnectReady(
   }
   if (!provider) return false;
   try {
-    await adapter.setUniversalProvider(provider as never);
+    await adapter.setUniversalProvider(provider);
   } catch {
     return false;
   }
