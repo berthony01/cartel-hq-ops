@@ -91,6 +91,7 @@ const CONNECT_NOTICE_COPY: Record<WalletConnectorNotice, string> = {
   REOWN_LIBRARY_LOAD_FAILED: "The wallet chooser could not load in this browser. Try Safari or Chrome, or another network.",
   REOWN_CHUNK_FETCH_FAILED: "The wallet connection files are out of date or could not be loaded. Reload this page and try again.",
   REOWN_MODULE_EVAL_FAILED: "The wallet chooser loaded but could not start in this browser. Try Chrome or your wallet's dapp browser.",
+  REOWN_CUSTOM_ELEMENT_CONFLICT: "The wallet interface did not initialize cleanly. Reload this page once and try again.",
   REOWN_ADAPTER_LOAD_FAILED: "The wallet connection adapter could not load. Reload the page and try again.",
   REOWN_ORIGIN_NOT_ALLOWED: "The wallet service refused this website address. It must be allowed in the Reown dashboard.",
   REOWN_PROJECT_ID_INVALID_OR_MISSING: "The wallet service rejected this site's configuration. Nothing was connected.",
@@ -548,7 +549,7 @@ export function TreasurySafeCreatePanel({
                   Website address to allow: {getConnectorOrigin()}
                 </p>
               ) : null}
-              {connectNotice === "REOWN_CHUNK_FETCH_FAILED" ? (
+              {connectNotice === "REOWN_CHUNK_FETCH_FAILED" || connectNotice === "REOWN_CUSTOM_ELEMENT_CONFLICT" ? (
                 <div className="space-y-1 pt-1">
                   <Button type="button" size="sm" variant="outline" onClick={reloadAndRetry}>
                     Reload and retry

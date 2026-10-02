@@ -105,13 +105,13 @@ check(
   "C1",
   /await import\("\.\/reown-appkit-browser"\)/.test(appkitCode) &&
     (appkitCode.match(/await import\(/g) ?? []).length === 1 &&
-    !/appkit-adapter-ethers/.test(appkitCode) &&
-    /adapters: \[ethersAdapter as never\]/.test(appkitCode) &&
-    (appkitCode.match(/new EthersAdapter\(\)/g) ?? []).length === 1 &&
+    !/EthersAdapter|appkit-adapter-ethers/.test(appkitCode + bridgeCode) &&
+    /adapters: \[wagmiAdapter as never\]/.test(appkitCode) &&
+    (appkitCode.match(/new WagmiAdapter\(\{/g) ?? []).length === 1 &&
     /coinbasePreference: "all"/.test(appkitCode) &&
     /from "@reown\/appkit"/.test(bridgeCode) &&
-    /from "@reown\/appkit-adapter-ethers"/.test(bridgeCode),
-  "one lazy bridge import bundles AppKit + one EthersAdapter; coinbasePreference all",
+    /from "@reown\/appkit-adapter-wagmi"/.test(bridgeCode),
+  "one lazy bridge import bundles AppKit + one WagmiAdapter; coinbasePreference all",
 );
 check(
   "C2",
@@ -514,15 +514,34 @@ check(
 // separately and classified into sanitized chunk-fetch / module-eval /
 // adapter-load codes. None of them may fall through to the init code.
 const importLoader = /async function loadAppKitLibraries[\s\S]*?\n\}/.exec(appkitCode)?.[0];
+const classifierBody = /export function classifyLazyLoadFailure[\s\S]*?\n\}/.exec(appkitCode)?.[0];
 check(
   "M5",
   importLoader !== undefined &&
-    /REOWN_CHUNK_FETCH_FAILED/.test(importLoader) &&
-    /REOWN_MODULE_EVAL_FAILED/.test(importLoader) &&
-    !/REOWN_ADAPTER_LOAD_FAILED/.test(importLoader) &&
-    !/REOWN_APPKIT_INIT_FAILED/.test(importLoader),
-  "a failed dynamic import returns a sanitized library-load code, not the init code",
+    classifierBody !== undefined &&
+    /classifyLazyLoadFailure\(error\)/.test(importLoader) &&
+    /REOWN_CHUNK_FETCH_FAILED/.test(classifierBody) &&
+    /REOWN_MODULE_EVAL_FAILED/.test(classifierBody) &&
+    /REOWN_CUSTOM_ELEMENT_CONFLICT/.test(classifierBody) &&
+    !/REOWN_ADAPTER_LOAD_FAILED|REOWN_APPKIT_INIT_FAILED/.test(importLoader + classifierBody),
+  "a failed dynamic import returns a sanitized load code, not the init code",
 );
+{
+  const m = await import("../src/lib/reown-appkit-wallet");
+  const css = new Error("Unable to preload CSS for /assets/x.css");
+  const stale = new TypeError("Failed to fetch dynamically imported module: https://x/a.js");
+  const ce = new DOMException("Failed to execute 'define' on 'CustomElementRegistry': the name \"w3m-modal\" has already been used with this registry", "NotSupportedError");
+  const generic = new Error("x is not a function");
+  check(
+    "M5b",
+    m.classifyLazyLoadFailure(stale) === "REOWN_CHUNK_FETCH_FAILED" &&
+      m.classifyLazyLoadFailure(css) === "REOWN_CHUNK_FETCH_FAILED" &&
+      m.classifyLazyLoadFailure(ce) === "REOWN_CUSTOM_ELEMENT_CONFLICT" &&
+      m.classifyLazyLoadFailure(generic) === "REOWN_MODULE_EVAL_FAILED" &&
+      m.classifyLazyLoadFailure(undefined) === "REOWN_MODULE_EVAL_FAILED",
+    "classifier: stale TypeError + Vite CSS preload → chunk; duplicate custom element → conflict; other → eval",
+  );
+}
 check(
   "M6",
   /APKT002/.test(appkitCode) &&
@@ -571,8 +590,9 @@ check(
   "R2",
   /open\(\{ view: "Connect", namespace: "eip155" \}\)/.test(appkitCode) &&
     /networks: \[ROBINHOOD_APPKIT_NETWORK\]/.test(appkitCode) &&
-    /"@reown\/appkit": "\^?1\.8\.23"/.test(pkgSrc),
-  "the core chooser opens Connect with eip155 as the only configured namespace, pinned AppKit 1.8.23",
+    /"@reown\/appkit": "1\.8\.24"/.test(pkgSrc) &&
+    /"@reown\/appkit-adapter-wagmi": "1\.8\.24"/.test(pkgSrc),
+  "the chooser opens Connect with eip155 as the only configured namespace, pinned AppKit + WagmiAdapter 1.8.24",
 );
 
 /* N — explicit Robinhood Chain switch + safe deployer binding. */
@@ -933,7 +953,7 @@ check(
 );
 check(
   "T5",
-  !/as never/.test(appkitCode.replace(/adapters: \[ethersAdapter as never\]/, "")) &&
+  !/as never/.test(appkitCode.replace(/adapters: \[wagmiAdapter as never\]/, "")) &&
     /ROBINHOOD_APPKIT_NETWORK: import\("@reown\/appkit-common"\)\.CaipNetwork/.test(appkitCode) &&
     /networks: \[ROBINHOOD_APPKIT_NETWORK\]/.test(appkitCode),
   "the custom network is typed against the installed CaipNetwork contract with no unsafe cast hiding a required property",
