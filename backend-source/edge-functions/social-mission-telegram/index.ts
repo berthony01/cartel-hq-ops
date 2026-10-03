@@ -27,7 +27,7 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
-import { presentInlineKeyboard, presentTelegramPayload } from "../_shared/telegram-presentation.ts";
+import { presentInlineKeyboard, presentTelegramFormData, presentTelegramPayload } from "../_shared/telegram-presentation.ts";
 
 const TG_BASE = "https://api.telegram.org";
 const TELEGRAM_TIMEOUT_MS = 10_000;
