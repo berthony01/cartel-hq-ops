@@ -82,3 +82,22 @@ export function setupCommercialAccessAllows(
   if (access.allowed && !access.wouldBlock) return true;
   return exactCommittedRecovery && access.reason === "PLAN_LIMIT_REACHED";
 }
+
+export type ActiveSetupMission = {
+  missionId: string;
+  candidateId: string | null;
+  requestId: string | null;
+  targets: Record<string, number>;
+  groupConnectionId: string;
+  telegramChatId: string;
+};
+
+export function classifyActiveSetupMission(
+  active: ActiveSetupMission | null,
+  candidateId: string,
+  groupConnectionId: string,
+  telegramChatId: string,
+): "none" | "exact_recovery" | "duplicate" {
+  if (!active || active.groupConnectionId !== groupConnectionId || active.telegramChatId !== telegramChatId) return "none";
+  return active.candidateId === candidateId && active.requestId ? "exact_recovery" : "duplicate";
+}

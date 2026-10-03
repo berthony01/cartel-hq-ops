@@ -12,6 +12,7 @@ import {
   setupPermissionProofAllowsStart,
   setupRecoveryAction,
   setupCommercialAccessAllows,
+  classifyActiveSetupMission,
 } from "../src/lib/mission-setup-orchestration";
 import { setupSuggestionTargets, setupTargets } from "../src/lib/telegram-miniapp-bridge.functions";
 
@@ -85,6 +86,19 @@ const atLimit = { allowed: false, wouldBlock: true, reason: "PLAN_LIMIT_REACHED"
 check("at-last-slot exact committed recovery survives PLAN_LIMIT_REACHED", setupCommercialAccessAllows(atLimit, true));
 check("at-last-slot new mission cannot bypass PLAN_LIMIT_REACHED", !setupCommercialAccessAllows(atLimit, false));
 check("disabled or suspended access still blocks committed recovery", !setupCommercialAccessAllows({ allowed: false, wouldBlock: true, reason: "SUBSCRIPTION_INACTIVE" }, true));
+
+const activeWinner = {
+  missionId: "11111111-2222-4333-8444-555555555555",
+  candidateId: "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee",
+  requestId: "99999999-8888-4777-8666-555555555555",
+  targets: { likes: 25, replies: 4 },
+  groupConnectionId: "11111111-aaaa-4bbb-8ccc-222222222222",
+  telegramChatId: "-1001234567890",
+};
+check("same candidate and exact group remains exact committed recovery", classifyActiveSetupMission(activeWinner, activeWinner.candidateId, activeWinner.groupConnectionId, activeWinner.telegramChatId) === "exact_recovery");
+check("second candidate for same post and exact group is a duplicate with winner targets preserved", classifyActiveSetupMission(activeWinner, "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff", activeWinner.groupConnectionId, activeWinner.telegramChatId) === "duplicate" && activeWinner.targets.likes === 25 && activeWinner.targets.replies === 4);
+check("same post in a different group does not collide", classifyActiveSetupMission(activeWinner, "bbbbbbbb-cccc-4ddd-8eee-ffffffffffff", "22222222-aaaa-4bbb-8ccc-333333333333", "-1009876543210") === "none");
+check("old active mission without setup request is duplicate, never quota recovery", classifyActiveSetupMission({ ...activeWinner, requestId: null }, activeWinner.candidateId, activeWinner.groupConnectionId, activeWinner.telegramChatId) === "duplicate" && !setupCommercialAccessAllows(atLimit, false));
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail > 0) process.exit(1);

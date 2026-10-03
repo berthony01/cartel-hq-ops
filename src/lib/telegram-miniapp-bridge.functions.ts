@@ -1009,7 +1009,7 @@ async function sendSetupMissionCard(args: {
 
 export const miniAppStartMissionSetup = createServerFn({ method: "POST" })
   .inputValidator((input: { initData: string; requestId: string; likes?: number | null; replies?: number | null; reposts?: number | null; bookmarks?: number | null }) => input)
-  .handler(async ({ data }): Promise<{ ok: true; outcome: string; missionId?: string } | MiniAppFailure> => {
+  .handler(async ({ data }): Promise<{ ok: true; outcome: string; missionId?: string; targets?: Record<string, number> } | MiniAppFailure> => {
     if (!isRequestId(data?.requestId)) return fail("invalid_request_id");
     const targets = setupTargets(data);
     if (!targets) return fail("invalid_target");
@@ -1019,8 +1019,12 @@ export const miniAppStartMissionSetup = createServerFn({ method: "POST" })
     if (!actor.ok) return actor;
     const identity = await gate.admin.rpc("can_use_project_tools", { _workspace_id: gate.launch.workspaceId, _user_id: actor.actorUserId });
     if (identity.error || identity.data !== true) return fail("project_identity_required");
-    const entitled = await miniAppFeatureAllowed(gate.admin, gate.launch.workspaceId, "x_missions", actor.actorUserId);
-    if (entitled !== true) return fail(entitled === false ? "missions_plan_required" : "unavailable");
+    const access = await miniAppFeatureAccess(gate.admin, gate.launch.workspaceId, "x_missions", actor.actorUserId);
+    if (!access) return fail("unavailable");
+    // PLAN_LIMIT_REACHED may proceed only to the atomic RPC so it can distinguish
+    // exact recovery / an existing same-group duplicate from a genuinely new row.
+    // The RPC applies quota again before every new insert.
+    if (!setupCommercialAccessAllows(access, true)) return fail("missions_plan_required");
     const permissions = await botMissionPermissions(gate.token, gate.chatId);
     const { data: started, error } = await gate.admin.rpc(MINIAPP_RPC.startSetup, {
       _candidate_id: gate.route.candidateId, _group_connection_id: gate.route.connectionId,
@@ -1034,6 +1038,9 @@ export const miniAppStartMissionSetup = createServerFn({ method: "POST" })
     const missionId = String(start["mission_id"] ?? "");
     const targetId = String(start["target_id"] ?? "");
     if (outcome === "FINALIZED") return { ok: true, outcome, missionId };
+    if (outcome === "ALREADY_ACTIVE" && isUuid(missionId)) {
+      return { ok: true, outcome, missionId, targets: setupSuggestionTargets((start["reviewed_targets"] ?? {}) as Record<string, unknown>) };
+    }
     if (!["CREATED", "EXISTING"].includes(outcome) || !isUuid(missionId) || !isUuid(targetId)) return fail(String(start["reason"] ?? "mission_setup_unavailable"));
     const winnerRequestId = String(start["request_id"] ?? "");
     if (!isRequestId(winnerRequestId)) return fail("mission_setup_unavailable");
