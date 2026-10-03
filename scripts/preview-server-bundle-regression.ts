@@ -62,18 +62,64 @@ try {
 const files = listMjs(SERVER_DIR);
 check("server bundle emitted chunks", files.length > 0, `${files.length} files`);
 
-// 1. Browser-only chunks may only be reachable from other browser-only chunks.
+// 1. Eager-reachability: following ONLY static imports from the server
+//    entries must never reach a browser-only chunk. The lazy wallet bridge
+//    (src/lib/reown-appkit-browser.ts) and the wallet libraries it pulls in
+//    (AppKit, wagmi connectors, Safe Apps provider) are browser-only and may
+//    statically import each other; they are legitimate only behind a
+//    dynamic import().
+const LAZY_WALLET_CHUNK = /(reown-appkit-browser-|wagmi__connectors|@safe-global[\\/]safe-apps-provider)/;
+const isBrowserOnly = (rel: string) => BROWSER_ONLY_CHUNK.test(rel) || LAZY_WALLET_CHUNK.test(rel);
+const resolveSpec = (from: string, spec: string) =>
+  spec.startsWith(".") ? resolve(join(from, ".."), spec) : null;
+
+const entries = [join(SERVER_DIR, "index.mjs"), join(SERVER_DIR, "_ssr/ssr.mjs")].filter((f) => {
+  try { statSync(f); return true; } catch { return false; }
+});
+check("server entries found (index.mjs, _ssr/ssr.mjs)", entries.length === 2, `${entries.length}`);
+const seen = new Set<string>();
+const eagerBrowserOnly: string[] = [];
+const stack = [...entries];
+while (stack.length) {
+  const file = stack.pop()!;
+  if (seen.has(file)) continue;
+  seen.add(file);
+  const rel = relative(SERVER_DIR, file);
+  if (isBrowserOnly(rel)) { eagerBrowserOnly.push(rel); continue; }
+  for (const spec of staticImportsOf(file)) {
+    const target = resolveSpec(file, spec);
+    if (target) stack.push(target);
+  }
+}
+check("static graph from server entries visited modules", seen.size >= 3, `${seen.size}`);
+check(
+  "no browser-only chunk eagerly reachable from server entries",
+  eagerBrowserOnly.length === 0,
+  eagerBrowserOnly.join(", "),
+);
+
+// 1b. Non-browser-only chunks must not statically import browser-only chunks.
 for (const file of files) {
   const rel = relative(SERVER_DIR, file);
-  const isBrowserOnlyChunk = BROWSER_ONLY_CHUNK.test(rel);
-  const offending = staticImportsOf(file).filter((spec) => BROWSER_ONLY_CHUNK.test(spec));
-  if (isBrowserOnlyChunk) continue;
-  check(
-    `no static browser-only import in ${rel}`,
-    offending.length === 0,
-    offending.join(", "),
-  );
+  if (isBrowserOnly(rel)) continue;
+  const offending = staticImportsOf(file).filter((spec) => isBrowserOnly(spec));
+  check(`no static browser-only import in ${rel}`, offending.length === 0, offending.join(", "));
 }
+
+// 1c. The lazy bridge exists and every reference to it is a dynamic import().
+const bridgeFiles = files.filter((f) => /reown-appkit-browser-/.test(relative(SERVER_DIR, f)));
+check("lazy wallet bridge chunk emitted", bridgeFiles.length === 1, `${bridgeFiles.length}`);
+for (const file of files) {
+  const src = readFileSync(file, "utf8");
+  if (!/reown-appkit-browser-/.test(src) || bridgeFiles.includes(file)) continue;
+  const staticRef = staticImportsOf(file).some((s) => /reown-appkit-browser-/.test(s));
+  check(`bridge never statically imported by ${relative(SERVER_DIR, file)}`, !staticRef);
+}
+const wrapper = files.find((f) => /reown-appkit-wallet-/.test(relative(SERVER_DIR, f)));
+check(
+  "wallet wrapper loads the bridge only via dynamic import()",
+  !!wrapper && /import\(\s*["'][^"']*reown-appkit-browser-/.test(readFileSync(wrapper, "utf8")),
+);
 
 // 2. The two modules proven to have dragged the browser chunk into SSR.
 for (const marker of ["router-core", "supabase__realtime-js"]) {

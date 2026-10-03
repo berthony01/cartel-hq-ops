@@ -1446,7 +1446,12 @@ check(
 
 {
   const ids = (appkitCode.match(/featuredWalletIds: \[([^\]]*)\]/)?.[1] ?? "").match(/[0-9a-f]{64}/g) ?? [];
-  check("FW-1", ids.join(",") === "c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96,fd20dc426fb37566d803205b19bbc1d4096b248ac04548e3cfb6b3a38bd033aa,8837dd9413b1d9b585ee937d27a816590248386d9dbf59f5cd3422dbbb65683e", "featured IDs exactly MetaMask, Base, Robinhood in order");
+  check("FW-1", ids.join(",") === "c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96,fd20dc426fb37566d803205b19bbc1d4096b248ac04548e3cfb6b3a38bd033aa,8837dd9413b1d9b585ee937d27a816590248386d9dbf59f5cd3422dbbb65683e,d0ca99ff52b99abc48743dad0f7fc891e041be73574f7fac4afe5d4bb83845c8", "featured IDs exactly MetaMask, Base, Robinhood, Coinbase (mobile Base path) in order");
+  {
+    // FW-1b: the mobile Base path relies on AppKit's built-in custom-deeplink id.
+    const mw = readFileSync("node_modules/@reown/appkit-controllers/dist/esm/src/utils/MobileWallet.js", "utf8");
+    check("FW-1b", /COINBASE:\s*\{\s*id:\s*'d0ca99ff52b99abc48743dad0f7fc891e041be73574f7fac4afe5d4bb83845c8'/.test(mw), "legacy Coinbase id is AppKit's CUSTOM_DEEPLINK_WALLETS.COINBASE");
+  }
   check("FW-2", !appkitCode.includes("a797aa35c0fadbfc1a53e7f675162ed5226968b44a19ee3d24385c64d1d3c393"), "Phantom is not featured");
   check("FW-3", /\n      allWallets: "SHOW",/.test(appkitCode), "top-level allWallets SHOW");
   check("FW-4", /enableMobileFullScreen: true/.test(appkitCode), "mobile full screen");
