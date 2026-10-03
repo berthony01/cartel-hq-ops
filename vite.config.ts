@@ -44,6 +44,13 @@ export default defineConfig({
   },
   vite: {
     plugins: [mcpPlugin()],
+    // WalletConnect imports `events` (EventEmitter). The production client build
+    // replaced it with Vite's empty browser-external stub, so UniversalProvider
+    // threw "x.default is not a constructor" on start. Force the real npm package
+    // (trailing slash = resolve the installed package, not the Node builtin).
+    resolve: {
+      alias: [{ find: /^events$/, replacement: "events/" }],
+    },
     environments: {
       nitro: serverChunkIsolation,
       ssr: serverChunkIsolation,
