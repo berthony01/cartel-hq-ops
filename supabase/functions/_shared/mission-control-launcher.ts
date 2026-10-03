@@ -22,6 +22,11 @@ export const MISSION_CONTROL_UNAVAILABLE_TEXT =
 export const MISSION_CONTROL_ADMIN_ONLY_TEXT =
   "Mission Control is available to this group's administrators only.";
 
+/** Once setup commits a mission, legacy Ignore must not resolve the candidate. */
+export function candidateIgnoreAllowed(setupMissionId: unknown): boolean {
+  return setupMissionId === null || setupMissionId === undefined || setupMissionId === "";
+}
+
 /** `/missioncontrol` or `/missioncontrol@<this bot>`; a foreign suffix is ignored. */
 export function isMissionControlCommand(text: string, botUsername: string): boolean {
   const match = String(text ?? "").match(/^\/missioncontrol(?:@(\w+))?\s*$/i);

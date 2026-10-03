@@ -4,6 +4,7 @@ import { requireProjectToolAccess } from "../_shared/project-identity.ts";
 import { requireCommercialAccess } from "../_shared/commercial-access.ts";
 import {
   buildMissionSetupDirectLink,
+  candidateIgnoreAllowed,
   isMissionControlCommand,
   runMissionControlGroupLauncher,
 } from "../_shared/mission-control-launcher.ts";
@@ -3156,6 +3157,23 @@ Deno.serve(async (req: Request) => {
             );
           }
           await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Open Set Up Mission to review targets.");
+          return json({ ok: true });
+        }
+
+        // Clear preflight feedback for legacy Ignore. The staged database
+        // constraint remains the atomic barrier if setup commits after this read.
+        const { data: ignoreCandidate, error: ignoreCandidateError } = await admin
+          .from("social_mission_link_candidates")
+          .select("setup_mission_id")
+          .eq("id", candidateId)
+          .eq("telegram_chat_id", candidateChatId)
+          .maybeSingle();
+        if (ignoreCandidateError || !ignoreCandidate) {
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "This suggestion could not be handled.");
+          return json({ ok: true });
+        }
+        if (!candidateIgnoreAllowed(ignoreCandidate.setup_mission_id)) {
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "This mission is already starting. Open Mission Control to continue.");
           return json({ ok: true });
         }
 

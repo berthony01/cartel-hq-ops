@@ -27,6 +27,7 @@ import {
   MISSION_CONTROL_UNAVAILABLE_TEXT,
   buildMissionControlDirectLink,
   buildMissionSetupDirectLink,
+  candidateIgnoreAllowed,
   isMissionControlCommand,
   runMissionControlGroupLauncher,
   type LauncherDeps,
@@ -438,6 +439,10 @@ const startSql = stagedSetupSql.slice(stagedSetupSql.indexOf("create or replace 
 check("7.13 exact committed recovery resolves before quota and only PLAN_LIMIT_REACHED may recover", startSql.indexOf("if v.setup_mission_id is not null") < startSql.indexOf("perform pg_advisory_xact_lock") && startSql.includes("coalesce(v_access->>'reason','') <> 'PLAN_LIMIT_REACHED'"));
 check("7.14 workspace-serialized quota check occurs only before new mission insert", startSql.includes("social_mission_setup_workspace:") && startSql.lastIndexOf("public.evaluate_commercial_access") < startSql.indexOf("insert into public.social_missions") && startSql.lastIndexOf("public.evaluate_commercial_access") > startSql.indexOf("if v_mission is null then"));
 check("7.15 discovered recovery is bound to exact candidate and community", startSql.includes("m.metadata->>'candidate_id'=v.id::text") && startSql.includes("t.group_connection_id=v.group_connection_id"));
+check("7.16 committed setup winner cannot enter legacy IGNORED or EXPIRED states", stagedSetupSql.includes("check (setup_mission_id is null or state in ('PENDING','STARTED'))"));
+check("7.17 start-v-Ignore precheck refuses committed winner and permits unresolved candidate", !candidateIgnoreAllowed("aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee") && candidateIgnoreAllowed(null));
+const ignoreBranch = webhookSetup.slice(webhookSetup.indexOf("Clear preflight feedback for legacy Ignore"), webhookSetup.indexOf("// SE-7"));
+check("7.18 Ignore checks exact candidate after authorization and before resolver", ignoreBranch.includes('.select("setup_mission_id")') && ignoreBranch.includes('.eq("id", candidateId)') && ignoreBranch.includes('.eq("telegram_chat_id", candidateChatId)') && ignoreBranch.includes("candidateIgnoreAllowed") && ignoreBranch.includes("already starting"));
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail > 0) process.exit(1);
