@@ -432,7 +432,8 @@ check("7.9 bot permission proof is checked atomically before mission insert", st
 check("7.10 command provenance freezes configured cleanup while detector remains mandatory", stagedSetupSql.includes("setup_source text not null default 'LINK_FINDER'") && stagedSetupSql.includes("source_cleanup_required boolean not null default true") && webhookSetup.includes('created.source_cleanup_required !== false'));
 check("7.11 start RPC receives all four current bot permission facts", stagedSetupSql.includes("_bot_permissions_resolved boolean") && stagedSetupSql.includes("_bot_can_delete boolean") && stagedSetupSql.includes("_bot_can_pin boolean"));
 const bridgeSetup = readFileSync("src/lib/telegram-miniapp-bridge.functions.ts", "utf8");
-check("7.12 setup close re-reads exact candidate token before queue request", bridgeSetup.indexOf('route.kind === "setup"') < bridgeSetup.indexOf("MINIAPP_RPC.closeLauncher") && bridgeSetup.includes('["cleanup_confirmed"] !== true'));
+const closeHandler = bridgeSetup.slice(bridgeSetup.indexOf("export const miniAppCloseCommunityLaunch"), bridgeSetup.indexOf("export const miniAppListMissions"));
+check("7.12 setup close re-reads exact candidate token before queue request", closeHandler.includes('route.kind === "setup"') && closeHandler.indexOf("MINIAPP_RPC.readSetup") < closeHandler.indexOf("MINIAPP_RPC.closeLauncher") && closeHandler.includes('["cleanup_confirmed"] === true'));
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail > 0) process.exit(1);
