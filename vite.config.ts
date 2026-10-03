@@ -52,7 +52,7 @@ export default defineConfig({
     // threw "x.default is not a constructor" on start. Force the real npm package
     // by absolute file path so builtin detection cannot intercept it.
     resolve: {
-      alias: [{ find: /^events$/, replacement: EVENTS_NPM }],
+      alias: [{ find: /^(?:node:)?events$/, replacement: EVENTS_NPM }],
     },
     environments: {
       nitro: serverChunkIsolation,
