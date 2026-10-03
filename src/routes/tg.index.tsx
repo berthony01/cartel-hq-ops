@@ -204,6 +204,19 @@ function MiniAppHome() {
 
   const listWorkspaces = useServerFn(miniAppListMissionWorkspaces);
   const listMissions = useServerFn(miniAppListMissions);
+  const resolveLaunch = useServerFn(miniAppResolveCommunityLaunch);
+
+  // The `mc_` hint is read server-side from the SIGNED start_param only.
+  const launchQuery = useQuery({
+    queryKey: ["tg", "community-launch"],
+    enabled: Boolean(initData),
+    retry: false,
+    queryFn: () => resolveLaunch({ data: { initData: initData as string } }),
+  });
+  const communityLaunch = launchQuery.data?.ok ? launchQuery.data.launch : null;
+  const launchRefused = Boolean(launchQuery.data && !launchQuery.data.ok) || launchQuery.isError;
+  // True whenever a community launch is pending, resolved or refused.
+  const launchActive = launchQuery.isPending || launchRefused || communityLaunch !== null;
   const loadOperatorHome = useServerFn(miniAppOperatorHome);
   const loadInboxSummary = useServerFn(miniAppInboxSummary);
   const loadCommercialStatus = useServerFn(miniAppCommercialStatus);
@@ -227,6 +240,15 @@ function MiniAppHome() {
   const requestedWorkspace = search.workspace ?? null;
   useEffect(() => {
     setWorkspaceId((current) => {
+      // Community launch: locked to the server-resolved workspace only. While
+      // the launch is unresolved or refused, nothing is selected.
+      if (launchActive) {
+        if (!communityLaunch) return null;
+        const match = workspaces.find(
+          (w) => w.workspaceId.toLowerCase() === communityLaunch.workspaceId,
+        );
+        return match ? match.workspaceId : null;
+      }
       if (current && workspaces.some((workspace) => workspace.workspaceId === current)) {
         return current;
       }
@@ -242,7 +264,11 @@ function MiniAppHome() {
       }
       return null;
     });
-  }, [workspaces, requestedWorkspace]);
+  }, [workspaces, requestedWorkspace, launchActive, communityLaunch]);
+
+  useEffect(() => {
+    if (communityLaunch) setActiveTab("missions");
+  }, [communityLaunch]);
 
   // C3 — read-only commercial status. Server authorization remains the gate;
   // this only drives honest UI and skips premium reads once denied.
@@ -266,10 +292,16 @@ function MiniAppHome() {
   const inboxEnabled = inboxAllowed === true;
 
   const missionsQuery = useQuery({
-    queryKey: ["tg", "missions", workspaceId],
+    queryKey: ["tg", "missions", workspaceId, communityLaunch?.connectionId ?? null],
     enabled: Boolean(initData && workspaceId && missionsEnabled),
     queryFn: () =>
-      listMissions({ data: { initData: initData as string, workspaceId: workspaceId as string } }),
+      listMissions({
+        data: {
+          initData: initData as string,
+          workspaceId: workspaceId as string,
+          groupConnectionId: communityLaunch?.connectionId ?? null,
+        },
+      }),
   });
 
   const homeQuery = useQuery({
@@ -307,6 +339,37 @@ function MiniAppHome() {
       </MiniAppFrame>
     );
   }
+
+  // /missioncontrol direct launch: resolve before rendering any project, and
+  // never fall back to another workspace when the launch is refused.
+  if (launchQuery.isPending) {
+    return (
+      <MiniAppFrame>
+        <MiniAppIdentity title="Operator Console" />
+        <MiniAppSkeleton label="Checking community access…" />
+      </MiniAppFrame>
+    );
+  }
+  if (launchRefused) {
+    return (
+      <MiniAppFrame>
+        <MiniAppIdentity title="Mission Control" />
+        <MiniAppMessage
+          title="Mission Control can't open here"
+          description={miniAppFailureMessage(
+            launchQuery.data && !launchQuery.data.ok ? launchQuery.data.reason : "unavailable",
+          )}
+          action={
+            <MiniAppRetryButton
+              onRetry={() => void launchQuery.refetch()}
+              pending={launchQuery.isFetching}
+            />
+          }
+        />
+      </MiniAppFrame>
+    );
+  }
+
 
   const workspaceFailure =
     workspacesQuery.data && !workspacesQuery.data.ok ? workspacesQuery.data.reason : null;
