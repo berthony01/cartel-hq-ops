@@ -18,6 +18,7 @@ import {
   Inbox,
   Palette,
   RotateCw,
+  X,
   Target,
   type LucideIcon,
 } from "lucide-react";
@@ -54,9 +55,13 @@ export function MiniAppFrame({
 export function MiniAppIdentity({
   title = "Mission Control",
   subtitle,
+  onClose,
+  closePending,
 }: {
   title?: string;
   subtitle?: string | undefined;
+  onClose?: () => void;
+  closePending?: boolean;
 }) {
   return (
     <div className="flex min-w-0 items-center justify-between gap-3 border-b border-border-subtle pb-3">
@@ -66,7 +71,18 @@ export function MiniAppIdentity({
           {title}
         </p>
       </div>
-      {subtitle ? (
+      {onClose ? (
+        <button
+          type="button"
+          aria-label="Close and clear launcher post"
+          title="Close and clear launcher post"
+          disabled={closePending}
+          onClick={onClose}
+          className="flex size-10 shrink-0 items-center justify-center rounded-md border border-border/70 bg-surface-raised/40 text-muted-foreground transition-colors hover:border-gold/40 hover:text-gold disabled:opacity-60"
+        >
+          <X className="size-4" aria-hidden="true" />
+        </button>
+      ) : subtitle ? (
         <span className="max-w-[45%] truncate text-right text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
           {subtitle}
         </span>

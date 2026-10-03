@@ -69,6 +69,7 @@ export const MINIAPP_RPC = {
   cancel: "cancel_social_mission_from_control",
   finishScheduleEvent: "finish_social_mission_schedule_event",
   recordPin: "record_social_mission_target_pin",
+  closeLauncher: "request_mission_control_launcher_cleanup",
 } as const;
 
 /** MINI-HQ-1C — the in-place final-state transport action (same as the bot). */
@@ -774,6 +775,33 @@ export const miniAppResolveCommunityLaunch = createServerFn({ method: "POST" })
     const resolved = await resolveCommunityLaunch(admin, token, auth.user.id, route.connectionId);
     if (!resolved.ok) return resolved;
     return { ok: true, launch: resolved.launch };
+  });
+
+/**
+ * Explicit Close & clear acknowledgement. The browser supplies only signed
+ * initData; the database resolves its opaque token to the exact confirmed
+ * launcher post and queues deletion. The same operator + live group-admin
+ * authority is re-proven here before cleanup is requested.
+ */
+export const miniAppCloseCommunityLaunch = createServerFn({ method: "POST" })
+  .inputValidator((input: { initData: string }) => input)
+  .handler(async ({ data }): Promise<{ ok: true; cleanup: "queued" | "unavailable" } | MiniAppFailure> => {
+    const token = botToken();
+    const auth = await validateTelegramInitData(data?.initData, token);
+    if (!auth.ok) return fail(auth.reason);
+    const route = routeStartParam(auth.startParam);
+    if (route.kind !== "community") return fail("community_launch_invalid");
+    const admin = await adminClient();
+    const resolved = await resolveCommunityLaunch(admin, token, auth.user.id, route.connectionId);
+    if (!resolved.ok) return resolved;
+    if (!route.closeToken) return { ok: true, cleanup: "unavailable" };
+    const { data: result, error } = await admin.rpc(MINIAPP_RPC.closeLauncher, {
+      _telegram_user_id: auth.user.id,
+      _group_connection_id: route.connectionId,
+      _close_token: route.closeToken,
+    });
+    if (error) return fail("unavailable");
+    return { ok: true, cleanup: result === true ? "queued" : "unavailable" };
   });
 
 export const miniAppListMissions = createServerFn({ method: "POST" })

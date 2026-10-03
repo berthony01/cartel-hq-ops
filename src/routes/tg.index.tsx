@@ -19,6 +19,7 @@ import {
   miniAppOperatorHome,
   miniAppInboxSummary,
   miniAppCommercialStatus,
+  miniAppCloseCommunityLaunch,
   miniAppResolveCommunityLaunch,
 } from "@/lib/telegram-miniapp-bridge.functions";
 import { MiniAppInbox } from "@/components/telegram-miniapp/MiniAppInbox";
@@ -39,6 +40,7 @@ import {
   formatTimeRemaining,
   miniAppFailureMessage,
   missionStatusTone,
+  closeTelegramMiniApp,
   resolveTelegramSession,
 } from "@/lib/telegram-miniapp-client";
 
@@ -189,6 +191,7 @@ function MiniAppHome() {
   const search = Route.useSearch();
   const [activeTab, setActiveTab] = useState<MiniAppTab>(search.tab ?? "home");
   const [conversationId, setConversationId] = useState<string | null>(search.conversation ?? null);
+  const [closing, setClosing] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -205,6 +208,7 @@ function MiniAppHome() {
   const listWorkspaces = useServerFn(miniAppListMissionWorkspaces);
   const listMissions = useServerFn(miniAppListMissions);
   const resolveLaunch = useServerFn(miniAppResolveCommunityLaunch);
+  const closeLaunch = useServerFn(miniAppCloseCommunityLaunch);
 
   // The `mc_` hint is read server-side from the SIGNED start_param only.
   const launchQuery = useQuery({
@@ -382,10 +386,27 @@ function MiniAppHome() {
   // Null when unavailable: Home then shows no inbox claim at all.
   const inboxSummary = inboxSummaryQuery.data?.ok ? inboxSummaryQuery.data.summary : null;
   const navigation = <MiniAppTabBar active={activeTab} onSelect={setActiveTab} />;
+  const closeAndClear = communityLaunch
+    ? async () => {
+        if (closing || !initData) return;
+        setClosing(true);
+        try {
+          const result = await closeLaunch({ data: { initData } });
+          if (result.ok) closeTelegramMiniApp();
+        } finally {
+          setClosing(false);
+        }
+      }
+    : undefined;
 
   return (
     <MiniAppFrame navigation={navigation}>
-      <MiniAppIdentity title="Operator Console" subtitle={activeWorkspace?.workspaceName} />
+      <MiniAppIdentity
+        title="Operator Console"
+        subtitle={activeWorkspace?.workspaceName}
+        onClose={closeAndClear}
+        closePending={closing}
+      />
 
       {workspacesQuery.isPending ? <MiniAppSkeleton label="Loading projects…" /> : null}
 
