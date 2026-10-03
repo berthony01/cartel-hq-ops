@@ -134,6 +134,7 @@ export async function runMissionControlGroupLauncher(deps: LauncherDeps): Promis
     closeBinding?.token,
   );
   if (!link) {
+    if (closeBinding) await deps.abandonCloseBinding?.(closeBinding.bindingId).catch(() => undefined);
     deps.log?.("[MC-GL] MISSION_CONTROL_MINIAPP_LINK missing or invalid; launcher withheld");
     await deps.sendText(MISSION_CONTROL_UNAVAILABLE_TEXT);
     return "link_unavailable";
