@@ -3131,6 +3131,34 @@ Deno.serve(async (req: Request) => {
           return json({ ok: true });
         }
 
+        // A button from an older prompt must not retain the former direct-start
+        // path. Replace it in place with the same candidate-scoped Mini App URL.
+        if (smStart) {
+          const { data: candidateRow, error: candidateError } = await admin
+            .from("social_mission_link_candidates")
+            .select("group_connection_id")
+            .eq("id", candidateId)
+            .eq("telegram_chat_id", candidateChatId)
+            .maybeSingle();
+          const connectionId = String(candidateRow?.group_connection_id ?? "");
+          const setupUrl = !candidateError
+            ? buildMissionSetupDirectLink(Deno.env.get("MISSION_CONTROL_MINIAPP_LINK") ?? "", candidateId, connectionId, BOT_USERNAME)
+            : null;
+          if (!setupUrl) {
+            await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Mission setup is unavailable right now.");
+            return json({ ok: true });
+          }
+          const promptId = Number(preflight.prompt_message_id);
+          if (Number.isSafeInteger(promptId) && promptId > 0) {
+            await editMessage(TELEGRAM_BOT_TOKEN, String(candidateChatId), promptId,
+              "This official project post is ready for admin review. Open setup to choose targets before starting.",
+              { inline_keyboard: [[{ text: "🔥 SET UP MISSION", url: setupUrl, style: "primary" }, { text: "IGNORE", callback_data: `sm_lf_ignore_${candidateId}` }]] },
+            );
+          }
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Open Set Up Mission to review targets.");
+          return json({ ok: true });
+        }
+
         // SE-7 — START is AUTHORIZED here but NOT consumed. The candidate only
         // becomes terminal STARTED after the branded card is confirmed SENT and
         // the schedule is activated, so a downstream failure leaves a fully
@@ -3138,7 +3166,7 @@ Deno.serve(async (req: Request) => {
         const { data: resolved } = await admin.rpc("resolve_social_mission_link_candidate", {
           _candidate_id: candidateId,
           _telegram_user_id: Number(from.id),
-          _decision: smStart ? "START" : "IGNORE",
+          _decision: "IGNORE",
           _verified_chat_id: candidateChatId,
         });
         const decision = (resolved ?? {}) as {
