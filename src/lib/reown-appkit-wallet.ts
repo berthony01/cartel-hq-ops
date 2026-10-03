@@ -285,11 +285,17 @@ async function runCreateAppKit(
       defaultAccountTypes: { eip155: "eoa" },
       // The Reown directory does not tag these wallets with eip155:4663, so the
       // chain-filtered list hides them. Featured IDs are fetched unfiltered.
-      // Order: MetaMask, Base (formerly Coinbase Wallet), Robinhood Wallet.
+      // Order: MetaMask, Base (formerly Coinbase Wallet), Robinhood Wallet,
+      // Coinbase Wallet (legacy id). On mobile AppKit drops wallets without a
+      // mobile/web link (_filterWalletsByPlatform) unless the id is one of its
+      // CUSTOM_DEEPLINK_WALLETS; the Base id has no mobile link and is hidden,
+      // the legacy Coinbase id is AppKit's built-in Coinbase/Base app path
+      // (opens CARTEL HQ in the Base app via AppKit's own deeplink).
       featuredWalletIds: [
         "c57ca95b47569778a828d19178114f4db188b89b763c899ba0be274e97267d96",
         "fd20dc426fb37566d803205b19bbc1d4096b248ac04548e3cfb6b3a38bd033aa",
         "8837dd9413b1d9b585ee937d27a816590248386d9dbf59f5cd3422dbbb65683e",
+        "d0ca99ff52b99abc48743dad0f7fc891e041be73574f7fac4afe5d4bb83845c8",
       ],
       allWallets: "SHOW",
       enableMobileFullScreen: true,
