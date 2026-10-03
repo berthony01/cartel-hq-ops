@@ -67,9 +67,11 @@ Historical items above are preserved as technical evidence; staged vs production
 - [ ] Create the Safe with a signer wallet — waiting on owner authorization; no transaction sent yet.
 
 ## Mission Control group launcher — 3 October 2026
-- [ ] /missioncontrol group command -> community Mission Control — STAGED (code + QA-correction pass + tests; not deployed, not complete)
-- [ ] Owner: set up Main Mini App in BotFather and add MISSION_CONTROL_MINIAPP_LINK to bot backend secrets
-- [ ] Deploy telegram-webhook + publish site — waiting on owner approval
-- [ ] Real Telegram end-to-end check (admin, non-admin, copied link) after deploy
-- [x] Community sessions: opening/changing/ending a mission binds exactly to the launching group via a direct mission read (no 10-mission list limit, no SQL) — staged, not deployed
+- [ ] /missioncontrol group command -> community Mission Control — bot code LIVE, feature NOT complete
+- [x] Correction: live telegram-webhook observed ACTIVE v112 (updated 2026-10-03 15:00:34 UTC) with the /missioncontrol launcher. No manual deploy was run by the agent; the saves at 14:56:03/14:56:41 UTC were followed ~4 min later by v112, consistent with automatic platform sync (cause UNPROVEN). Limitation: saving bot code can push it live without a separate deploy step.
+- [x] Read-only Telegram check (3 Oct 15:08): getMe OK, username matches, has_main_web_app = false; private menu button = commands (no Mini App URL)
+- [ ] Owner: enable Main Mini App in BotFather (currently OFF per getMe) and add MISSION_CONTROL_MINIAPP_LINK to bot backend secrets (not in project secrets; bot-backend value unverifiable here). Until then live /missioncontrol shows the safe "link not available" message
+- [ ] Publish site (Mini App community-binding fix is app code, not yet published) — waiting on owner approval
+- [ ] Real Telegram end-to-end check (admin, non-admin, copied link)
+- [x] Community sessions: opening/changing/ending a mission binds exactly to the launching group via a direct mission read (no 10-mission list limit, no SQL) — app code, not published
 - [ ] Known limit (private sessions only): opening a mission from the private, project-wide Mission Control still uses the 10-newest list; unchanged by request
