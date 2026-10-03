@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { presentTelegramPayload } from "../_shared/telegram-presentation.ts";
 
 /**
  * C7.3D — Durable Project Inbox team-reply delivery worker.
@@ -79,11 +80,11 @@ async function sendMessage(
     const response = await fetch(`${TG_BASE}/bot${token}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
+      body: JSON.stringify(presentTelegramPayload("sendMessage", {
         chat_id: chatId,
         text,
         disable_web_page_preview: true,
-      }),
+      })),
       signal: controller.signal,
     });
     let payload: any = null;

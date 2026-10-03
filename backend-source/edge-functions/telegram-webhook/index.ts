@@ -6,6 +6,7 @@ import {
   isMissionControlCommand,
   runMissionControlGroupLauncher,
 } from "../_shared/mission-control-launcher.ts";
+import { presentTelegramPayload } from "../_shared/telegram-presentation.ts";
 
 const TG_BASE = "https://api.telegram.org";
 const BOT_USERNAME = "PepeCartelHQBot";
@@ -38,7 +39,7 @@ async function telegramJson(token: string, method: string, body: Record<string, 
     res = await fetch(`${TG_BASE}/bot${token}/${method}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify(presentTelegramPayload(method, body)),
       signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS),
     });
   } catch {
@@ -79,7 +80,7 @@ async function sendMessageWithOutcome(
     res = await fetch(`${TG_BASE}/bot${token}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ chat_id: chatId, text, disable_web_page_preview: true, ...extra }),
+      body: JSON.stringify(presentTelegramPayload("sendMessage", { chat_id: chatId, text, disable_web_page_preview: true, ...extra })),
       signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS),
     });
   } catch (error) {
@@ -4724,7 +4725,7 @@ Deno.serve(async (req: Request) => {
         sendLauncher: (body, url) =>
           sendMessage(TELEGRAM_BOT_TOKEN, chatId, body, {
             parse_mode: "HTML",
-            reply_markup: { inline_keyboard: [[{ text: "Open Mission Control", url }]] },
+            reply_markup: { inline_keyboard: [[{ text: "🔥 Open Mission Control", url }]] },
           }),
         deleteCommand: (messageId) =>
           telegramJson(TELEGRAM_BOT_TOKEN, "deleteMessage", { chat_id: chatId, message_id: messageId }),

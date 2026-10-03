@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { presentTelegramPayload } from "../_shared/telegram-presentation.ts";
 
 /**
  * Phase 5 — Launch notification worker.
@@ -507,13 +508,13 @@ Deno.serve(async (req: Request) => {
 
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
+          body: JSON.stringify(presentTelegramPayload("sendMessage", {
             chat_id: claim.telegram_user_id,
             text,
             parse_mode: "HTML",
             disable_web_page_preview: true,
             ...(keyboardRows.length ? { reply_markup: { inline_keyboard: keyboardRows } } : {}),
-          }),
+          })),
           signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
         });
 
