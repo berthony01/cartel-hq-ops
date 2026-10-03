@@ -98,6 +98,7 @@ export const MINIAPP_FINAL_TRANSPORT_ACTION = "edit_mission";
  * permission, cleanup, and pin calls after server-side authorization.
  */
 export const MINIAPP_TRANSPORT_FUNCTION = "social-mission-telegram";
+export const MINIAPP_SETUP_FUNCTION = "social-mission-setup";
 export const MINIAPP_TRANSPORT_ACTION = "resurface_mission";
 /** Existing accepted internal-source value; no new transport source is added. */
 export const MINIAPP_TRANSPORT_INTERNAL_SOURCE = "telegram-webhook";
@@ -901,35 +902,40 @@ export const miniAppSuggestMissionSetup = createServerFn({ method: "POST" })
     if (!accessResult) return fail("unavailable");
     const exactCommittedRecovery = ["STARTING", "STARTED"].includes(setupState) && isUuid((currentSetup as Record<string, unknown>)["mission_id"]);
     if (!setupCommercialAccessAllows(accessResult, exactCommittedRecovery)) return fail("missions_plan_required");
-    const bearer = process.env["X_API_BEARER_TOKEN"] ?? "";
-    const { readMissionSetupMetrics } = await import("./x-mission-autoselect.server");
-    const orchestration = await suggestSetupTargets({
-      readCandidate: async () => {
-        const { data: candidate, error } = await gate.admin.rpc(MINIAPP_RPC.readSetup, {
-          _candidate_id: gate.route.candidateId, _group_connection_id: gate.route.connectionId,
-          _telegram_user_id: gate.telegramUserId, _verified_chat_id: Number(gate.chatId), _close_token: gate.route.closeToken,
-        });
-        const row = (candidate ?? {}) as Record<string, unknown>;
-        return error || String(row["outcome"] ?? "") !== "READY" ? null : { externalPostId: String(row["external_post_id"] ?? "") };
-      },
-      readMetrics: async (externalPostId) => {
-        const snapshot = await readMissionSetupMetrics(bearer, externalPostId);
-        return snapshot.ok ? snapshot : null;
-      },
-      suggest: async (snapshot) => {
-        const { data: suggested, error } = await gate.admin.rpc(MINIAPP_RPC.suggestSetup, {
-          _views: snapshot.metrics.views, _likes: snapshot.metrics.likes, _comments: snapshot.metrics.comments,
-          _shares: snapshot.metrics.shares, _saves: snapshot.metrics.saves, _primary_type: "NONE", _primary_target: null,
-        });
-        return { suggested, error, observedAt: snapshot.observedAt };
-      },
-    });
-    if (!orchestration.available) return { ok: true, suggestion: { available: false, basis: "Official X metrics are unavailable right now. No values were invented.", observedAt: null, targets: {} } };
-    const { suggested, error: suggestError, observedAt } = orchestration.suggestion;
-    if (suggestError) return fail("unavailable");
-    const raw = (suggested ?? {}) as Record<string, unknown>;
-    const targets = setupSuggestionTargets(raw);
-    return { ok: true, suggestion: { available: Object.keys(targets).length > 0, basis: "Suggested from one current official X snapshot using the existing mission target policy.", observedAt, targets } };
+    const supabaseUrl = process.env["SUPABASE_URL"] ?? "";
+    const serviceKey = process.env["SUPABASE_SERVICE_ROLE_KEY"] ?? "";
+    if (!supabaseUrl || !serviceKey) return fail("unavailable");
+    try {
+      const response = await fetch(
+        `${supabaseUrl.replace(/\/$/, "")}/functions/v1/${MINIAPP_SETUP_FUNCTION}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            apikey: serviceKey,
+            Authorization: `Bearer ${serviceKey}`,
+            "X-Cartel-Internal-Source": "telegram-miniapp-bridge",
+          },
+          body: JSON.stringify({ action: "auto_select", initData: data.initData }),
+          signal: AbortSignal.timeout(MINIAPP_TRANSPORT_TIMEOUT_MS),
+        },
+      );
+      const payload = (await response.json().catch(() => null)) as Record<string, unknown> | null;
+      if (!response.ok || payload?.["ok"] !== true) return fail(String(payload?.["reason"] ?? "unavailable"));
+      const suggestion = (payload["suggestion"] ?? {}) as Record<string, unknown>;
+      const targets = setupSuggestionTargets((suggestion["targets"] ?? {}) as Record<string, unknown>);
+      return {
+        ok: true,
+        suggestion: {
+          available: suggestion["available"] === true && Object.keys(targets).length > 0,
+          basis: String(suggestion["basis"] ?? "Official X metrics are unavailable right now. No values were invented.").slice(0, 240),
+          observedAt: typeof suggestion["observedAt"] === "string" ? suggestion["observedAt"].slice(0, 64) : null,
+          targets,
+        },
+      };
+    } catch {
+      return fail("unavailable");
+    }
   });
 
 export const miniAppSaveMissionSetup = createServerFn({ method: "POST" })
