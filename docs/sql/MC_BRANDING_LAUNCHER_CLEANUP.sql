@@ -39,7 +39,8 @@ language plpgsql security definer set search_path = pg_catalog
 as $$
 declare v_connection public.telegram_group_connections%rowtype;
 begin
-  if _binding_id is null or _group_connection_id is null
+  -- NULL hash must be rejected explicitly: NULL !~ pattern yields NULL, not true.
+  if _binding_id is null or _group_connection_id is null or _close_token_hash is null
      or _close_token_hash !~ '^[0-9a-f]{64}$' then return false; end if;
   select * into v_connection from public.telegram_group_connections
   where id = _group_connection_id and telegram_chat_id < 0 and bot_is_admin = true
@@ -115,7 +116,9 @@ declare v_binding public.mission_control_launcher_bindings%rowtype;
 declare v_uid uuid;
 declare v_due timestamptz := now() + interval '5 seconds';
 begin
-  if length(_close_token) < 22 or length(_close_token) > 64 then return null; end if;
+  -- Anchored base64url syntax; NULL rejected explicitly.
+  if _telegram_user_id is null or _group_connection_id is null or _close_token is null
+     or _close_token !~ '^[A-Za-z0-9_-]{22,64}$' then return null; end if;
   select b.* into v_binding
   from public.mission_control_launcher_bindings b
   join public.telegram_group_connections c

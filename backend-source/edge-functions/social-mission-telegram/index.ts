@@ -27,7 +27,7 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
-import { presentInlineKeyboard, presentTelegramPayload } from "../_shared/telegram-presentation.ts";
+import { presentInlineKeyboard, presentTelegramFormData, presentTelegramPayload } from "../_shared/telegram-presentation.ts";
 
 const TG_BASE = "https://api.telegram.org";
 const TELEGRAM_TIMEOUT_MS = 10_000;
@@ -361,7 +361,7 @@ async function callTelegram(
       method: "POST",
       // multipart/form-data sets its own boundary header; JSON keeps the old one.
       ...(multipart ? {} : { headers: { "Content-Type": "application/json" } }),
-      body: multipart ? body : JSON.stringify(presentTelegramPayload(method, body, "platform")),
+      body: multipart ? presentTelegramFormData(method, body, "platform") : JSON.stringify(presentTelegramPayload(method, body, "platform")),
       signal: controller.signal,
     });
 
