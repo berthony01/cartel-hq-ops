@@ -4721,6 +4721,28 @@ Deno.serve(async (req: Request) => {
             .limit(2);
           return { rows: Array.isArray(data) ? data : [], error };
         },
+        prepareCloseBinding: async (connectionId) => {
+          const tokenBytes = crypto.getRandomValues(new Uint8Array(24));
+          const token = btoa(String.fromCharCode(...tokenBytes))
+            .replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+          const bindingId = crypto.randomUUID();
+          const { data, error } = await admin.rpc("prepare_mission_control_launcher_binding", {
+            _binding_id: bindingId,
+            _group_connection_id: connectionId,
+            _close_token_hash: await sha256Hex(token),
+          });
+          return !error && data === true ? { token, bindingId } : null;
+        },
+        confirmCloseBinding: async (bindingId, launcherMessageId) => {
+          const { data, error } = await admin.rpc("confirm_mission_control_launcher_binding", {
+            _binding_id: bindingId,
+            _telegram_message_id: launcherMessageId,
+          });
+          return !error && data === true;
+        },
+        abandonCloseBinding: async (bindingId) => {
+          await admin.rpc("abandon_mission_control_launcher_binding", { _binding_id: bindingId });
+        },
         sendText: (body) => sendMessage(TELEGRAM_BOT_TOKEN, chatId, body, { parse_mode: "HTML" }),
         sendLauncher: (body, url) =>
           sendMessage(TELEGRAM_BOT_TOKEN, chatId, body, {
