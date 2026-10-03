@@ -409,7 +409,7 @@ function MiniAppHome() {
         />
       ) : null}
 
-      {workspaces.length > 1 ? (
+      {workspaces.length > 1 && !communityLaunch ? (
         <MiniAppPanel
           heading="Project"
           note={workspaceId ? undefined : "Choose a project to control."}
@@ -617,7 +617,15 @@ function MiniAppHome() {
       ) : null}
 
       {workspaceId && activeTab === "missions" && missionsEnabled ? (
-        <MiniAppPanel heading="Live missions" note="Select a mission to view its latest results.">
+        <MiniAppPanel
+          heading={communityLaunch ? `Live missions · ${communityLaunch.communityTitle}` : "Live missions"}
+          note={
+            communityLaunch
+              ? "Showing only missions posted in this community."
+              : "Select a mission to view its latest results."
+          }
+        >
+
           {missionsQuery.isError || missionsFailure ? (
             <MiniAppMessage
               title="Could not load missions"
@@ -632,7 +640,11 @@ function MiniAppHome() {
           ) : missionsQuery.data?.ok && missionsQuery.data.missions.length === 0 ? (
             <MiniAppMessage
               title="No live missions"
-              description="This project has no live mission right now. Start one from the CARTEL HQ bot."
+              description={
+                communityLaunch
+                  ? "This community has no live mission right now. Start one with /mission <X link> in the group."
+                  : "This project has no live mission right now. Start one from the CARTEL HQ bot."
+              }
             />
           ) : (
             <ul className="flex flex-col gap-2">
