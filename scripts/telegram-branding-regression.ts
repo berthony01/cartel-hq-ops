@@ -33,6 +33,8 @@ check("generated header keeps escaping and authored body byte-identical", html.i
 check("platform HTML presentation is idempotent", presentHtmlText(html, "platform") === html);
 const attributeHtml = '<a href="https://example.com/🔥?x=✅">🔥 authored</a>';
 check("authored emoji in attributes URLs and body is never replaced", presentHtmlText(attributeHtml, "authored") === attributeHtml);
+const platformAttributeHtml = presentHtmlText(attributeHtml, "platform");
+check("platform header never rewrites emoji inside an href or authored body", platformAttributeHtml === `<tg-emoji emoji-id="${CARTEL_CUSTOM_EMOJI.energy.id}">🔥</tg-emoji> <b>PEPECARTEL · CARTEL HQ</b>\n\n${attributeHtml}`);
 const frozen = "Official project response: <not markup>";
 const frozenPayload = presentTelegramPayload("sendMessage", { text: frozen });
 check("plain/frozen authored body remains byte-identical", frozenPayload.text === frozen);
@@ -42,6 +44,8 @@ const markupPayload = presentTelegramPayload("editMessageReplyMarkup", { reply_m
 check("reply-markup edits receive platform presentation", markupPayload.reply_markup.inline_keyboard[0][1].style === "danger");
 const preserved = presentInlineKeyboard({ inline_keyboard: [[{ text: "Open", style: "primary", icon_custom_emoji_id: "existing" }]] }, "platform") as any;
 check("existing button style and custom icon are preserved", preserved.inline_keyboard[0][0].style === "primary" && preserved.inline_keyboard[0][0].icon_custom_emoji_id === "existing");
+const primaryOpen = presentInlineKeyboard({ inline_keyboard: [[{ text: "Open", style: "primary" }]] }, "platform") as any;
+check("existing primary Open style is not overwritten with success", primaryOpen.inline_keyboard[0][0].style === "primary");
 
 const connection = "11111111-2222-4333-8444-555555555555";
 const closeToken = "AbCdEf0123456789_-abcdef";
@@ -86,6 +90,7 @@ for (const path of ["telegram-webhook", "social-mission-telegram", "social-missi
 const sql = readFileSync("docs/sql/MC_BRANDING_LAUNCHER_CLEANUP.sql", "utf8");
 check("staged binding stores immutable original scope", sql.includes("telegram_chat_id bigint not null") && sql.includes("cleanup_job_id uuid"));
 check("staged SQL qualifies pgcrypto digest", sql.includes("extensions.digest(_close_token"));
+check("all staged security-definer routines use fixed pg_catalog search paths", (sql.match(/security definer set search_path = pg_catalog/g) ?? []).length === 5 && !sql.includes("search_path = public"));
 check("staged SQL revokes binding table from browser roles", sql.includes("revoke all on table public.mission_control_launcher_bindings from public, anon, authenticated"));
 check("cleanup queue remains service-only", sql.includes("revoke all on table public.telegram_message_cleanup_jobs from public, anon, authenticated") && sql.includes("grant all on table public.telegram_message_cleanup_jobs to service_role"));
 check("fast worker path is service-only, delayed, and exact-job claimed", readFileSync("backend-source/edge-functions/telegram-message-cleanup/index.ts", "utf8").includes("Bearer ${SUPABASE_SERVICE_ROLE_KEY}") && readFileSync("backend-source/edge-functions/telegram-message-cleanup/index.ts", "utf8").includes("setTimeout(resolve, 5_000)") && sql.includes("claim_mission_control_launcher_cleanup_job"));
