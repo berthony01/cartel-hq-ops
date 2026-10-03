@@ -4738,7 +4738,19 @@ Deno.serve(async (req: Request) => {
             _binding_id: bindingId,
             _telegram_message_id: launcherMessageId,
           });
-          return !error && data === true;
+          const jobId = typeof data === "string" ? data : null;
+          if (!error && jobId) {
+            const schedulerSecret = Deno.env.get("TELEGRAM_MESSAGE_CLEANUP_SCHEDULER_SECRET") ?? "";
+            const cleanupUrl = `${Deno.env.get("SUPABASE_URL")}/functions/v1/telegram-message-cleanup`;
+            if (schedulerSecret && cleanupUrl.startsWith("https://")) {
+              const fastCleanup = new Promise((resolve) => setTimeout(resolve, 5_000)).then(() => fetch(cleanupUrl, {
+                method: "POST",
+                headers: { "x-cartel-cleanup-scheduler-secret": schedulerSecret, "x-cartel-cleanup-job-id": jobId },
+              })).catch(() => undefined);
+              try { (globalThis as any).EdgeRuntime?.waitUntil?.(fastCleanup); } catch { }
+            }
+          }
+          return !error && Boolean(jobId);
         },
         abandonCloseBinding: async (bindingId) => {
           await admin.rpc("abandon_mission_control_launcher_binding", { _binding_id: bindingId });
