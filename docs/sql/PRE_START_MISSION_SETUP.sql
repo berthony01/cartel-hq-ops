@@ -8,6 +8,24 @@ alter table public.social_mission_link_candidates
   add column if not exists setup_started_at timestamptz,
   add column if not exists setup_mission_id uuid references public.social_missions(id) on delete set null;
 
+create or replace function public.create_social_mission_setup_candidate(
+  _telegram_chat_id bigint, _telegram_message_id bigint, _telegram_user_id bigint,
+  _canonical_url text, _external_post_id text, _author_handle text, _ttl_minutes integer default 15
+) returns jsonb language plpgsql security definer set search_path = pg_catalog as $$
+declare v_workspace uuid; v_connection uuid; v_x text; v_official text; v_handle text:=lower(btrim(coalesce(_author_handle,''))); v_post text:=btrim(coalesce(_external_post_id,'')); v_url text:=btrim(coalesce(_canonical_url,'')); v_id uuid;
+begin
+  if _telegram_chat_id is null or _telegram_chat_id>=0 or _telegram_message_id is null or _telegram_message_id<=0 or v_post !~ '^[0-9]{1,32}$' or v_handle !~ '^[a-z0-9_]{1,15}$' or v_url<>('https://x.com/'||v_handle||'/status/'||v_post) then return jsonb_build_object('outcome','REJECTED','reason','invalid_arguments'); end if;
+  select c.id,c.workspace_id into strict v_connection,v_workspace from public.telegram_group_connections c where c.telegram_chat_id=_telegram_chat_id and c.bot_is_admin is true and coalesce(c.metadata->>'bot_removed_at','')='';
+  select p.x_url into v_x from public.project_profiles p where p.workspace_id=v_workspace limit 1;
+  v_official:=lower((regexp_match(coalesce(v_x,''),'^https?://(?:www\.|mobile\.)?(?:x|twitter)\.com/@?([A-Za-z0-9_]{1,15})(?:[/?#].*)?$'))[1]);
+  if v_official is null or v_official<>v_handle then return jsonb_build_object('outcome','REJECTED','reason','handle_not_official'); end if;
+  insert into public.social_mission_link_candidates(workspace_id,group_connection_id,telegram_chat_id,telegram_message_id,telegram_user_id,canonical_url,external_post_id,author_handle,expires_at)
+  values(v_workspace,v_connection,_telegram_chat_id,_telegram_message_id,_telegram_user_id,v_url,v_post,v_handle,now()+make_interval(mins=>greatest(1,least(60,coalesce(_ttl_minutes,15)))))
+  on conflict(telegram_chat_id,telegram_message_id) do nothing returning id into v_id;
+  return jsonb_build_object('outcome',case when v_id is null then 'EXISTING' else 'CREATED' end,'candidate_id',v_id,'workspace_id',v_workspace,'canonical_url',v_url);
+exception when no_data_found or too_many_rows then return jsonb_build_object('outcome','REJECTED','reason','group_not_connected');
+end $$;
+
 create or replace function public.social_mission_setup_targets_valid(_targets jsonb)
 returns boolean language plpgsql immutable set search_path = pg_catalog as $$
 declare k text; v jsonb; n numeric;
@@ -100,10 +118,12 @@ begin
 exception when no_data_found or too_many_rows then return jsonb_build_object('outcome','REJECTED','reason','candidate_unavailable');
 end $$;
 
+revoke all on function public.create_social_mission_setup_candidate(bigint,bigint,bigint,text,text,text,integer) from public,anon,authenticated;
 revoke all on function public.social_mission_setup_targets_valid(jsonb) from public,anon,authenticated;
 revoke all on function public.read_social_mission_candidate_setup(uuid,uuid,bigint,bigint,text) from public,anon,authenticated;
 revoke all on function public.save_social_mission_candidate_setup(uuid,uuid,bigint,bigint,uuid,jsonb) from public,anon,authenticated;
 revoke all on function public.start_social_mission_candidate_setup(uuid,uuid,bigint,bigint,uuid,jsonb) from public,anon,authenticated;
+grant execute on function public.create_social_mission_setup_candidate(bigint,bigint,bigint,text,text,text,integer) to service_role,postgres;
 grant execute on function public.social_mission_setup_targets_valid(jsonb) to service_role,postgres;
 grant execute on function public.read_social_mission_candidate_setup(uuid,uuid,bigint,bigint,text) to service_role,postgres;
 grant execute on function public.save_social_mission_candidate_setup(uuid,uuid,bigint,bigint,uuid,jsonb) to service_role,postgres;
