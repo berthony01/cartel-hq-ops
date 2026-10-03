@@ -704,7 +704,7 @@ async function resolveCommunityLaunch(
   token: string,
   telegramUserId: number,
   connectionId: string,
-): Promise<{ ok: true; launch: MiniAppCommunityLaunch; chatId: string } | MiniAppFailure> {
+): Promise<{ ok: true; launch: Omit<MiniAppCommunityLaunch, "cleanupAvailable">; chatId: string } | MiniAppFailure> {
   const result = await resolveCommunityLaunchCore(communityDeps(admin, token), telegramUserId, connectionId);
   return result.ok ? result : fail(result.reason);
 }
