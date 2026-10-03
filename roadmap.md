@@ -71,4 +71,5 @@ Historical items above are preserved as technical evidence; staged vs production
 - [ ] Owner: set up Main Mini App in BotFather and add MISSION_CONTROL_MINIAPP_LINK to bot backend secrets
 - [ ] Deploy telegram-webhook + publish site — waiting on owner approval
 - [ ] Real Telegram end-to-end check (admin, non-admin, copied link) after deploy
-- [ ] Known limit: opening/changing a mission outside the project's 10 newest live mission targets fails closed (existing database read; needs an approved SQL change)
+- [x] Community sessions: opening/changing/ending a mission binds exactly to the launching group via a direct mission read (no 10-mission list limit, no SQL) — staged, not deployed
+- [ ] Known limit (private sessions only): opening a mission from the private, project-wide Mission Control still uses the 10-newest list; unchanged by request

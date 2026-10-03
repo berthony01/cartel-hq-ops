@@ -156,3 +156,66 @@ export async function fetchCommunityLiveMissions(
   });
   return { ok: true, rows };
 }
+
+/* --------------------------------------- exact-mission community binding */
+
+export type CommunityMissionDeps = CommunityDeps & {
+  /** social_missions row (id, workspace_id, status) restricted to one workspace. */
+  readMission: (
+    missionId: string,
+    workspaceId: string,
+  ) => Promise<{ row: Record<string, unknown> | null; error: boolean }>;
+  /** Distinct delivered target chat ids for the mission inside that workspace. */
+  readTargetChats: (missionId: string, workspaceId: string) => Promise<{ chats: string[]; error: boolean }>;
+};
+
+export type CommunityMissionBinding = {
+  workspaceId: string;
+  workspaceName: string;
+  chatId: string;
+  missionId: string;
+  missionStatus: string;
+};
+
+/**
+ * Binds ONE mission to the community of a direct `/missioncontrol` session.
+ * The chat comes only from the re-proven launch (verified start_param ->
+ * operational connection -> operator workspace -> live admin), never from the
+ * mission's other targets, so a mission delivered to several groups can never
+ * bind another group's target. A direct mission + target read replaces the
+ * workspace-wide LIVE list (limit 10), so newer sibling missions cannot hide it.
+ * `requireLive` keeps the existing LIVE-only panel/edit rule; lifecycle passes
+ * false so a completed/cancelled replay still reaches the authoritative RPC.
+ */
+export async function resolveCommunityMissionBindingCore(
+  deps: CommunityMissionDeps,
+  telegramUserId: number,
+  connectionId: string,
+  missionId: string,
+  options: { requireLive: boolean },
+): Promise<{ ok: true; binding: CommunityMissionBinding } | CommunityRefusal | { ok: false; reason: "not_found" }> {
+  const launch = await resolveCommunityLaunchCore(deps, telegramUserId, connectionId);
+  if (!launch.ok) return launch;
+  const workspaceId = launch.launch.workspaceId;
+  const mission = await deps.readMission(missionId, workspaceId);
+  if (mission.error) return { ok: false, reason: "unavailable" };
+  const row = mission.row;
+  if (!row || String(row["workspace_id"] ?? "").toLowerCase() !== workspaceId) {
+    return { ok: false, reason: "not_found" };
+  }
+  const status = String(row["status"] ?? "").toUpperCase();
+  if (!status || (options.requireLive && status !== "LIVE")) return { ok: false, reason: "not_found" };
+  const targets = await deps.readTargetChats(missionId, workspaceId);
+  if (targets.error) return { ok: false, reason: "unavailable" };
+  if (!targets.chats.includes(launch.chatId)) return { ok: false, reason: "not_found" };
+  return {
+    ok: true,
+    binding: {
+      workspaceId,
+      workspaceName: launch.launch.workspaceName,
+      chatId: launch.chatId,
+      missionId,
+      missionStatus: status,
+    },
+  };
+}

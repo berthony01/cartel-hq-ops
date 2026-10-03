@@ -15,8 +15,10 @@ import {
   COMMUNITY_MISSION_LIMIT,
   fetchCommunityLiveMissions,
   resolveCommunityLaunchCore,
+  resolveCommunityMissionBindingCore,
   routeStartParam,
   type CommunityDeps,
+  type CommunityMissionDeps,
 } from "../src/lib/mission-control-community.server";
 import {
   MISSION_CONTROL_ADMIN_ONLY_TEXT,
@@ -325,6 +327,87 @@ function launcher(o: Partial<LauncherDeps> & { rows?: unknown[]; status?: string
   check("5.9 refusal never auto-selects another workspace", home.includes("if (!communityLaunch) return null;") && home.includes("if (launchRefused)"));
   check("5.10 picker hidden + scoped request in community mode", home.includes("workspaces.length > 1 && !communityLaunch") && home.includes("groupConnectionId: communityLaunch?.connectionId ?? null"));
   check("5.11 initDataUnsafe never read", !home.includes(".initDataUnsafe"));
+}
+
+// 6. Exact-mission community binding (detail / edit / lifecycle).
+{
+  const W = "11111111-1111-4111-8111-111111111111";
+  const W2 = "22222222-2222-4222-8222-222222222222";
+  const CONN_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+  const CONN_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+  const CONN_F = "ffffffff-ffff-4fff-8fff-ffffffffffff";
+  const CHAT_A = "-1001", CHAT_B = "-1002", CHAT_F = "-1009";
+  const USER = 42;
+  const target = "99999999-9999-4999-8999-999999999999";
+  const ended = "88888888-8888-4888-8888-888888888888";
+  type M = { id: string; workspace_id: string; status: string; started_at: string; chats: string[] };
+  const missions: M[] = [
+    { id: target, workspace_id: W, status: "LIVE", started_at: "2026-01-01", chats: [CHAT_B, CHAT_A] },
+    { id: ended, workspace_id: W, status: "COMPLETED", started_at: "2026-01-02", chats: [CHAT_A] },
+  ];
+  for (let i = 0; i < 12; i++) {
+    missions.push({ id: `00000000-0000-4000-8000-0000000000${String(i).padStart(2, "0")}`, workspace_id: W, status: "LIVE", started_at: `2026-02-${String(i + 1).padStart(2, "0")}`, chats: [CHAT_B] });
+  }
+  const conns: Record<string, Record<string, unknown>> = {
+    [CONN_A]: { id: CONN_A, workspace_id: W, telegram_chat_id: CHAT_A, title: "A", bot_is_admin: true, metadata: {} },
+    [CONN_B]: { id: CONN_B, workspace_id: W, telegram_chat_id: CHAT_B, title: "B", bot_is_admin: true, metadata: {} },
+    [CONN_F]: { id: CONN_F, workspace_id: W2, telegram_chat_id: CHAT_F, title: "F", bot_is_admin: true, metadata: {} },
+  };
+  const make = (o: { admins?: string[]; revokeA?: boolean; operatorWs?: string[] } = {}) => {
+    const calls = { listRpc: 0 };
+    const deps: CommunityMissionDeps = {
+      listOperatorWorkspaces: async () => ({ rows: (o.operatorWs ?? [W]).map((w) => ({ workspace_id: w, workspace_name: "WS" })), error: false }),
+      findConnection: async (id) => {
+        const r = conns[id];
+        if (!r) return { rows: [], error: false };
+        if (o.revokeA && id === CONN_A) return { rows: [{ ...r, metadata: { bot_removed_at: "x" } }], error: false };
+        return { rows: [r], error: false };
+      },
+      isChatAdmin: async (chat) => (o.admins ?? [CHAT_A, CHAT_B, CHAT_F]).includes(chat),
+      readMission: async (id, ws) => {
+        const m = missions.find((x) => x.id === id && x.workspace_id === ws);
+        return { row: m ? { id: m.id, workspace_id: m.workspace_id, status: m.status } : null, error: false };
+      },
+      readTargetChats: async (id, ws) => ({ chats: missions.find((x) => x.id === id && x.workspace_id === ws)?.chats ?? [], error: false }),
+    };
+    return { deps, calls };
+  };
+  // Old limited list: newest 10 LIVE targets for workspace — target would be absent.
+  const oldList = missions.filter((m) => m.status === "LIVE").sort((a, b) => b.started_at.localeCompare(a.started_at)).slice(0, 10);
+  check("6.0 baseline: workspace top-10 list excludes the target mission", !oldList.some((m) => m.id === target));
+
+  const live = await resolveCommunityMissionBindingCore(make().deps, USER, CONN_A, target, { requireLive: true });
+  check("6.1 >10 newer sibling missions do not block target detail", live.ok === true);
+  check("6.2 multi-target mission binds originating group A (not B, B is first target)", live.ok && live.binding.chatId === CHAT_A && live.binding.workspaceId === W);
+  const viaB = await resolveCommunityMissionBindingCore(make().deps, USER, CONN_B, target, { requireLive: true });
+  check("6.3 same mission via group B binds B's target", viaB.ok && viaB.binding.chatId === CHAT_B);
+  const tamper = await resolveCommunityMissionBindingCore(make().deps, USER, CONN_B, ended, { requireLive: false });
+  check("6.4 mission not delivered to session group refused", !tamper.ok && tamper.reason === "not_found");
+  const foreign = await resolveCommunityMissionBindingCore(make().deps, USER, CONN_F, target, { requireLive: true });
+  check("6.5 foreign-workspace connection refused uniformly", !foreign.ok && foreign.reason === "community_launch_unavailable");
+  const revoked = await resolveCommunityMissionBindingCore(make({ revokeA: true }).deps, USER, CONN_A, target, { requireLive: true });
+  check("6.6 revoked connection refused uniformly", !revoked.ok && revoked.reason === "community_launch_unavailable");
+  const nonAdmin = await resolveCommunityMissionBindingCore(make({ admins: [CHAT_B] }).deps, USER, CONN_A, target, { requireLive: true });
+  check("6.7 non-admin in session group refused (no fallback to group B where admin)", !nonAdmin.ok && nonAdmin.reason === "community_launch_unavailable");
+  const missing = await resolveCommunityMissionBindingCore(make().deps, USER, "cccccccc-cccc-4ccc-8ccc-cccccccccccc", target, { requireLive: true });
+  check("6.8 unknown connection refused uniformly", !missing.ok && missing.reason === "community_launch_unavailable");
+  const notOp = await resolveCommunityMissionBindingCore(make({ operatorWs: [W2] }).deps, USER, CONN_A, target, { requireLive: true });
+  check("6.9 non-operator refused", !notOp.ok && notOp.reason === "community_launch_unavailable");
+  const endedPanel = await resolveCommunityMissionBindingCore(make().deps, USER, CONN_A, ended, { requireLive: true });
+  check("6.10 panel/edit keep LIVE requirement", !endedPanel.ok && endedPanel.reason === "not_found");
+  const r1 = await resolveCommunityMissionBindingCore(make().deps, USER, CONN_A, ended, { requireLive: false });
+  const r2 = await resolveCommunityMissionBindingCore(make().deps, USER, CONN_A, ended, { requireLive: false });
+  check("6.11 lifecycle replay on COMPLETED reaches same target each retry", r1.ok && r2.ok && r1.binding.chatId === CHAT_A && r2.binding.chatId === CHAT_A && r1.binding.missionStatus === "COMPLETED");
+  const err = await resolveCommunityMissionBindingCore({ ...make().deps, readMission: async () => ({ row: null, error: true }) }, USER, CONN_A, target, { requireLive: true });
+  check("6.12 mission read error fails closed as unavailable", !err.ok && err.reason === "unavailable");
+  const terr = await resolveCommunityMissionBindingCore({ ...make().deps, readTargetChats: async () => ({ chats: [], error: true }) }, USER, CONN_A, target, { requireLive: true });
+  check("6.13 target read error fails closed", !terr.ok && terr.reason === "unavailable");
+  const bridge6 = readFileSync("src/lib/telegram-miniapp-bridge.functions.ts", "utf8");
+  const am = bridge6.slice(bridge6.indexOf("async function authorizeMission("), bridge6.indexOf("async function resolveLifecycleCandidates"));
+  const al = bridge6.slice(bridge6.indexOf("async function authorizeLifecycle("), bridge6.indexOf("function hexDigest"));
+  check("6.14 authorizeMission: community path uses exact binding (requireLive true) before list RPC fallback", am.includes("routeStartParam(auth.startParam)") && am.includes("requireLive: true") && am.indexOf("resolveCommunityMissionBindingCore") < am.indexOf("resolveBinding(admin"));
+  check("6.15 authorizeLifecycle: community path pinned (requireLive false) and still calls authorize RPC", al.includes("requireLive: false") && al.includes("MINIAPP_RPC.authorize"));
+  check("6.16 invalid start_param refused in both gates", am.includes('fail("community_launch_invalid")') && al.includes('fail("community_launch_invalid")'));
 }
 
 console.log(`\n${pass}/${pass + fail} passed`);
