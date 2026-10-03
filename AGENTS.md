@@ -10,3 +10,4 @@
 <!-- LOVABLE:END -->
 
 - Keep Telegram delivery state machines transport-owned; presentation helpers may only transform a payload immediately before the existing single send/edit call, never add fallback sends.
+- Keep Mission Setup Auto-select provider reads in the external Supabase function where the existing X credential lives; the app bridge may only forward signed initData and return bounded suggestions.
