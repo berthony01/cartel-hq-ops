@@ -74,3 +74,11 @@ export async function startSetupMutation<T>(deps: {
   if (!setupPermissionProofAllowsStart(deps.permissions, deps.requirements)) return { ok: false, reason: "permissions" };
   return { ok: true, result: await deps.mutate() };
 }
+
+export function setupCommercialAccessAllows(
+  access: { allowed: boolean; wouldBlock: boolean; reason: string },
+  exactCommittedRecovery: boolean,
+): boolean {
+  if (access.allowed && !access.wouldBlock) return true;
+  return exactCommittedRecovery && access.reason === "PLAN_LIMIT_REACHED";
+}

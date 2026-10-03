@@ -434,6 +434,10 @@ check("7.11 start RPC receives all four current bot permission facts", stagedSet
 const bridgeSetup = readFileSync("src/lib/telegram-miniapp-bridge.functions.ts", "utf8");
 const closeHandler = bridgeSetup.slice(bridgeSetup.indexOf("export const miniAppCloseCommunityLaunch"), bridgeSetup.indexOf("export const miniAppListMissions"));
 check("7.12 setup close re-reads exact candidate token before queue request", closeHandler.includes('route.kind === "setup"') && closeHandler.indexOf("MINIAPP_RPC.readSetup") < closeHandler.indexOf("MINIAPP_RPC.closeLauncher") && closeHandler.includes('["cleanup_confirmed"] === true'));
+const startSql = stagedSetupSql.slice(stagedSetupSql.indexOf("create or replace function public.start_social_mission_candidate_setup"), stagedSetupSql.indexOf("revoke all on function public.create_social_mission_setup_candidate"));
+check("7.13 exact committed recovery resolves before quota and only PLAN_LIMIT_REACHED may recover", startSql.indexOf("if v.setup_mission_id is not null") < startSql.indexOf("perform pg_advisory_xact_lock") && startSql.includes("coalesce(v_access->>'reason','') <> 'PLAN_LIMIT_REACHED'"));
+check("7.14 workspace-serialized quota check occurs only before new mission insert", startSql.includes("social_mission_setup_workspace:") && startSql.lastIndexOf("public.evaluate_commercial_access") < startSql.indexOf("insert into public.social_missions") && startSql.lastIndexOf("public.evaluate_commercial_access") > startSql.indexOf("if v_mission is null then"));
+check("7.15 discovered recovery is bound to exact candidate and community", startSql.includes("m.metadata->>'candidate_id'=v.id::text") && startSql.includes("t.group_connection_id=v.group_connection_id"));
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail > 0) process.exit(1);
