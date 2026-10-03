@@ -68,13 +68,19 @@ export type InitDataResult =
       user: TelegramInitDataUser;
       authDate: number;
       /**
-       * `start_param` from the SIGNED payload (covered by the HMAC above), or
-       * null when absent/duplicated/oversized. A routing hint only — it never
-       * grants authority by itself.
+       * `start_param` from the SIGNED payload (covered by the HMAC above).
+       * "absent" = ordinary launch; "invalid" = present but duplicated,
+       * oversized or illegal (callers must refuse, never treat as ordinary).
+       * A routing hint only — it never grants authority by itself.
        */
-      startParam: string | null;
+      startParam: StartParamState;
     }
   | { ok: false; reason: InitDataFailureReason };
+
+export type StartParamState =
+  | { state: "absent" }
+  | { state: "valid"; value: string }
+  | { state: "invalid" };
 
 /** Telegram `startapp` payloads: up to 512 chars of A-Z a-z 0-9 _ -. */
 export const START_PARAM_PATTERN = /^[A-Za-z0-9_-]{1,512}$/;
@@ -217,8 +223,12 @@ export async function validateTelegramInitData(
   // Read only AFTER the signature check: start_param is part of the signed
   // data-check-string, so a tampered value already failed above.
   const startParams = params.getAll("start_param");
-  const startParam =
-    startParams.length === 1 && START_PARAM_PATTERN.test(startParams[0]!) ? startParams[0]! : null;
+  const startParam: StartParamState =
+    startParams.length === 0
+      ? { state: "absent" }
+      : startParams.length === 1 && START_PARAM_PATTERN.test(startParams[0]!)
+        ? { state: "valid", value: startParams[0]! }
+        : { state: "invalid" };
 
   return {
     ok: true,
