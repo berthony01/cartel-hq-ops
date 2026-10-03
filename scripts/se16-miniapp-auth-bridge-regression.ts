@@ -296,10 +296,8 @@ const opts = { now: NOW_MS };
       !/^import[\s\S]{0,80}client\.server/m.test(bridgeCode),
   );
   check(
-    // SE-16.2P — the service-role key is now read for exactly ONE purpose: the
-    // internal transport headers of the card refresh. It is read per-request
-    // inside that helper, is never module-scope, never exported, never
-    // returned and never logged.
+    // Service-role reads are limited to per-request internal transport calls:
+    // card refresh, final card edit, and exact launcher cleanup dispatch.
     "6.4 service role key appears only as a per-request transport credential",
     (() => {
       const hits = (bridgeCode.match(/SUPABASE_SERVICE_ROLE_KEY/g) ?? []).length;
@@ -314,9 +312,12 @@ const opts = { now: NOW_MS };
         bridgeCode.indexOf("async function miniAppSafeUnpin"),
       );
       return (
-        hits === 2 &&
+        hits === 3 &&
         /const serviceKey = process\.env\["SUPABASE_SERVICE_ROLE_KEY"\] \?\? "";/.test(finalHelper) &&
         /const serviceKey = process\.env\["SUPABASE_SERVICE_ROLE_KEY"\] \?\? "";/.test(helper) &&
+        /const serviceKey = process\.env\["SUPABASE_SERVICE_ROLE_KEY"\] \?\? "";/.test(
+          bridgeCode.slice(bridgeCode.indexOf("export const miniAppCloseCommunityLaunch"), bridgeCode.indexOf("export const miniAppListCommunityMissions")),
+        ) &&
         !/^const\s+\w+\s*=\s*process\.env\["SUPABASE_SERVICE_ROLE_KEY"\]/m.test(bridgeCode) &&
         !/export[^\n]*serviceKey/.test(bridgeCode) &&
         !/return[^\n]*serviceKey/.test(bridgeCode) &&
