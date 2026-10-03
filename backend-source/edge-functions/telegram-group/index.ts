@@ -2,6 +2,7 @@ import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { requireProjectToolAccess, PROJECT_IDENTITY_DENIAL_BODY } from "../_shared/project-identity.ts";
 import { requireCommercialAccess, commercialDenialFor, type CommercialFeatureKey } from "../_shared/commercial-access.ts";
+import { presentInlineKeyboard, presentTelegramPayload } from "../_shared/telegram-presentation.ts";
 
 const TG_BASE = "https://api.telegram.org";
 const MAX_BATCH_GROUPS = 50;
@@ -12,7 +13,7 @@ const cors = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers
 function respond(body: unknown, status = 200) { return new Response(JSON.stringify(body), { status, headers: { ...cors, "Content-Type": "application/json" } }); }
 /** Hard timeout around every api.telegram.org call so a hung request cannot stall the function. */
 const TELEGRAM_TIMEOUT_MS = 10_000;
-async function telegramJson(token: string, method: string, body: Record<string, unknown> = {}) { let res: Response; try { res = await fetch(`${TG_BASE}/bot${token}/${method}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS) }); } catch { throw new Error("Could not reach Telegram. Try again shortly."); } const payload = await res.json().catch(() => null) as any; if (!res.ok || !payload?.ok) throw new Error(String(payload?.description ?? `Telegram request failed (${res.status}).`)); return payload.result; }
+async function telegramJson(token: string, method: string, body: Record<string, unknown> = {}) { let res: Response; try { res = await fetch(`${TG_BASE}/bot${token}/${method}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(presentTelegramPayload(method, body)), signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS) }); } catch { throw new Error("Could not reach Telegram. Try again shortly."); } const payload = await res.json().catch(() => null) as any; if (!res.ok || !payload?.ok) throw new Error(String(payload?.description ?? `Telegram request failed (${res.status}).`)); return payload.result; }
 function firstEmoji(value: unknown) { return Array.isArray(value) && typeof value[0] === "string" ? value[0] : ""; }
 
 /* C7.2 — Official Community Broadcast branding (`telegram_photo_v1`). */
@@ -976,7 +977,7 @@ Deno.serve(async (req: Request) => {
             brandingSnapshot?.mimeType === "image/jpeg" ? "logo.jpg" : "logo.png",
           );
           // The inline keyboard rides along in the SAME call — never a 2nd message.
-          if (ctaKeyboard) form.append("reply_markup", JSON.stringify(ctaKeyboard));
+          if (ctaKeyboard) form.append("reply_markup", JSON.stringify(presentInlineKeyboard(ctaKeyboard)));
           endpoint = "sendPhoto";
           init = { method: "POST", body: form };
         } else {
@@ -984,12 +985,12 @@ Deno.serve(async (req: Request) => {
           init = {
             method: "POST",
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
+            body: JSON.stringify(presentTelegramPayload("sendMessage", {
               chat_id: String(group.telegram_chat_id),
               text: deliveredText,
               disable_web_page_preview: true,
               ...(ctaKeyboard ? { reply_markup: ctaKeyboard } : {}),
-            }),
+            })),
           };
         }
         const res = await fetch(`${TG_BASE}/bot${TELEGRAM_BOT_TOKEN}/${endpoint}`, {

@@ -6,7 +6,11 @@
  * real service-role client, the existing operator RPC and the live
  * `getChatMember` check into these functions; it adds no authority of its own.
  */
-import { parseMissionControlStartParam, type StartParamState } from "./telegram-miniapp-auth.server";
+import {
+  parseMissionControlCloseToken,
+  parseMissionControlStartParam,
+  type StartParamState,
+} from "./telegram-miniapp-auth.server";
 
 export type CommunityLaunch = {
   connectionId: string;
@@ -26,7 +30,7 @@ export type CommunityRefusal =
 
 export type StartParamRoute =
   | { kind: "ordinary" }
-  | { kind: "community"; connectionId: string }
+  | { kind: "community"; connectionId: string; closeToken: string | null }
   | { kind: "invalid" };
 
 const MC_PREFIX = /^mc_/i;
@@ -41,7 +45,9 @@ export function routeStartParam(startParam: StartParamState): StartParamRoute {
   if (startParam.state === "invalid") return { kind: "invalid" };
   if (!MC_PREFIX.test(startParam.value)) return { kind: "ordinary" };
   const connectionId = parseMissionControlStartParam(startParam.value);
-  return connectionId ? { kind: "community", connectionId } : { kind: "invalid" };
+  return connectionId
+    ? { kind: "community", connectionId, closeToken: parseMissionControlCloseToken(startParam.value) }
+    : { kind: "invalid" };
 }
 
 /**

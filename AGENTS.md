@@ -8,3 +8,5 @@
 > Commits you push to the connected branch sync back to Lovable and show up in
 > the editor, so keep the branch in a working state.
 <!-- LOVABLE:END -->
+
+- Keep Telegram delivery state machines transport-owned; presentation helpers may only transform a payload immediately before the existing single send/edit call, never add fallback sends.

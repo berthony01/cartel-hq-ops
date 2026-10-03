@@ -1,5 +1,6 @@
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "npm:@supabase/supabase-js@2";
+import { presentTelegramPayload } from "../_shared/telegram-presentation.ts";
 
 const TG_BASE = "https://api.telegram.org";
 const MAX_DUE_PER_RUN = 100;
@@ -14,7 +15,7 @@ async function telegramJson(token: string, method: string, body: Record<string, 
   const res = await fetch(`${TG_BASE}/bot${token}/${method}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
+    body: JSON.stringify(presentTelegramPayload(method, body)),
   });
   const payload = await res.json().catch(() => null) as any;
   if (!res.ok || !payload?.ok) throw new Error(String(payload?.description ?? `Telegram request failed (${res.status}).`));

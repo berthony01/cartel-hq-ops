@@ -11,6 +11,7 @@
  */
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const CLOSE_TOKEN_RE = /^[A-Za-z0-9_-]{22,64}$/;
 
 export const MISSION_CONTROL_GROUP_TEXT =
   "🛠 <b>MISSION CONTROL</b>\n\nOpen this community's missions in the CARTEL HQ Mini App. Only this group's current admins who operate the project can manage it — the button grants no access by itself.";
@@ -31,13 +32,18 @@ export function buildMissionControlDirectLink(
   configured: string,
   connectionId: string,
   botUsername: string,
+  closeToken?: string | null,
 ): string | null {
   if (!UUID_RE.test(connectionId)) return null;
+  if (closeToken != null && !CLOSE_TOKEN_RE.test(closeToken)) return null;
   const raw = String(configured ?? "").trim().replace(/\/+$/, "");
   const match = raw.match(/^https:\/\/t\.me\/([A-Za-z0-9_]{5,32})(?:\/([A-Za-z0-9_]{3,30}))?$/);
   if (!match || match[1]!.toLowerCase() !== botUsername.toLowerCase()) return null;
   const url = new URL(raw);
-  url.search = new URLSearchParams({ startapp: `mc_${connectionId.toLowerCase()}` }).toString();
+  const payload = closeToken
+    ? `mc_${connectionId.toLowerCase()}_${closeToken}`
+    : `mc_${connectionId.toLowerCase()}`;
+  url.search = new URLSearchParams({ startapp: payload }).toString();
   return url.toString();
 }
 
@@ -65,6 +71,12 @@ export type LauncherDeps = {
   sendText: (text: string) => Promise<unknown>;
   /** Launcher post with a single URL button; truthy only when Telegram confirmed it. */
   sendLauncher: (text: string, url: string) => Promise<unknown>;
+  /** Optional durable close binding. Null safely preserves the legacy link. */
+  prepareCloseBinding?: (connectionId: string) => Promise<{ token: string; bindingId: string } | null>;
+  /** Attaches the exact confirmed launcher message to the prepared binding. */
+  confirmCloseBinding?: (bindingId: string, messageId: number) => Promise<boolean>;
+  /** Invalidates an unconfirmed prepared binding. */
+  abandonCloseBinding?: (bindingId: string) => Promise<void>;
   /** Deletes exactly the original command message. */
   deleteCommand: (messageId: number) => Promise<unknown>;
   sourceMessageId: unknown;
@@ -109,7 +121,18 @@ export async function runMissionControlGroupLauncher(deps: LauncherDeps): Promis
     return "not_connected";
   }
 
-  const link = buildMissionControlDirectLink(deps.configuredLink, connectionId, deps.botUsername);
+  let closeBinding: { token: string; bindingId: string } | null = null;
+  try {
+    closeBinding = (await deps.prepareCloseBinding?.(connectionId)) ?? null;
+  } catch {
+    closeBinding = null;
+  }
+  const link = buildMissionControlDirectLink(
+    deps.configuredLink,
+    connectionId,
+    deps.botUsername,
+    closeBinding?.token,
+  );
   if (!link) {
     deps.log?.("[MC-GL] MISSION_CONTROL_MINIAPP_LINK missing or invalid; launcher withheld");
     await deps.sendText(MISSION_CONTROL_UNAVAILABLE_TEXT);
@@ -117,7 +140,17 @@ export async function runMissionControlGroupLauncher(deps: LauncherDeps): Promis
   }
 
   const sent = await deps.sendLauncher(MISSION_CONTROL_GROUP_TEXT, link);
-  if (!sent) return "launcher_failed";
+  const launcherMessageId = Number((sent as { message_id?: unknown } | null)?.message_id);
+  if (!sent) {
+    if (closeBinding) await deps.abandonCloseBinding?.(closeBinding.bindingId).catch(() => undefined);
+    return "launcher_failed";
+  }
+  if (closeBinding) {
+    const confirmed = Number.isFinite(launcherMessageId) && launcherMessageId > 0
+      ? await deps.confirmCloseBinding?.(closeBinding.bindingId, launcherMessageId).catch(() => false)
+      : false;
+    if (!confirmed) await deps.abandonCloseBinding?.(closeBinding.bindingId).catch(() => undefined);
+  }
   // Only the exact original command, and only after the launcher was confirmed.
   const messageId = Number(deps.sourceMessageId);
   if (Number.isFinite(messageId) && messageId > 0) {

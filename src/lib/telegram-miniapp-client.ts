@@ -18,6 +18,7 @@ type TelegramWebApp = {
   initData?: string;
   ready?: () => void;
   expand?: () => void;
+  close?: () => void;
 };
 
 /** Upper bound on how long the Mini App waits for the Telegram bridge. */
@@ -30,6 +31,15 @@ function webApp(): TelegramWebApp | null {
   if (typeof window === "undefined") return null;
   const tg = (window as unknown as { Telegram?: { WebApp?: TelegramWebApp } }).Telegram;
   return tg?.WebApp ?? null;
+}
+
+/** Explicit user action only; never inferred from visibility or deactivation. */
+export function closeTelegramMiniApp(): void {
+  try {
+    webApp()?.close?.();
+  } catch {
+    // The server acknowledgement already controls cleanup; close is best effort.
+  }
 }
 
 /** Raw signed credential, or null when not running inside Telegram. */

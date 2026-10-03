@@ -178,6 +178,7 @@ import {
 // SE-15 — pure resolver folding an active Mission Control manual override over
 // the immutable launch config. No network, no database, no provider read.
 import { resolveMissionConfig } from "../_shared/mission-resolved-config.ts";
+import { presentTelegramPayload } from "../_shared/telegram-presentation.ts";
 
 export {
   PULSE_TEXT,
@@ -209,7 +210,7 @@ async function callTelegram(
     response = await fetch(`${TELEGRAM_API}/bot${botToken}/${method}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      body: JSON.stringify(presentTelegramPayload(method, payload)),
       signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS),
     });
   } catch {

@@ -27,6 +27,7 @@
  */
 
 import { createClient } from "@supabase/supabase-js";
+import { presentInlineKeyboard, presentTelegramPayload } from "../_shared/telegram-presentation.ts";
 
 const TG_BASE = "https://api.telegram.org";
 const TELEGRAM_TIMEOUT_MS = 10_000;
@@ -360,7 +361,7 @@ async function callTelegram(
       method: "POST",
       // multipart/form-data sets its own boundary header; JSON keeps the old one.
       ...(multipart ? {} : { headers: { "Content-Type": "application/json" } }),
-      body: multipart ? body : JSON.stringify(body),
+      body: multipart ? body : JSON.stringify(presentTelegramPayload(method, body)),
       signal: controller.signal,
     });
 
@@ -900,7 +901,7 @@ async function handleSend(args: {
     const form = new FormData();
     form.append("chat_id", String(chatId));
     form.append("caption", rendered.text);
-    if (rendered.replyMarkup) form.append("reply_markup", JSON.stringify(rendered.replyMarkup));
+    if (rendered.replyMarkup) form.append("reply_markup", JSON.stringify(presentInlineKeyboard(rendered.replyMarkup)));
     form.append("photo", new Blob([logo.bytes as BlobPart], { type: logo.mimeType }), logo.fileName);
     outcome = await callTelegram(botToken, "sendPhoto", form, TELEGRAM_UPLOAD_TIMEOUT_MS);
   } else {
@@ -1099,14 +1100,14 @@ async function handleEdit(args: {
           chat_id: chatId,
           message_id: messageId,
           caption: rendered.text,
-          ...(rendered.replyMarkup ? { reply_markup: rendered.replyMarkup } : {}),
+          ...(rendered.replyMarkup ? { reply_markup: presentInlineKeyboard(rendered.replyMarkup) } : {}),
         })
       : await callTelegram(botToken, "editMessageText", {
           chat_id: chatId,
           message_id: messageId,
           text: rendered.text,
           disable_web_page_preview: true,
-          ...(rendered.replyMarkup ? { reply_markup: rendered.replyMarkup } : {}),
+          ...(rendered.replyMarkup ? { reply_markup: presentInlineKeyboard(rendered.replyMarkup) } : {}),
         });
 
   const confirmed =
@@ -1457,7 +1458,7 @@ async function handleResurface(args: {
     const form = new FormData();
     form.append("chat_id", String(chatId));
     form.append("caption", rendered.text);
-    if (rendered.replyMarkup) form.append("reply_markup", JSON.stringify(rendered.replyMarkup));
+    if (rendered.replyMarkup) form.append("reply_markup", JSON.stringify(presentInlineKeyboard(rendered.replyMarkup)));
     form.append("photo", new Blob([logo.bytes as BlobPart], { type: logo.mimeType }), logo.fileName);
     outcome = await callTelegram(botToken, "sendPhoto", form, TELEGRAM_UPLOAD_TIMEOUT_MS);
   } else {

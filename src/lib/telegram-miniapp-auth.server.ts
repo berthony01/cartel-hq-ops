@@ -85,13 +85,19 @@ export type StartParamState =
 /** Telegram `startapp` payloads: up to 512 chars of A-Z a-z 0-9 _ -. */
 export const START_PARAM_PATTERN = /^[A-Za-z0-9_-]{1,512}$/;
 
-/** `mc_<group_connection UUID>` -> lowercase UUID, otherwise null. */
+/** `mc_<connection UUID>[_<opaque close token>]` -> bounded routing parts. */
 const MISSION_CONTROL_START_PARAM =
-  /^mc_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+  /^mc_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:_([A-Za-z0-9_-]{22,64}))?$/i;
 export function parseMissionControlStartParam(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const match = value.match(MISSION_CONTROL_START_PARAM);
   return match ? match[1]!.toLowerCase() : null;
+}
+
+export function parseMissionControlCloseToken(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const match = value.match(MISSION_CONTROL_START_PARAM);
+  return match?.[2] ?? null;
 }
 
 /**

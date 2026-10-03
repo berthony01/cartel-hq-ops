@@ -75,3 +75,10 @@ Historical items above are preserved as technical evidence; staged vs production
 - [ ] Real Telegram end-to-end check (admin, non-admin, copied link)
 - [x] Community sessions: opening/changing/ending a mission binds exactly to the launching group via a direct mission read (no 10-mission list limit, no SQL) — app code, not published
 - [ ] Known limit (private sessions only): opening a mission from the private, project-wide Mission Control still uses the 10-newest list; unchanged by request
+
+## Telegram presentation + launcher cleanup — staged for review
+- [x] Shared PepeCartel presentation helper staged across audited bot send/edit transports; validated animated custom-emoji IDs keep visible Unicode fallback, native button styles only, tenant-authored/frozen bodies unchanged
+- [x] Explicit Mini App “Close & clear” UI and signed exact-launch routing staged; legacy unbound links safely close without deletion authority
+- [ ] Apply `docs/sql/MC_BRANDING_LAUNCHER_CLEANUP.sql` — BLOCKED pending independent review and explicit owner approval; until applied, launcher cleanup stays unavailable and legacy behavior remains
+- [ ] Deploy/synchronize backend sender sources and publish `/tg` — BLOCKED pending independent review and explicit owner approval
+- [ ] Real Telegram E2E for animated emoji eligibility, native button rendering, exact launcher cleanup, non-admin denial, copied-link denial, and abandoned-prompt expiry — PENDING after activation
