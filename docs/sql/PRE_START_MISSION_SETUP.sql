@@ -58,7 +58,7 @@ end $$;
 create or replace function public.start_social_mission_candidate_setup(
   _candidate_id uuid, _telegram_user_id bigint, _verified_chat_id bigint, _request_id uuid, _targets jsonb
 ) returns jsonb language plpgsql security definer set search_path = pg_catalog as $$
-declare v public.social_mission_link_candidates%rowtype; v_uid uuid; v_x text; v_handle text; v_post uuid; v_mission uuid; v_target uuid; v_delivery text; v_settings public.social_mission_settings%rowtype; v_config jsonb;
+declare v public.social_mission_link_candidates%rowtype; v_uid uuid; v_x text; v_handle text; v_post uuid; v_mission uuid; v_target uuid; v_delivery text; v_settings public.social_mission_settings%rowtype; v_config jsonb; v_access jsonb;
 begin
   if _request_id is null or not public.social_mission_setup_targets_valid(_targets) then return jsonb_build_object('outcome','REJECTED','reason','invalid_targets'); end if;
   select * into v from public.social_mission_link_candidates where id=_candidate_id for update;
@@ -72,6 +72,8 @@ begin
   select user_id into v_uid from public.telegram_connections where telegram_user_id=_telegram_user_id limit 1;
   if v_uid is null or not public.is_workspace_operator(v.workspace_id,v_uid) then return jsonb_build_object('outcome','REJECTED','reason','candidate_unavailable'); end if;
   if not public.can_use_project_tools(v.workspace_id,v_uid) then return jsonb_build_object('outcome','REJECTED','reason','project_identity_required'); end if;
+  v_access:=public.evaluate_commercial_access(v.workspace_id,'x_missions',v_uid);
+  if coalesce((v_access->>'allowed')::boolean,false) is not true or coalesce((v_access->>'would_block')::boolean,false) is true then return jsonb_build_object('outcome','REJECTED','reason','commercial_access_denied'); end if;
   select x_url into v_x from public.project_profiles where workspace_id=v.workspace_id limit 1;
   v_handle:=lower((regexp_match(coalesce(v_x,''),'^https?://(?:www\.|mobile\.)?(?:x|twitter)\.com/@?([A-Za-z0-9_]{1,15})(?:[/?#].*)?$'))[1]);
   if v_handle is null or v_handle<>v.author_handle then return jsonb_build_object('outcome','REJECTED','reason','official_identity_changed'); end if;

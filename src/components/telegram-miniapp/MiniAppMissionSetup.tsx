@@ -17,8 +17,12 @@ const EMPTY: Draft = { likes: "", replies: "", reposts: "", bookmarks: "" };
 function values(draft: Draft) {
   const parsed = Object.fromEntries(Object.entries(draft).map(([key, raw]) => [key, parseOptionalPositiveInt(raw)]));
   if (Object.values(parsed).some((result) => !result.ok)) return null;
-  const out = Object.fromEntries(Object.entries(parsed).map(([key, result]) => [key, result.ok ? result.value : null]));
-  return Object.values(out).some((value) => value !== null) ? out : null;
+  const out = Object.fromEntries(
+    Object.entries(parsed)
+      .map(([key, result]) => [key, result.ok ? result.value : null] as const)
+      .filter((entry) => entry[1] !== null),
+  );
+  return Object.keys(out).length > 0 ? out : null;
 }
 
 export function MiniAppMissionSetup({ initData }: { initData: string }) {
