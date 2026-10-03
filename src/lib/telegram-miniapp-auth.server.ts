@@ -63,8 +63,30 @@ export type InitDataFailureReason =
   | "bad_signature";
 
 export type InitDataResult =
-  | { ok: true; user: TelegramInitDataUser; authDate: number }
+  | {
+      ok: true;
+      user: TelegramInitDataUser;
+      authDate: number;
+      /**
+       * `start_param` from the SIGNED payload (covered by the HMAC above), or
+       * null when absent/duplicated/oversized. A routing hint only — it never
+       * grants authority by itself.
+       */
+      startParam: string | null;
+    }
   | { ok: false; reason: InitDataFailureReason };
+
+/** Telegram `startapp` payloads: up to 512 chars of A-Z a-z 0-9 _ -. */
+export const START_PARAM_PATTERN = /^[A-Za-z0-9_-]{1,512}$/;
+
+/** `mc_<group_connection UUID>` -> lowercase UUID, otherwise null. */
+const MISSION_CONTROL_START_PARAM =
+  /^mc_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
+export function parseMissionControlStartParam(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const match = value.match(MISSION_CONTROL_START_PARAM);
+  return match ? match[1]!.toLowerCase() : null;
+}
 
 /**
  * Length- and value-independent comparison of two hex digests.
@@ -192,9 +214,16 @@ export async function validateTelegramInitData(
   const expected = await computeInitDataHash(buildDataCheckString(params), botToken);
   if (!constantTimeEqualHex(expected, hash)) return { ok: false, reason: "bad_signature" };
 
+  // Read only AFTER the signature check: start_param is part of the signed
+  // data-check-string, so a tampered value already failed above.
+  const startParams = params.getAll("start_param");
+  const startParam =
+    startParams.length === 1 && START_PARAM_PATTERN.test(startParams[0]!) ? startParams[0]! : null;
+
   return {
     ok: true,
     authDate,
+    startParam,
     user: {
       id: userId,
       firstName: String(parsedUser["first_name"] ?? ""),

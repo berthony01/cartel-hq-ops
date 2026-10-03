@@ -65,3 +65,8 @@ Historical items above are preserved as technical evidence; staged vs production
 - [x] Built (not live): in-app "Create treasury Safe" card in Launch Control, canonical Safe v1.4.1 plan (CompatibilityFallbackHandler, deterministic salt, CREATE2 prediction), managed-RPC preflight, one wallet send without retry, exact-owner + fallback-handler verification, readiness from fresh verification only.
 - [x] Treasury Safe evidence SQL `docs/sql/PCART_TREASURY_SAFE_EVIDENCE.sql` — APPLIED 2026-10-01 (owner-authorized migration).
 - [ ] Create the Safe with a signer wallet — waiting on owner authorization; no transaction sent yet.
+
+## Mission Control group launcher — 3 October 2026
+- [x] /missioncontrol group command -> Mission Control Mini App for that community (code + tests; not deployed)
+- [ ] Owner: set up Mini App in BotFather and add MISSION_CONTROL_MINIAPP_LINK to bot backend secrets
+- [ ] Deploy telegram-webhook + publish site — waiting on owner approval

@@ -98,6 +98,11 @@ export function miniAppFailureMessage(reason: string | null | undefined): string
     // Operator scope / routing hints.
     case "not_found":
       return "This mission is not available for your account.";
+    // /missioncontrol direct-link launches. A copied link grants nothing.
+    case "community_launch_invalid":
+      return "This Mission Control link is not valid. Send /missioncontrol in your community to get a fresh one.";
+    case "community_launch_unavailable":
+      return "Mission Control for this community is not available to your account, or the community is no longer connected.";
     case "invalid_mission_id":
     case "invalid_workspace_id":
       return "That mission link is not valid.";
