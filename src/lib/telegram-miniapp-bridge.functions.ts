@@ -45,8 +45,10 @@ import {
 import {
   fetchCommunityLiveMissions,
   resolveCommunityLaunchCore,
+  resolveCommunityMissionBindingCore,
   routeStartParam,
   type CommunityDeps,
+  type CommunityMissionDeps,
 } from "./mission-control-community.server";
 
 /** Existing SE-15 service-only RPCs. This bridge reuses them; it defines none. */
@@ -297,6 +299,25 @@ async function authorizeMission(
   if (!isUuid(missionId)) return fail("invalid_mission_id");
 
   const admin = await adminClient();
+
+  // MC-GL — direct community session: chat derived from the HMAC-verified
+  // start_param, launch authority + live admin re-proven, exact mission read
+  // (no workspace-wide limited list). Private sessions keep resolveBinding.
+  const route = routeStartParam(auth.startParam);
+  if (route.kind === "invalid") return fail("community_launch_invalid");
+  if (route.kind === "community") {
+    const bound = await resolveCommunityMissionBindingCore(
+      communityMissionDeps(admin, token),
+      auth.user.id,
+      route.connectionId,
+      missionId,
+      { requireLive: true },
+    );
+    if (!bound.ok) return fail(bound.reason);
+    const { workspaceId, workspaceName, chatId } = bound.binding;
+    return { ok: true, admin, telegramUserId: auth.user.id, binding: { workspaceId, workspaceName, chatId, missionId } };
+  }
+
   const binding = await resolveBinding(admin, auth.user.id, missionId);
   if (!binding || !binding.chatId) return fail("not_found");
 
@@ -383,14 +404,36 @@ async function authorizeLifecycle(
   if (!auth.ok) return fail(auth.reason);
   if (!isUuid(missionId)) return fail("invalid_mission_id");
   const admin = await adminClient();
-  const candidates = await resolveLifecycleCandidates(admin, auth.user.id, missionId);
-  if (!candidates) return fail("not_found");
 
+  // MC-GL — a direct community session is pinned to its own group's target.
+  // Not LIVE-only, so completed/cancelled replays still reach the RPC.
+  const route = routeStartParam(auth.startParam);
+  if (route.kind === "invalid") return fail("community_launch_invalid");
+  let candidates: { workspaceId: string; workspaceName: string; chatIds: string[] } | null;
   let chatId = "";
-  for (const candidate of candidates.chatIds) {
-    if (await isCurrentChatAdmin(token, candidate, auth.user.id)) {
-      chatId = candidate;
-      break;
+  if (route.kind === "community") {
+    const bound = await resolveCommunityMissionBindingCore(
+      communityMissionDeps(admin, token),
+      auth.user.id,
+      route.connectionId,
+      missionId,
+      { requireLive: false },
+    );
+    if (!bound.ok) return fail(bound.reason);
+    candidates = {
+      workspaceId: bound.binding.workspaceId,
+      workspaceName: bound.binding.workspaceName,
+      chatIds: [bound.binding.chatId],
+    };
+    chatId = bound.binding.chatId;
+  } else {
+    candidates = await resolveLifecycleCandidates(admin, auth.user.id, missionId);
+    if (!candidates) return fail("not_found");
+    for (const candidate of candidates.chatIds) {
+      if (await isCurrentChatAdmin(token, candidate, auth.user.id)) {
+        chatId = candidate;
+        break;
+      }
     }
   }
   if (!chatId) return fail("not_group_admin");
@@ -679,6 +722,37 @@ function communityDeps(admin: AdminClient, token: string): CommunityDeps {
       return { rows: Array.isArray(data) ? (data as Record<string, unknown>[]) : [], error: Boolean(error) };
     },
     isChatAdmin: (chatId, telegramUserId) => isCurrentChatAdmin(token, chatId, telegramUserId),
+  };
+}
+
+/** Production wiring for the exact-mission community binding (direct reads, no list RPC). */
+function communityMissionDeps(admin: AdminClient, token: string): CommunityMissionDeps {
+  return {
+    ...communityDeps(admin, token),
+    readMission: async (missionId, workspaceId) => {
+      const { data, error } = await admin
+        .from("social_missions")
+        .select("id, workspace_id, status")
+        .eq("id", missionId)
+        .eq("workspace_id", workspaceId)
+        .maybeSingle();
+      return { row: (data ?? null) as Record<string, unknown> | null, error: Boolean(error) };
+    },
+    readTargetChats: async (missionId, workspaceId) => {
+      const { data, error } = await admin
+        .from("social_mission_targets")
+        .select("telegram_chat_id")
+        .eq("mission_id", missionId)
+        .eq("workspace_id", workspaceId);
+      const chats = [
+        ...new Set(
+          (Array.isArray(data) ? data : [])
+            .map((t) => String((t as Record<string, unknown>)["telegram_chat_id"] ?? ""))
+            .filter((c) => /^-?\d+$/.test(c)),
+        ),
+      ];
+      return { chats, error: Boolean(error) };
+    },
   };
 }
 
