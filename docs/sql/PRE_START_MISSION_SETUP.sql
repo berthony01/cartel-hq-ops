@@ -8,7 +8,9 @@ alter table public.social_mission_link_candidates
   add column if not exists setup_started_at timestamptz,
   add column if not exists setup_mission_id uuid references public.social_missions(id) on delete set null,
   add column if not exists setup_source text not null default 'LINK_FINDER',
-  add column if not exists source_cleanup_required boolean not null default true;
+  add column if not exists source_cleanup_required boolean not null default true,
+  add constraint social_mission_link_candidates_setup_state_guard
+    check (setup_mission_id is null or state in ('PENDING','STARTED'));
 
 create or replace function public.create_social_mission_setup_candidate(
   _telegram_chat_id bigint, _telegram_message_id bigint, _telegram_user_id bigint,
