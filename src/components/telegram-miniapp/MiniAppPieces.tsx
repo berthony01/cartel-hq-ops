@@ -57,11 +57,13 @@ export function MiniAppIdentity({
   subtitle,
   onClose,
   closePending,
+  closeLabel = "Close",
 }: {
   title?: string;
   subtitle?: string | undefined;
   onClose?: () => void;
   closePending?: boolean;
+  closeLabel?: string;
 }) {
   return (
     <div className="flex min-w-0 items-center justify-between gap-3 border-b border-border-subtle pb-3">
@@ -74,8 +76,8 @@ export function MiniAppIdentity({
       {onClose ? (
         <button
           type="button"
-          aria-label="Close and clear launcher post"
-          title="Close and clear launcher post"
+          aria-label={closeLabel}
+          title={closeLabel}
           disabled={closePending}
           onClick={onClose}
           className="flex size-10 shrink-0 items-center justify-center rounded-md border border-border/70 bg-surface-raised/40 text-muted-foreground transition-colors hover:border-gold/40 hover:text-gold disabled:opacity-60"

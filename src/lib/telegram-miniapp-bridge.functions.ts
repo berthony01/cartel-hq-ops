@@ -687,6 +687,7 @@ export type MiniAppCommunityLaunch = {
   workspaceId: string;
   workspaceName: string;
   communityTitle: string;
+  cleanupAvailable: boolean;
 };
 
 /**
@@ -774,7 +775,10 @@ export const miniAppResolveCommunityLaunch = createServerFn({ method: "POST" })
     const admin = await adminClient();
     const resolved = await resolveCommunityLaunch(admin, token, auth.user.id, route.connectionId);
     if (!resolved.ok) return resolved;
-    return { ok: true, launch: resolved.launch };
+    return {
+      ok: true,
+      launch: { ...resolved.launch, cleanupAvailable: Boolean(route.closeToken) },
+    };
   });
 
 /**
