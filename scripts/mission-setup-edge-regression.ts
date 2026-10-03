@@ -75,6 +75,11 @@ const malformed = deps();
 const malformedResponse = await handleSetupAutoSelect(request(await signedInitData("ms_bad")), malformed.value);
 check("signed malformed setup route fails before authorization/provider", malformedResponse.status === 403 && malformed.counts().providerReads === 0);
 
+const tampered = deps();
+const tamperedData = signed.replace("Admin", "Intruder");
+const tamperedResponse = await handleSetupAutoSelect(request(tamperedData), tampered.value);
+check("tampered initData fails signature validation before authorization/provider", tamperedResponse.status === 401 && tampered.counts().providerReads === 0);
+
 const unavailable = deps({ readMetrics: async () => null });
 const unavailableResponse = await handleSetupAutoSelect(request(signed), unavailable.value);
 const unavailableBody = await unavailableResponse.json() as Record<string, any>;

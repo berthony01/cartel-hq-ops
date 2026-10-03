@@ -50,7 +50,7 @@ import {
   type CommunityDeps,
   type CommunityMissionDeps,
 } from "./mission-control-community.server";
-import { continueSetupDelivery, normalizeSetupDeliveryState, requestExactSetupCleanup, saveSetupDraft, setupCommercialAccessAllows, setupPermissionProofAllowsStart, suggestSetupTargets, type SetupDeliveryState } from "./mission-setup-orchestration";
+import { continueSetupDelivery, normalizeSetupDeliveryState, requestExactSetupCleanup, saveSetupDraft, setupCommercialAccessAllows, setupPermissionProofAllowsStart, type SetupDeliveryState } from "./mission-setup-orchestration";
 
 /** Existing SE-15 service-only RPCs. This bridge reuses them; it defines none. */
 export const MINIAPP_RPC = {
@@ -897,11 +897,10 @@ export const miniAppSuggestMissionSetup = createServerFn({ method: "POST" })
       _telegram_user_id: gate.telegramUserId, _verified_chat_id: Number(gate.chatId), _close_token: gate.route.closeToken,
     });
     const setupState = String((currentSetup as Record<string, unknown> | null)?.["outcome"] ?? "");
-    if (currentSetupError || !["READY", "STARTING", "STARTED"].includes(setupState)) return fail("mission_setup_unavailable");
+    if (currentSetupError || setupState !== "READY") return fail("mission_setup_unavailable");
     const accessResult = await miniAppFeatureAccess(gate.admin, gate.launch.workspaceId, "x_missions", actor.actorUserId);
     if (!accessResult) return fail("unavailable");
-    const exactCommittedRecovery = ["STARTING", "STARTED"].includes(setupState) && isUuid((currentSetup as Record<string, unknown>)["mission_id"]);
-    if (!setupCommercialAccessAllows(accessResult, exactCommittedRecovery)) return fail("missions_plan_required");
+    if (!setupCommercialAccessAllows(accessResult, false)) return fail("missions_plan_required");
     const supabaseUrl = process.env["SUPABASE_URL"] ?? "";
     const serviceKey = process.env["SUPABASE_SERVICE_ROLE_KEY"] ?? "";
     if (!supabaseUrl || !serviceKey) return fail("unavailable");
