@@ -37,6 +37,7 @@ export function MiniAppMissionSetup({ initData }: { initData: string }) {
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [notice, setNotice] = useState<{ tone: "success" | "warning" | "error"; message: string } | null>(null);
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
+  const [alreadyActive, setAlreadyActive] = useState(false);
   const query = useQuery({ queryKey: ["tg", "mission-setup"], retry: false, queryFn: () => read({ data: { initData } }) });
   const setup = query.data?.ok ? query.data.setup : null;
   useEffect(() => {
@@ -65,7 +66,15 @@ export function MiniAppMissionSetup({ initData }: { initData: string }) {
       if (!result.ok) throw new Error(miniAppFailureMessage(result.reason));
       return result;
     },
-    onSuccess: async () => {
+    onSuccess: async (result) => {
+      if (result.outcome === "ALREADY_ACTIVE") {
+        setAlreadyActive(true);
+        if (result.targets && Object.keys(result.targets).length > 0) {
+          setDraft((current) => ({ ...current, ...Object.fromEntries(Object.entries(result.targets).map(([key, value]) => [key, String(value)])) }));
+        }
+        setNotice({ tone: "warning", message: "A mission for this post is already active in this community. Its existing targets were kept; no second mission was created." });
+        return;
+      }
       await query.refetch();
       setNotice({ tone: "success", message: "Mission started with the committed reviewed targets." });
     },
@@ -96,7 +105,7 @@ export function MiniAppMissionSetup({ initData }: { initData: string }) {
   if (query.isPending) return <MiniAppSkeleton label="Opening mission setup…" />;
   if (!setup) return <MiniAppMessage title="Mission setup unavailable" description={miniAppFailureMessage(query.data && !query.data.ok ? query.data.reason : "mission_setup_unavailable")} action={<MiniAppRetryButton onRetry={() => void query.refetch()} pending={query.isFetching} />} />;
   const recovery = setupRecoveryAction(setup.state, setup.deliveryState);
-  const frozen = setup.state !== "READY" || startMutation.isSuccess;
+  const frozen = setup.state !== "READY" || (startMutation.isSuccess && !alreadyActive) || alreadyActive;
   const mutationBusy = saveMutation.isPending || startMutation.isPending || suggestMutation.isPending;
   const editorBusy = mutationBusy || frozen;
   return <>
@@ -119,7 +128,7 @@ export function MiniAppMissionSetup({ initData }: { initData: string }) {
     <div className="mt-2">
       {recovery === "refresh"
         ? <MiniAppActionButton label="Refresh status" pendingLabel="Refreshing…" pending={query.isFetching} disabled={mutationBusy} onPress={() => { setNotice(null); void query.refetch(); }} />
-        : recovery !== "complete"
+        : recovery !== "complete" && !alreadyActive
           ? <MiniAppActionButton label={recovery === "continue" ? "Continue start" : "Start Mission"} pendingLabel="Starting…" pending={startMutation.isPending} disabled={mutationBusy} onPress={() => { setNotice(null); startMutation.mutate(); }} />
           : null}
     </div>
