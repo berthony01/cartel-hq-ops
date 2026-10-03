@@ -4,6 +4,7 @@ import {
   presentHtmlText,
   presentInlineKeyboard,
   presentTelegramPayload,
+  telegramHtmlVisibleLength,
 } from "../backend-source/edge-functions/_shared/telegram-presentation";
 import { buildMissionControlDirectLink, runMissionControlGroupLauncher, type LauncherDeps } from "../backend-source/edge-functions/_shared/mission-control-launcher";
 import { parseMissionControlCloseToken, parseMissionControlStartParam } from "../src/lib/telegram-miniapp-auth.server";
@@ -31,6 +32,7 @@ check("real validated custom emoji id attached", styled.inline_keyboard[0]?.[0]?
 const html = presentHtmlText("<b>✅ SENT</b> &amp; safe", "platform");
 check("generated header keeps escaping and authored body byte-identical", html.includes("<tg-emoji") && html.endsWith("<b>✅ SENT</b> &amp; safe"));
 check("platform HTML presentation is idempotent", presentHtmlText(html, "platform") === html);
+check("HTML visible length counts UTF-16 units after entity decoding", telegramHtmlVisibleLength("<b>&lt;x&gt;</b> &#128056;") === 6);
 const attributeHtml = '<a href="https://example.com/🔥?x=✅">🔥 authored</a>';
 check("authored emoji in attributes URLs and body is never replaced", presentHtmlText(attributeHtml, "authored") === attributeHtml);
 const platformAttributeHtml = presentHtmlText(attributeHtml, "platform");

@@ -4668,8 +4668,9 @@ Deno.serve(async (req: Request) => {
       parsedLink: ParsedXStatus,
       sourceMessageId: number,
       posterId: number | null,
+      requireLinkFinderEnabled = true,
     ): Promise<boolean> => {
-      const { data: candidate } = await admin.rpc("create_social_mission_link_candidate", {
+      const { data: candidate } = await admin.rpc(requireLinkFinderEnabled ? "create_social_mission_link_candidate" : "create_social_mission_setup_candidate", {
         _telegram_chat_id: Number(chatId),
         _telegram_message_id: Number(sourceMessageId),
         _telegram_user_id: posterId,
@@ -4711,7 +4712,7 @@ Deno.serve(async (req: Request) => {
       }
       const prompt = await telegramJson(TELEGRAM_BOT_TOKEN, "sendMessage", {
         chat_id: chatId,
-        text: "This is an official project post. Current admins can review mission targets before starting.",
+        text: "Mission Control · This official project post is ready for admin review. Choose mission targets before starting.",
         reply_to_message_id: Number(sourceMessageId),
         disable_notification: true,
         disable_web_page_preview: true,
@@ -4886,6 +4887,10 @@ Deno.serve(async (req: Request) => {
     }
 
     if (missionMatch && from?.is_bot !== true && isGroupChat) {
+      if (String(missionMatch[1] ?? "").toLowerCase() === "close") {
+        await runMissionCommand({ chatId, chatType: String(chat?.type ?? ""), updateId: update.update_id, messageId: message?.message_id, telegramUserId: Number(from.id), argument: "close" });
+        return json({ ok: true });
+      }
       const parsed = parseXStatusUrl(String(missionMatch[1] ?? ""));
       if (!parsed) {
         await sendMessage(TELEGRAM_BOT_TOKEN, chatId, MISSION_USAGE, { parse_mode: "HTML" });
@@ -4898,7 +4903,7 @@ Deno.serve(async (req: Request) => {
         await sendMessage(TELEGRAM_BOT_TOKEN, chatId, "Only current administrators of this group can set up a Social Mission.");
         return json({ ok: true });
       }
-      await offerLinkFinderCandidate(parsed, Number(message?.message_id), Number(from.id));
+      await offerLinkFinderCandidate(parsed, Number(message?.message_id), Number(from.id), false);
       return json({ ok: true });
     }
 
@@ -4920,13 +4925,17 @@ Deno.serve(async (req: Request) => {
     // requires Telegram to prove `sender_chat` is THIS exact group.
     if (missionMatch && isAnonymousGroupAdminSender && isGroupChat) {
       const anonArgument = String(missionMatch[1] ?? "");
+      if (anonArgument.toLowerCase() === "close") {
+        await sendMessage(TELEGRAM_BOT_TOKEN, chatId, "Open Mission Control as an identifiable linked administrator to close a mission.");
+        return json({ ok: true });
+      }
       const anonParsed = anonArgument ? parseXStatusUrl(anonArgument) : null;
       if (!anonParsed) {
         // Never fail silently: malformed or missing link gets visible usage.
         await sendMessage(TELEGRAM_BOT_TOKEN, chatId, MISSION_USAGE, { parse_mode: "HTML" });
         return json({ ok: true });
       }
-      await offerLinkFinderCandidate(anonParsed, Number(message?.message_id), null);
+      await offerLinkFinderCandidate(anonParsed, Number(message?.message_id), null, false);
       return json({ ok: true });
     }
 
