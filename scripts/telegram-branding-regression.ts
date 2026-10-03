@@ -87,6 +87,7 @@ const sql = readFileSync("docs/sql/MC_BRANDING_LAUNCHER_CLEANUP.sql", "utf8");
 check("staged binding stores immutable original scope", sql.includes("telegram_chat_id bigint not null") && sql.includes("cleanup_job_id uuid"));
 check("staged SQL qualifies pgcrypto digest", sql.includes("extensions.digest(_close_token"));
 check("staged SQL revokes binding table from browser roles", sql.includes("revoke all on table public.mission_control_launcher_bindings from public, anon, authenticated"));
+check("cleanup queue remains service-only", sql.includes("revoke all on table public.telegram_message_cleanup_jobs from public, anon, authenticated") && sql.includes("grant all on table public.telegram_message_cleanup_jobs to service_role"));
 check("fast worker path is service-only, delayed, and exact-job claimed", readFileSync("backend-source/edge-functions/telegram-message-cleanup/index.ts", "utf8").includes("Bearer ${SUPABASE_SERVICE_ROLE_KEY}") && readFileSync("backend-source/edge-functions/telegram-message-cleanup/index.ts", "utf8").includes("setTimeout(resolve, 5_000)") && sql.includes("claim_mission_control_launcher_cleanup_job"));
 const tgRoute = readFileSync("src/routes/tg.index.tsx", "utf8");
 check("Mini App closes only after queued acknowledgement", tgRoute.includes('result.ok && result.cleanup === "queued"'));

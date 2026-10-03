@@ -10,6 +10,8 @@ alter table public.telegram_message_cleanup_jobs
 alter table public.telegram_message_cleanup_jobs
   add constraint telegram_message_cleanup_jobs_cleanup_kind_ck
   check (cleanup_kind in ('launch_watch_cta', 'social_mission_pulse', 'social_mission_card', 'mission_control_launcher'));
+revoke all on table public.telegram_message_cleanup_jobs from public, anon, authenticated;
+grant all on table public.telegram_message_cleanup_jobs to service_role;
 
 create table public.mission_control_launcher_bindings (
   id uuid primary key default gen_random_uuid(),
