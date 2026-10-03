@@ -24,7 +24,7 @@ const DESTRUCTIVE = /\b(stop|delete|remove|cancel|end|mute|disconnect|close)\b/i
 const ACTION = /\b(open|start|join|watch|enable|save|send|confirm|retry|publish|connect|add|continue|view|reply|launch|manage)\b/i;
 
 /** Adds only Bot API presentation fields; callback_data and url are untouched. */
-export function presentInlineKeyboard(value: unknown): unknown {
+export function presentInlineKeyboard(value: unknown, context: TelegramPresentationContext = "authored"): unknown {
   if (!value || typeof value !== "object") return value;
   const keyboard = value as TelegramKeyboard;
   if (!Array.isArray(keyboard.inline_keyboard)) return value;
@@ -39,10 +39,11 @@ export function presentInlineKeyboard(value: unknown): unknown {
             const existingStyle = typeof button.style === "string" ? button.style : undefined;
             const existingIcon = typeof button.icon_custom_emoji_id === "string" ? button.icon_custom_emoji_id : undefined;
             const style = existingStyle ?? (DESTRUCTIVE.test(text) ? "danger" : ACTION.test(text) ? "success" : undefined);
+            const generatedIcon = context === "platform" && ACTION.test(text) ? CARTEL_CUSTOM_EMOJI.announce.id : undefined;
             return {
               ...button,
               ...(style ? { style } : {}),
-              ...(existingIcon ? { icon_custom_emoji_id: existingIcon } : {}),
+              ...((existingIcon ?? generatedIcon) ? { icon_custom_emoji_id: existingIcon ?? generatedIcon } : {}),
             };
           })
         : rawRow,
@@ -75,7 +76,7 @@ export function presentTelegramPayload(
     return body;
   }
   const next = { ...body };
-  if (next.reply_markup) next.reply_markup = presentInlineKeyboard(next.reply_markup);
+  if (next.reply_markup) next.reply_markup = presentInlineKeyboard(next.reply_markup, context);
   if (context === "platform" && next.parse_mode === "HTML") {
     if (typeof next.text === "string") next.text = presentHtmlText(next.text, context);
     if (typeof next.caption === "string") next.caption = presentHtmlText(next.caption, context);
