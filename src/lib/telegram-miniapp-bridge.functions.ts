@@ -795,8 +795,7 @@ export const miniAppCloseCommunityLaunch = createServerFn({ method: "POST" })
     const resolved = await resolveCommunityLaunch(admin, token, auth.user.id, route.connectionId);
     if (!resolved.ok) return resolved;
     if (!route.closeToken) return { ok: true, cleanup: "unavailable" };
-    const liveAdmin = await getTelegramMemberStatus(token, resolved.launch.telegramChatId, auth.user.id);
-    if (liveAdmin !== "administrator" && liveAdmin !== "creator") return fail("community_launch_unavailable");
+    if (!(await isCurrentChatAdmin(token, resolved.chatId, auth.user.id))) return fail("community_launch_unavailable");
     const { data: result, error } = await admin.rpc(MINIAPP_RPC.closeLauncher, {
       _telegram_user_id: auth.user.id,
       _group_connection_id: route.connectionId,
