@@ -339,6 +339,64 @@ async function sendMissionManageLauncherAndCleanup(
   return sent;
 }
 
+/**
+ * MC-GL — `/missioncontrol` group launcher -> direct Telegram Mini App link.
+ *
+ * Groups cannot carry `web_app` buttons, so the launcher is a normal URL button
+ * to the configured direct link (Main Mini App `https://t.me/<bot>` or named
+ * app `https://t.me/<bot>/<short_name>`) with `startapp=mc_<connection UUID>`.
+ * The link is read from server env `MISSION_CONTROL_MINIAPP_LINK`; it is never
+ * guessed. Missing/invalid config withholds the button with safe copy.
+ * The payload is a routing hint only: the Mini App re-proves operator scope and
+ * a live admin check in this exact chat, so a copied link grants nothing.
+ */
+const MISSION_CONTROL_CONNECTION_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+export function buildMissionControlDirectLink(configured: string, connectionId: string): string | null {
+  if (!MISSION_CONTROL_CONNECTION_UUID_RE.test(connectionId)) return null;
+  const raw = String(configured ?? "").trim().replace(/\/+$/, "");
+  const match = raw.match(/^https:\/\/t\.me\/([A-Za-z0-9_]{5,32})(?:\/([A-Za-z0-9_]{3,30}))?$/);
+  if (!match || match[1]!.toLowerCase() !== BOT_USERNAME.toLowerCase()) return null;
+  const url = new URL(raw);
+  url.search = new URLSearchParams({ startapp: `mc_${connectionId.toLowerCase()}` }).toString();
+  return url.toString();
+}
+export function missionControlConnectionOperational(row: unknown): boolean {
+  const r = (row ?? {}) as { bot_is_admin?: unknown; metadata?: unknown };
+  if (r.bot_is_admin !== true) return false;
+  const meta = (r.metadata ?? {}) as Record<string, unknown>;
+  return !meta["bot_removed_at"] && meta["bot_can_change_info"] !== false;
+}
+const MISSION_CONTROL_GROUP_TEXT =
+  "🛠 <b>MISSION CONTROL</b>\n\nOpen this community's missions in the CARTEL HQ Mini App. Only this group's current admins who operate the project can manage it — the button grants no access by itself.";
+const MISSION_CONTROL_NOT_CONNECTED_TEXT =
+  "🛠 <b>MISSION CONTROL</b>\n\nThis group is not connected to a CARTEL HQ project yet, or the bot has lost its admin rights here.";
+const MISSION_CONTROL_UNAVAILABLE_TEXT =
+  "🛠 <b>MISSION CONTROL</b>\n\nThe Mission Control app link is not available right now. Use /mission manage to open Mission Control in a private chat with the bot.";
+async function sendMissionControlLauncherAndCleanup(
+  token: string,
+  chatId: string,
+  directLink: string,
+  sourceMessageId: number | null | undefined,
+) {
+  const sent = await sendMessage(token, chatId, MISSION_CONTROL_GROUP_TEXT, {
+    parse_mode: "HTML",
+    reply_markup: { inline_keyboard: [[{ text: "Open Mission Control", url: directLink }]] },
+  });
+  if (!sent) return null;
+  // Only the exact original command, and only after the launcher was confirmed.
+  const messageId = Number(sourceMessageId);
+  if (!Number.isFinite(messageId) || messageId <= 0) return sent;
+  try {
+    await telegramJson(token, "deleteMessage", { chat_id: chatId, message_id: messageId });
+  } catch (error) {
+    console.log(
+      `[MC-GL] missioncontrol command cleanup failed: ${String((error as Error)?.message ?? "unknown").slice(0, 200)}`,
+    );
+  }
+  return sent;
+}
+
 /** SE-15 — the supporting metrics an operator can target, and their labels. */
 const MISSION_CONTROL_METRICS = ["views", "likes", "replies", "reposts", "bookmarks"] as const;
 type MissionControlMetric = (typeof MISSION_CONTROL_METRICS)[number];
@@ -4685,6 +4743,78 @@ Deno.serve(async (req: Request) => {
       }
       return true;
     };
+
+    // MC-GL — canonical `/missioncontrol` (optionally `@<this bot>`). A suffix
+    // naming another bot is ignored. Legacy `/mission manage` stays below.
+    const missionControlMatch = text.match(/^\/missioncontrol(?:@(\w+))?\s*$/i);
+    const isMissionControlCommand =
+      !!missionControlMatch &&
+      (!missionControlMatch[1] ||
+        missionControlMatch[1].toLowerCase() === BOT_USERNAME.toLowerCase());
+    if (isMissionControlCommand && chat?.type === "private" && from?.is_bot !== true) {
+      await mcOpenConsole(Number(from.id), chatId);
+      return json({ ok: true });
+    }
+    if (isMissionControlCommand && isGroupChat && (from?.is_bot !== true || isAnonymousGroupAdminSender)) {
+      // Same gate as `/mission manage`: anonymous admin proven by same-group
+      // sender_chat, or an identifiable CURRENT administrator/creator.
+      let mcAdmin = isAnonymousGroupAdminSender;
+      if (!mcAdmin) {
+        try {
+          const member = await telegramJson(TELEGRAM_BOT_TOKEN, "getChatMember", {
+            chat_id: chatId,
+            user_id: Number(from.id),
+          });
+          const status = String((member as { status?: unknown })?.status ?? "");
+          mcAdmin = status === "administrator" || status === "creator";
+        } catch {
+          mcAdmin = false;
+        }
+      }
+      if (!mcAdmin) {
+        await sendMessage(
+          TELEGRAM_BOT_TOKEN,
+          chatId,
+          "Mission Control is available to this group's administrators only.",
+        );
+        return json({ ok: true });
+      }
+      // Exact, still-operational connection for THIS chat; ambiguity fails closed.
+      let connectionId: string | null = null;
+      try {
+        const { data: rows } = await admin
+          .from("telegram_group_connections")
+          .select("id,bot_is_admin,metadata")
+          .eq("telegram_chat_id", chatId)
+          .limit(2);
+        const list = Array.isArray(rows) ? rows : [];
+        if (list.length === 1 && missionControlConnectionOperational(list[0])) {
+          connectionId = String(list[0].id);
+        }
+      } catch {
+        connectionId = null;
+      }
+      if (!connectionId) {
+        await sendMessage(TELEGRAM_BOT_TOKEN, chatId, MISSION_CONTROL_NOT_CONNECTED_TEXT, { parse_mode: "HTML" });
+        return json({ ok: true });
+      }
+      const directLink = buildMissionControlDirectLink(
+        Deno.env.get("MISSION_CONTROL_MINIAPP_LINK") ?? "",
+        connectionId,
+      );
+      if (!directLink) {
+        console.log("[MC-GL] MISSION_CONTROL_MINIAPP_LINK missing or invalid; launcher withheld");
+        await sendMessage(TELEGRAM_BOT_TOKEN, chatId, MISSION_CONTROL_UNAVAILABLE_TEXT, { parse_mode: "HTML" });
+        return json({ ok: true });
+      }
+      await sendMissionControlLauncherAndCleanup(
+        TELEGRAM_BOT_TOKEN,
+        chatId,
+        directLink,
+        Number(message?.message_id),
+      );
+      return json({ ok: true });
+    }
 
     // SE-4A — `/mission <X link>`. Runs before every generic fallthrough and
     // before the unknown-slash-command no-op, and touches no other command.
