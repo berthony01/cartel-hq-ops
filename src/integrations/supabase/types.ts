@@ -3016,7 +3016,13 @@ export type Database = {
           prompt_message_id: number | null
           resolved_at: string | null
           resolved_by: string | null
+          reviewed_targets: Json
+          setup_mission_id: string | null
+          setup_request_id: string | null
+          setup_source: string
+          setup_started_at: string | null
           source_cleanup_error: string | null
+          source_cleanup_required: boolean
           source_deleted_at: string | null
           state: string
           telegram_chat_id: number
@@ -3037,7 +3043,13 @@ export type Database = {
           prompt_message_id?: number | null
           resolved_at?: string | null
           resolved_by?: string | null
+          reviewed_targets?: Json
+          setup_mission_id?: string | null
+          setup_request_id?: string | null
+          setup_source?: string
+          setup_started_at?: string | null
           source_cleanup_error?: string | null
+          source_cleanup_required?: boolean
           source_deleted_at?: string | null
           state?: string
           telegram_chat_id: number
@@ -3058,7 +3070,13 @@ export type Database = {
           prompt_message_id?: number | null
           resolved_at?: string | null
           resolved_by?: string | null
+          reviewed_targets?: Json
+          setup_mission_id?: string | null
+          setup_request_id?: string | null
+          setup_source?: string
+          setup_started_at?: string | null
           source_cleanup_error?: string | null
+          source_cleanup_required?: boolean
           source_deleted_at?: string | null
           state?: string
           telegram_chat_id?: number
@@ -3078,6 +3096,13 @@ export type Database = {
           {
             foreignKeyName: "social_mission_link_candidates_mission_id_fkey"
             columns: ["mission_id"]
+            isOneToOne: false
+            referencedRelation: "social_missions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "social_mission_link_candidates_setup_mission_id_fkey"
+            columns: ["setup_mission_id"]
             isOneToOne: false
             referencedRelation: "social_missions"
             referencedColumns: ["id"]
@@ -6165,6 +6190,19 @@ export type Database = {
         }
         Returns: Json
       }
+      create_social_mission_setup_candidate: {
+        Args: {
+          _author_handle: string
+          _canonical_url: string
+          _external_post_id: string
+          _setup_source?: string
+          _telegram_chat_id: number
+          _telegram_message_id: number
+          _telegram_user_id: number
+          _ttl_minutes?: number
+        }
+        Returns: Json
+      }
       custom_media_gate_ok: { Args: { _g: Json }; Returns: boolean }
       delete_sticker_pack_if_eligible: {
         Args: { _pack_id: string }
@@ -7626,6 +7664,16 @@ export type Database = {
         Args: { p_secret: string }
         Returns: boolean
       }
+      read_social_mission_candidate_setup: {
+        Args: {
+          _candidate_id: string
+          _close_token?: string
+          _group_connection_id: string
+          _telegram_user_id: number
+          _verified_chat_id: number
+        }
+        Returns: Json
+      }
       record_launch_watch_confirmation: {
         Args: {
           _attempted_at: string
@@ -7824,6 +7872,17 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      save_social_mission_candidate_setup: {
+        Args: {
+          _candidate_id: string
+          _group_connection_id: string
+          _request_id: string
+          _targets: Json
+          _telegram_user_id: number
+          _verified_chat_id: number
+        }
+        Returns: Json
       }
       send_launch_schedule_communication: {
         Args: {
@@ -8179,9 +8238,28 @@ export type Database = {
         Args: { p_secret: string }
         Returns: boolean
       }
+      social_mission_setup_targets_valid: {
+        Args: { _targets: Json }
+        Returns: boolean
+      }
       social_mission_support_target: {
         Args: { _baseline: number; _floor_add: number }
         Returns: number
+      }
+      start_social_mission_candidate_setup: {
+        Args: {
+          _bot_can_delete: boolean
+          _bot_can_pin: boolean
+          _bot_is_admin: boolean
+          _bot_permissions_resolved: boolean
+          _candidate_id: string
+          _group_connection_id: string
+          _request_id: string
+          _targets: Json
+          _telegram_user_id: number
+          _verified_chat_id: number
+        }
+        Returns: Json
       }
       sticker_drop_scheduler_secret_matches: {
         Args: { p_secret: string }
