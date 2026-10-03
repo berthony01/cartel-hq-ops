@@ -84,5 +84,5 @@ Historical items above are preserved as technical evidence; staged vs production
 - [ ] Real Telegram E2E for animated emoji eligibility, native button rendering, exact launcher cleanup, non-admin denial, copied-link denial, and abandoned-prompt expiry — PENDING after activation
 
 ## Pre-start Mission Setup — staged for root review
-- [x] Candidate-scoped setup source complete: authenticated Auto-select, atomic reviewed-target start, exact-group authorization, and legacy command compatibility; SQL remains staged and unapplied
+- [x] Candidate-scoped setup source complete: authenticated Auto-select, recoverable committed-target continuation, atomic bot-permission preflight, exact candidate/prompt cleanup binding, command cleanup provenance, exact-group authorization, and legacy command compatibility; SQL remains staged and unapplied
 - [ ] Root review/application, backend deployment, frontend publication, and real admin/non-admin Telegram acceptance — PENDING after source verification

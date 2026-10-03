@@ -15,8 +15,8 @@
  * deterministic idempotency key handed to the existing SE-15 RPCs, not from a
  * global one-use cache.
  *
- * No new table, no new RPC, no schema change, and no provider/X read in this
- * bridge. MINI-HQ-1C: END NOW and CANCEL reuse the EXISTING lifecycle RPCs and
+ * Mission Setup uses its staged candidate RPCs and one bounded official-X read
+ * for an explicit Auto-select action. MINI-HQ-1C: END NOW and CANCEL reuse the EXISTING lifecycle RPCs and
  * the EXISTING in-place `edit_mission` transport lane (which alone owns the
  * single best-effort final X read for a COMPLETED card), plus the same
  * pinned_by_hq-guarded safe unpin the bot uses.
@@ -50,6 +50,7 @@ import {
   type CommunityDeps,
   type CommunityMissionDeps,
 } from "./mission-control-community.server";
+import { continueSetupDelivery, normalizeSetupDeliveryState, requestExactSetupCleanup, saveSetupDraft, setupPermissionProofAllowsStart, suggestSetupTargets, type SetupDeliveryState } from "./mission-setup-orchestration";
 
 /** Existing SE-15 service-only RPCs. This bridge reuses them; it defines none. */
 export const MINIAPP_RPC = {
@@ -92,7 +93,9 @@ export const MINIAPP_FINAL_TRANSPORT_ACTION = "edit_mission";
  * END NOW / CANCEL and every other final-state update remain the bot's
  * in-place `edit_mission` lane; `resurface_mission` requires a LIVE mission.
  *
- * This bridge never renders a card and never calls the Telegram Bot API.
+ * Existing mission controls never render cards here. Mission Setup delegates
+ * its canonical card to the established transport and performs bounded bot
+ * permission, cleanup, and pin calls after server-side authorization.
  */
 export const MINIAPP_TRANSPORT_FUNCTION = "social-mission-telegram";
 export const MINIAPP_TRANSPORT_ACTION = "resurface_mission";
@@ -707,6 +710,8 @@ export type MiniAppMissionSetup = {
   cleanupAvailable: boolean;
   targets: { likes: number | null; replies: number | null; reposts: number | null; bookmarks: number | null };
   state: "READY" | "STARTING" | "STARTED";
+  deliveryState: SetupDeliveryState;
+  missionStatus: string | null;
   missionId: string | null;
   suggestion: { available: boolean; basis: string; observedAt: string | null; targets: Record<string, number> };
 };
@@ -824,7 +829,7 @@ function setupTarget(value: unknown): number | null | undefined {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0 && value <= 2_147_483_647 ? value : undefined;
 }
 
-function setupTargets(data: Record<string, unknown>): Record<string, number> | null {
+export function setupTargets(data: Record<string, unknown>): Record<string, number> | null {
   const out: Record<string, number> = {};
   for (const key of ["likes", "replies", "reposts", "bookmarks"] as const) {
     const parsed = setupTarget(data[key]);
@@ -832,6 +837,13 @@ function setupTargets(data: Record<string, unknown>): Record<string, number> | n
     if (parsed !== null) out[key] = parsed;
   }
   return Object.keys(out).length > 0 ? out : null;
+}
+
+export function setupSuggestionTargets(row: Record<string, unknown>): Record<string, number> {
+  return Object.fromEntries(["likes", "replies", "reposts", "bookmarks"].flatMap((key) => {
+    const value = positiveInt(row[key]);
+    return value === null ? [] : [[key, value]];
+  }));
 }
 
 export const miniAppReadMissionSetup = createServerFn({ method: "POST" })
@@ -863,6 +875,8 @@ export const miniAppReadMissionSetup = createServerFn({ method: "POST" })
       cleanupAvailable: r["cleanup_confirmed"] === true,
       targets: { likes: positiveInt(goals["likes"]), replies: positiveInt(goals["replies"]), reposts: positiveInt(goals["reposts"]), bookmarks: positiveInt(goals["bookmarks"]) },
       state: state as MiniAppMissionSetup["state"],
+      deliveryState: normalizeSetupDeliveryState(r["delivery_state"]),
+      missionStatus: r["mission_status"] ? String(r["mission_status"]).toUpperCase() : null,
       missionId: isUuid(r["mission_id"]) ? String(r["mission_id"]) : null,
       suggestion: { available: false, basis: "Choose Auto-select to request one current official X snapshot. Missing metrics remain unset.", observedAt: null, targets: {} },
     } };
@@ -879,26 +893,35 @@ export const miniAppSuggestMissionSetup = createServerFn({ method: "POST" })
     if (identity.error || identity.data !== true) return fail("project_identity_required");
     const entitled = await miniAppFeatureAllowed(gate.admin, gate.launch.workspaceId, "x_missions", actor.actorUserId);
     if (entitled !== true) return fail(entitled === false ? "missions_plan_required" : "unavailable");
-    const { data: candidate, error } = await gate.admin.rpc(MINIAPP_RPC.readSetup, {
-      _candidate_id: gate.route.candidateId, _group_connection_id: gate.route.connectionId,
-      _telegram_user_id: gate.telegramUserId, _verified_chat_id: Number(gate.chatId), _close_token: gate.route.closeToken,
-    });
-    const row = (candidate ?? {}) as Record<string, unknown>;
-    if (error || String(row["outcome"] ?? "") !== "READY") return fail("mission_setup_unavailable");
-    const externalPostId = String(row["external_post_id"] ?? "");
     const bearer = process.env["X_API_BEARER_TOKEN"] ?? "";
     const { readMissionSetupMetrics } = await import("./x-mission-autoselect.server");
-    const snapshot = await readMissionSetupMetrics(bearer, externalPostId);
-    if (!snapshot.ok) return { ok: true, suggestion: { available: false, basis: "Official X metrics are unavailable right now. No values were invented.", observedAt: null, targets: {} } };
-    const { data: suggested, error: suggestError } = await gate.admin.rpc(MINIAPP_RPC.suggestSetup, {
-      _views: snapshot.metrics.views, _likes: snapshot.metrics.likes, _comments: snapshot.metrics.comments,
-      _shares: snapshot.metrics.shares, _saves: snapshot.metrics.saves, _primary_type: "NONE", _primary_target: null,
+    const orchestration = await suggestSetupTargets({
+      readCandidate: async () => {
+        const { data: candidate, error } = await gate.admin.rpc(MINIAPP_RPC.readSetup, {
+          _candidate_id: gate.route.candidateId, _group_connection_id: gate.route.connectionId,
+          _telegram_user_id: gate.telegramUserId, _verified_chat_id: Number(gate.chatId), _close_token: gate.route.closeToken,
+        });
+        const row = (candidate ?? {}) as Record<string, unknown>;
+        return error || String(row["outcome"] ?? "") !== "READY" ? null : { externalPostId: String(row["external_post_id"] ?? "") };
+      },
+      readMetrics: async (externalPostId) => {
+        const snapshot = await readMissionSetupMetrics(bearer, externalPostId);
+        return snapshot.ok ? snapshot : null;
+      },
+      suggest: async (snapshot) => {
+        const { data: suggested, error } = await gate.admin.rpc(MINIAPP_RPC.suggestSetup, {
+          _views: snapshot.metrics.views, _likes: snapshot.metrics.likes, _comments: snapshot.metrics.comments,
+          _shares: snapshot.metrics.shares, _saves: snapshot.metrics.saves, _primary_type: "NONE", _primary_target: null,
+        });
+        return { suggested, error, observedAt: snapshot.observedAt };
+      },
     });
+    if (!orchestration.available) return { ok: true, suggestion: { available: false, basis: "Official X metrics are unavailable right now. No values were invented.", observedAt: null, targets: {} } };
+    const { suggested, error: suggestError, observedAt } = orchestration.suggestion;
+    if (suggestError) return fail("unavailable");
     const raw = (suggested ?? {}) as Record<string, unknown>;
-    const targets = Object.fromEntries(["likes", "replies", "reposts", "bookmarks"].flatMap((key) => {
-      const value = positiveInt(raw[key]); return value === null ? [] : [[key, value]];
-    }));
-    return { ok: true, suggestion: { available: Object.keys(targets).length > 0, basis: "Suggested from one current official X snapshot using the existing mission target policy.", observedAt: snapshot.observedAt, targets } };
+    const targets = setupSuggestionTargets(raw);
+    return { ok: true, suggestion: { available: Object.keys(targets).length > 0, basis: "Suggested from one current official X snapshot using the existing mission target policy.", observedAt, targets } };
   });
 
 export const miniAppSaveMissionSetup = createServerFn({ method: "POST" })
@@ -909,12 +932,14 @@ export const miniAppSaveMissionSetup = createServerFn({ method: "POST" })
     if (!targets) return fail("invalid_target");
     const gate = await authorizeCandidateSetup(data.initData);
     if (!gate.ok) return gate;
-    const { data: result, error } = await gate.admin.rpc(MINIAPP_RPC.saveSetup, {
-      _candidate_id: gate.route.candidateId, _group_connection_id: gate.route.connectionId,
-      _telegram_user_id: gate.telegramUserId, _verified_chat_id: Number(gate.chatId), _request_id: data.requestId, _targets: targets,
+    const saved = await saveSetupDraft({
+      save: () => gate.admin.rpc(MINIAPP_RPC.saveSetup, {
+        _candidate_id: gate.route.candidateId, _group_connection_id: gate.route.connectionId,
+        _telegram_user_id: gate.telegramUserId, _verified_chat_id: Number(gate.chatId), _request_id: data.requestId, _targets: targets,
+      }),
     });
-    if (error) return fail("unavailable");
-    const outcome = String((result as Record<string, unknown> | null)?.["outcome"] ?? "DENIED");
+    if (!saved.ok) return fail("unavailable");
+    const outcome = String((saved.data as Record<string, unknown> | null)?.["outcome"] ?? "DENIED");
     return outcome === "SAVED" || outcome === "REPLAYED" ? { ok: true, outcome } : fail("mission_setup_unavailable");
   });
 
@@ -984,10 +1009,11 @@ export const miniAppStartMissionSetup = createServerFn({ method: "POST" })
     const entitled = await miniAppFeatureAllowed(gate.admin, gate.launch.workspaceId, "x_missions", actor.actorUserId);
     if (entitled !== true) return fail(entitled === false ? "missions_plan_required" : "unavailable");
     const permissions = await botMissionPermissions(gate.token, gate.chatId);
-    if (!permissions.resolved || !permissions.isAdmin || !permissions.canDelete) return fail("mission_permissions_required");
     const { data: started, error } = await gate.admin.rpc(MINIAPP_RPC.startSetup, {
       _candidate_id: gate.route.candidateId, _group_connection_id: gate.route.connectionId,
       _telegram_user_id: gate.telegramUserId, _verified_chat_id: Number(gate.chatId), _request_id: data.requestId, _targets: targets,
+      _bot_permissions_resolved: permissions.resolved, _bot_is_admin: permissions.isAdmin,
+      _bot_can_delete: permissions.canDelete, _bot_can_pin: permissions.canPin,
     });
     const start = (started ?? {}) as Record<string, unknown>;
     if (error) return fail("unavailable");
@@ -999,8 +1025,9 @@ export const miniAppStartMissionSetup = createServerFn({ method: "POST" })
     const winnerRequestId = String(start["request_id"] ?? "");
     if (!isRequestId(winnerRequestId)) return fail("mission_setup_unavailable");
     const autoPin = start["auto_pin_mission"] !== false;
-    if (autoPin && !permissions.canPin) return fail("mission_permissions_required");
-    if (!start["source_deleted_at"]) {
+    const sourceCleanupRequired = start["source_cleanup_required"] !== false;
+    if (!setupPermissionProofAllowsStart(permissions, { sourceCleanupRequired, autoPinMission: autoPin })) return fail("mission_permissions_required");
+    if (sourceCleanupRequired && !start["source_deleted_at"]) {
       const sourceMessageId = Number(start["source_message_id"]);
       if (!Number.isSafeInteger(sourceMessageId) || sourceMessageId <= 0) return fail("source_cleanup_required");
       try {
@@ -1012,9 +1039,10 @@ export const miniAppStartMissionSetup = createServerFn({ method: "POST" })
         if (recorded.error) return fail("source_cleanup_required");
       } catch { return fail("source_cleanup_required"); }
     }
-    const delivery = String(start["delivery_state"] ?? "");
-    if (delivery === "SENDING" || delivery === "AMBIGUOUS") return fail("delivery_ambiguous");
-    const sent = delivery === "SENT" ? "replayed" : await sendSetupMissionCard({ workspaceId: gate.launch.workspaceId, missionId, targetId, requestId: winnerRequestId, actorUserId: actor.actorUserId });
+    const delivery = normalizeSetupDeliveryState(start["delivery_state"]);
+    const continuation = await continueSetupDelivery(delivery, () => sendSetupMissionCard({ workspaceId: gate.launch.workspaceId, missionId, targetId, requestId: winnerRequestId, actorUserId: actor.actorUserId }));
+    if (!continuation.sent && continuation.reason === "ambiguous") return fail("delivery_ambiguous");
+    const sent = continuation.sent ? continuation.result : continuation.reason === "already_sent" ? "replayed" : "failed";
     if (sent !== "sent" && sent !== "replayed") return fail(sent === "ambiguous" ? "delivery_ambiguous" : "delivery_failed");
     const activated = await gate.admin.rpc("activate_social_mission_schedule", { _mission_id: missionId, _target_id: targetId });
     const activation = String((activated.data as Record<string, unknown> | null)?.["outcome"] ?? "");
@@ -1059,11 +1087,28 @@ export const miniAppCloseCommunityLaunch = createServerFn({ method: "POST" })
     if (!resolved.ok) return resolved;
     if (!route.closeToken) return { ok: true, cleanup: "unavailable" };
     if (!(await isCurrentChatAdmin(token, resolved.chatId, auth.user.id))) return fail("community_launch_unavailable");
-    const { data: result, error } = await admin.rpc(MINIAPP_RPC.closeLauncher, {
-      _telegram_user_id: auth.user.id,
-      _group_connection_id: route.connectionId,
-      _close_token: route.closeToken,
-    });
+    let cleanupResult: { data: unknown; error: unknown };
+    if (route.kind === "setup") {
+      const exact = await requestExactSetupCleanup({
+        readExact: async () => {
+          const { data: setup, error } = await admin.rpc(MINIAPP_RPC.readSetup, {
+            _candidate_id: route.candidateId, _group_connection_id: route.connectionId,
+            _telegram_user_id: auth.user.id, _verified_chat_id: Number(resolved.chatId), _close_token: route.closeToken,
+          });
+          return { cleanupConfirmed: !error && (setup as Record<string, unknown> | null)?.["cleanup_confirmed"] === true };
+        },
+        requestCleanup: () => admin.rpc(MINIAPP_RPC.closeLauncher, {
+          _telegram_user_id: auth.user.id, _group_connection_id: route.connectionId, _close_token: route.closeToken,
+        }),
+      });
+      if (!exact.ok) return fail("community_launch_unavailable");
+      cleanupResult = exact.result;
+    } else {
+      cleanupResult = await admin.rpc(MINIAPP_RPC.closeLauncher, {
+        _telegram_user_id: auth.user.id, _group_connection_id: route.connectionId, _close_token: route.closeToken,
+      });
+    }
+    const { data: result, error } = cleanupResult;
     const jobId = typeof result === "string" ? result : null;
     if (error || !jobId) return fail("unavailable");
     const supabaseUrl = process.env["SUPABASE_URL"] ?? "";

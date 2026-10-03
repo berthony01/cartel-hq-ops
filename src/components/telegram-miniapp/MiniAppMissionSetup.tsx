@@ -10,6 +10,7 @@ import {
   miniAppStartMissionSetup,
 } from "@/lib/telegram-miniapp-bridge.functions";
 import { closeTelegramMiniApp, miniAppFailureMessage, newRequestId, parseOptionalPositiveInt } from "@/lib/telegram-miniapp-client";
+import { setupRecoveryAction } from "@/lib/mission-setup-orchestration";
 import { MiniAppActionButton, MiniAppFieldRow, MiniAppMessage, MiniAppNotice, MiniAppPanel, MiniAppRetryButton, MiniAppSkeleton } from "./MiniAppPieces";
 
 type Draft = { likes: string; replies: string; reposts: string; bookmarks: string };
@@ -55,7 +56,10 @@ export function MiniAppMissionSetup({ initData }: { initData: string }) {
   });
   const startMutation = useMutation({
     mutationFn: async () => {
-      const targets = values(draft); const requestId = newRequestId();
+      const targets = values(setup?.state === "STARTING"
+        ? Object.fromEntries(Object.entries(setup.targets).map(([key, value]) => [key, value == null ? "" : String(value)])) as Draft
+        : draft);
+      const requestId = newRequestId();
       if (!targets || !requestId) throw new Error("Choose at least one positive whole-number target.");
       const result = await start({ data: { initData, requestId, ...targets } });
       if (!result.ok) throw new Error(miniAppFailureMessage(result.reason));
@@ -91,27 +95,33 @@ export function MiniAppMissionSetup({ initData }: { initData: string }) {
   });
   if (query.isPending) return <MiniAppSkeleton label="Opening mission setup…" />;
   if (!setup) return <MiniAppMessage title="Mission setup unavailable" description={miniAppFailureMessage(query.data && !query.data.ok ? query.data.reason : "mission_setup_unavailable")} action={<MiniAppRetryButton onRetry={() => void query.refetch()} pending={query.isFetching} />} />;
+  const recovery = setupRecoveryAction(setup.state, setup.deliveryState);
   const frozen = setup.state !== "READY" || startMutation.isSuccess;
-  const busy = saveMutation.isPending || startMutation.isPending || suggestMutation.isPending || frozen;
+  const mutationBusy = saveMutation.isPending || startMutation.isPending || suggestMutation.isPending;
+  const editorBusy = mutationBusy || frozen;
   return <>
-    {setup.state === "STARTING" ? <MiniAppNotice tone="warning" message="Mission start is in progress. The committed targets are locked while delivery completes." /> : null}
+    {setup.state === "STARTING" ? <MiniAppNotice tone="warning" message={recovery === "refresh" ? "Delivery is still being resolved. Refresh status; no resend will be attempted." : "The committed targets are locked. Continue start to resume the remaining steps."} /> : null}
     {setup.state === "STARTED" ? <MiniAppNotice tone="success" message="Mission started. These are the committed targets." /> : null}
     <MiniAppPanel heading={`Set up mission · ${setup.communityTitle}`} note={`Official post by @${setup.authorHandle}`}>
       <a href={setup.canonicalUrl} target="_blank" rel="noreferrer" className="block truncate text-xs text-gold underline">View official X post</a>
       <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-1">
-        {([['likes','Likes'],['replies','Comments / replies'],['reposts','Shares / reposts'],['bookmarks','Favorites / bookmarks']] as const).map(([key,label]) => <MiniAppFieldRow key={key} label={label} value={draft[key]} disabled={busy} placeholder="Off" onValueChange={(value) => setDraft((current) => ({ ...current, [key]: value }))} hint={key === 'bookmarks' ? 'Aspirational target; tracking stays unavailable unless X supplies this metric.' : undefined} />)}
+        {([['likes','Likes'],['replies','Comments / replies'],['reposts','Shares / reposts'],['bookmarks','Favorites / bookmarks']] as const).map(([key,label]) => <MiniAppFieldRow key={key} label={label} value={draft[key]} disabled={editorBusy} placeholder="Off" onValueChange={(value) => setDraft((current) => ({ ...current, [key]: value }))} hint={key === 'bookmarks' ? 'Aspirational target; tracking stays unavailable unless X supplies this metric.' : undefined} />)}
       </div>
     </MiniAppPanel>
     <MiniAppPanel heading="Auto-select suggestion">
       <div className="flex items-start gap-3"><Sparkles className="mt-0.5 size-4 shrink-0 text-gold" /><div><p className="text-xs leading-5 text-muted-foreground">{(suggestion ?? setup.suggestion).basis}</p>{(suggestion ?? setup.suggestion).observedAt ? <p className="mt-1 text-[10px] text-muted-foreground">Observed {new Date((suggestion ?? setup.suggestion).observedAt as string).toLocaleString()}</p> : null}</div></div>
-      <div className="mt-3"><MiniAppActionButton label="Auto-select from X" pendingLabel="Reading X…" tone="quiet" pending={suggestMutation.isPending} disabled={busy} onPress={() => { setNotice(null); suggestMutation.mutate(); }} /></div>
+      <div className="mt-3"><MiniAppActionButton label="Auto-select from X" pendingLabel="Reading X…" tone="quiet" pending={suggestMutation.isPending} disabled={editorBusy} onPress={() => { setNotice(null); suggestMutation.mutate(); }} /></div>
     </MiniAppPanel>
     {notice ? <MiniAppNotice tone={notice.tone} message={notice.message} /> : null}
     <div>
-      <MiniAppActionButton label="Save draft" tone="quiet" pending={saveMutation.isPending} disabled={busy} onPress={() => { setNotice(null); saveMutation.mutate(); }} />
+      <MiniAppActionButton label="Save draft" tone="quiet" pending={saveMutation.isPending} disabled={editorBusy} onPress={() => { setNotice(null); saveMutation.mutate(); }} />
     </div>
     <div className="mt-2">
-      <MiniAppActionButton label="Start Mission" pendingLabel="Starting…" pending={startMutation.isPending} disabled={busy} onPress={() => { setNotice(null); startMutation.mutate(); }} />
+      {recovery === "refresh"
+        ? <MiniAppActionButton label="Refresh status" pendingLabel="Refreshing…" pending={query.isFetching} disabled={mutationBusy} onPress={() => { setNotice(null); void query.refetch(); }} />
+        : recovery !== "complete"
+          ? <MiniAppActionButton label={recovery === "continue" ? "Continue start" : "Start Mission"} pendingLabel="Starting…" pending={startMutation.isPending} disabled={mutationBusy} onPress={() => { setNotice(null); startMutation.mutate(); }} />
+          : null}
     </div>
     <MiniAppActionButton label={setup.cleanupAvailable ? "Close & clear post" : "Close Mission Control"} tone="quiet" pending={closeMutation.isPending} onPress={() => closeMutation.mutate()} />
     <p className="flex items-start gap-2 text-[11px] leading-4 text-muted-foreground"><Check className="mt-0.5 size-3.5 shrink-0 text-pepe" />No mission, schedule, metrics launch, or quota use occurs until Start Mission.</p>
