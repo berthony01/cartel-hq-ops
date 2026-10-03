@@ -427,6 +427,12 @@ check("7.5 explicit mission candidate preserves automatic detector setting", sta
 const webhookSetup = readFileSync("backend-source/edge-functions/telegram-webhook/index.ts", "utf8");
 check("7.6 explicit close reaches preserved close lifecycle before X parsing", webhookSetup.indexOf('toLowerCase() === "close"') < webhookSetup.indexOf('const parsed = parseXStatusUrl(String(missionMatch[1]'));
 check("7.7 explicit link uses setup candidate while automatic finder remains gated", webhookSetup.includes('requireLinkFinderEnabled ? "create_social_mission_link_candidate" : "create_social_mission_setup_candidate"') && webhookSetup.includes('offerLinkFinderCandidate(parsed, Number(message?.message_id), Number(from.id), false)'));
+check("7.8 setup cleanup token binds candidate workspace and exact confirmed prompt", stagedSetupSql.includes("b.workspace_id=v.workspace_id") && stagedSetupSql.includes("b.telegram_message_id=v.prompt_message_id"));
+check("7.9 bot permission proof is checked atomically before mission insert", stagedSetupSql.indexOf("mission_permissions_required") < stagedSetupSql.indexOf("insert into public.social_missions"));
+check("7.10 command provenance freezes configured cleanup while detector remains mandatory", stagedSetupSql.includes("setup_source text not null default 'LINK_FINDER'") && stagedSetupSql.includes("source_cleanup_required boolean not null default true") && webhookSetup.includes('created.source_cleanup_required !== false'));
+check("7.11 start RPC receives all four current bot permission facts", stagedSetupSql.includes("_bot_permissions_resolved boolean") && stagedSetupSql.includes("_bot_can_delete boolean") && stagedSetupSql.includes("_bot_can_pin boolean"));
+const bridgeSetup = readFileSync("src/lib/telegram-miniapp-bridge.functions.ts", "utf8");
+check("7.12 setup close re-reads exact candidate token before queue request", bridgeSetup.indexOf('route.kind === "setup"') < bridgeSetup.indexOf("MINIAPP_RPC.closeLauncher") && bridgeSetup.includes('["cleanup_confirmed"] !== true'));
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail > 0) process.exit(1);

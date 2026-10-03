@@ -4670,7 +4670,7 @@ Deno.serve(async (req: Request) => {
       posterId: number | null,
       requireLinkFinderEnabled = true,
     ): Promise<boolean> => {
-      const { data: candidate } = await admin.rpc(requireLinkFinderEnabled ? "create_social_mission_link_candidate" : "create_social_mission_setup_candidate", {
+       const { data: candidate } = await admin.rpc(requireLinkFinderEnabled ? "create_social_mission_link_candidate" : "create_social_mission_setup_candidate", {
         _telegram_chat_id: Number(chatId),
         _telegram_message_id: Number(sourceMessageId),
         _telegram_user_id: posterId,
@@ -4678,9 +4678,10 @@ Deno.serve(async (req: Request) => {
         _external_post_id: parsedLink.postId,
         _author_handle: parsedLink.handle,
         _ttl_minutes: 15,
+         ...(requireLinkFinderEnabled ? {} : { _setup_source: "COMMAND" }),
       });
 
-      const created = (candidate ?? {}) as { outcome?: string; candidate_id?: string };
+       const created = (candidate ?? {}) as { outcome?: string; candidate_id?: string; source_cleanup_required?: boolean };
       // EXISTING = a webhook retry or a repost of the same message: silent.
       if (created.outcome !== "CREATED" || !created.candidate_id) return false;
 
@@ -4748,7 +4749,8 @@ Deno.serve(async (req: Request) => {
       // completely untouched. A failed deletion records a bounded diagnostic
       // and leaves the PENDING candidate retryable; the START path re-attempts
       // it before launching.
-      if (promptAttached) {
+       const sourceCleanupRequired = requireLinkFinderEnabled || created.source_cleanup_required !== false;
+       if (promptAttached && sourceCleanupRequired) {
         await ensureLinkFinderSourceDeleted({
           candidateId: String(created.candidate_id),
           chatId: String(chatId),

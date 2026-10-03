@@ -829,7 +829,7 @@ function setupTarget(value: unknown): number | null | undefined {
   return typeof value === "number" && Number.isSafeInteger(value) && value > 0 && value <= 2_147_483_647 ? value : undefined;
 }
 
-function setupTargets(data: Record<string, unknown>): Record<string, number> | null {
+export function setupTargets(data: Record<string, unknown>): Record<string, number> | null {
   const out: Record<string, number> = {};
   for (const key of ["likes", "replies", "reposts", "bookmarks"] as const) {
     const parsed = setupTarget(data[key]);
@@ -837,6 +837,13 @@ function setupTargets(data: Record<string, unknown>): Record<string, number> | n
     if (parsed !== null) out[key] = parsed;
   }
   return Object.keys(out).length > 0 ? out : null;
+}
+
+export function setupSuggestionTargets(row: Record<string, unknown>): Record<string, number> {
+  return Object.fromEntries(["likes", "replies", "reposts", "bookmarks"].flatMap((key) => {
+    const value = positiveInt(row[key]);
+    return value === null ? [] : [[key, value]];
+  }));
 }
 
 export const miniAppReadMissionSetup = createServerFn({ method: "POST" })
@@ -902,9 +909,7 @@ export const miniAppSuggestMissionSetup = createServerFn({ method: "POST" })
       _shares: snapshot.metrics.shares, _saves: snapshot.metrics.saves, _primary_type: "NONE", _primary_target: null,
     });
     const raw = (suggested ?? {}) as Record<string, unknown>;
-    const targets = Object.fromEntries(["likes", "replies", "reposts", "bookmarks"].flatMap((key) => {
-      const value = positiveInt(raw[key]); return value === null ? [] : [[key, value]];
-    }));
+    const targets = setupSuggestionTargets(raw);
     return { ok: true, suggestion: { available: Object.keys(targets).length > 0, basis: "Suggested from one current official X snapshot using the existing mission target policy.", observedAt: snapshot.observedAt, targets } };
   });
 

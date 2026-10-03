@@ -49,7 +49,7 @@ create or replace function public.read_social_mission_candidate_setup(
   _candidate_id uuid, _group_connection_id uuid, _telegram_user_id bigint,
   _verified_chat_id bigint, _close_token text default null
 ) returns jsonb language plpgsql security definer set search_path = pg_catalog as $$
-declare v public.social_mission_link_candidates%rowtype; v_uid uuid; v_targets jsonb; v_cleanup boolean:=false;
+declare v public.social_mission_link_candidates%rowtype; v_uid uuid; v_targets jsonb; v_cleanup boolean:=false; v_mission_status text; v_delivery_state text;
 begin
   if _candidate_id is null or _group_connection_id is null or _telegram_user_id is null or _verified_chat_id is null or _verified_chat_id>=0 then return jsonb_build_object('outcome','REJECTED','reason','invalid_arguments'); end if;
   select * into v from public.social_mission_link_candidates where id=_candidate_id;
