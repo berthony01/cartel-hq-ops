@@ -404,8 +404,7 @@ function MiniAppHome() {
       <MiniAppIdentity
         title="Operator Console"
         subtitle={activeWorkspace?.workspaceName}
-        onClose={closeAndClear}
-        closePending={closing}
+        {...(closeAndClear ? { onClose: closeAndClear, closePending: closing } : {})}
       />
 
       {workspacesQuery.isPending ? <MiniAppSkeleton label="Loading projects…" /> : null}
