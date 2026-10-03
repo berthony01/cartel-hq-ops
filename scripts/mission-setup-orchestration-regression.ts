@@ -6,6 +6,7 @@ import {
   continueSetupDelivery,
   normalizeSetupDeliveryState,
   requestExactSetupCleanup,
+  saveSetupDraft,
   setupDeliveryMaySend,
   setupPermissionProofAllowsStart,
   setupRecoveryAction,
@@ -65,6 +66,12 @@ const exact = await requestExactSetupCleanup({
   requestCleanup: async () => { cleanupJobs += 1; return "exact-job"; },
 });
 check("exact confirmed candidate prompt queues once", exact.ok && exact.result === "exact-job" && cleanupJobs === 1);
+
+let providers = 0;
+let transports = 0;
+let saves = 0;
+const saved = await saveSetupDraft({ save: async () => { saves += 1; return { data: { outcome: "SAVED" }, error: null }; } });
+check("production save orchestration invokes only its injected save RPC", saved.ok && saves === 1 && providers === 0 && transports === 0);
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail > 0) process.exit(1);

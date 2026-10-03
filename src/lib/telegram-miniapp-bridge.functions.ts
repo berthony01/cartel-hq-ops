@@ -50,7 +50,7 @@ import {
   type CommunityDeps,
   type CommunityMissionDeps,
 } from "./mission-control-community.server";
-import { continueSetupDelivery, normalizeSetupDeliveryState, requestExactSetupCleanup, setupPermissionProofAllowsStart, type SetupDeliveryState } from "./mission-setup-orchestration";
+import { continueSetupDelivery, normalizeSetupDeliveryState, requestExactSetupCleanup, saveSetupDraft, setupPermissionProofAllowsStart, type SetupDeliveryState } from "./mission-setup-orchestration";
 
 /** Existing SE-15 service-only RPCs. This bridge reuses them; it defines none. */
 export const MINIAPP_RPC = {
@@ -921,12 +921,14 @@ export const miniAppSaveMissionSetup = createServerFn({ method: "POST" })
     if (!targets) return fail("invalid_target");
     const gate = await authorizeCandidateSetup(data.initData);
     if (!gate.ok) return gate;
-    const { data: result, error } = await gate.admin.rpc(MINIAPP_RPC.saveSetup, {
-      _candidate_id: gate.route.candidateId, _group_connection_id: gate.route.connectionId,
-      _telegram_user_id: gate.telegramUserId, _verified_chat_id: Number(gate.chatId), _request_id: data.requestId, _targets: targets,
+    const saved = await saveSetupDraft({
+      save: () => gate.admin.rpc(MINIAPP_RPC.saveSetup, {
+        _candidate_id: gate.route.candidateId, _group_connection_id: gate.route.connectionId,
+        _telegram_user_id: gate.telegramUserId, _verified_chat_id: Number(gate.chatId), _request_id: data.requestId, _targets: targets,
+      }),
     });
-    if (error) return fail("unavailable");
-    const outcome = String((result as Record<string, unknown> | null)?.["outcome"] ?? "DENIED");
+    if (!saved.ok) return fail("unavailable");
+    const outcome = String((saved.data as Record<string, unknown> | null)?.["outcome"] ?? "DENIED");
     return outcome === "SAVED" || outcome === "REPLAYED" ? { ok: true, outcome } : fail("mission_setup_unavailable");
   });
 

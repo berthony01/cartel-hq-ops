@@ -46,3 +46,31 @@ export async function requestExactSetupCleanup<T>(deps: {
   if (!exact.cleanupConfirmed) return { ok: false };
   return { ok: true, result: await deps.requestCleanup() };
 }
+
+export async function saveSetupDraft<T>(deps: {
+  save: () => Promise<{ data: T; error: unknown }>;
+}): Promise<{ ok: false } | { ok: true; data: T }> {
+  const result = await deps.save();
+  return result.error ? { ok: false } : { ok: true, data: result.data };
+}
+
+export async function suggestSetupTargets<TSnapshot, TSuggestion>(deps: {
+  readCandidate: () => Promise<{ externalPostId: string } | null>;
+  readMetrics: (externalPostId: string) => Promise<TSnapshot | null>;
+  suggest: (snapshot: TSnapshot) => Promise<TSuggestion>;
+}): Promise<{ available: false } | { available: true; suggestion: TSuggestion }> {
+  const candidate = await deps.readCandidate();
+  if (!candidate) return { available: false };
+  const snapshot = await deps.readMetrics(candidate.externalPostId);
+  if (!snapshot) return { available: false };
+  return { available: true, suggestion: await deps.suggest(snapshot) };
+}
+
+export async function startSetupMutation<T>(deps: {
+  permissions: { resolved: boolean; isAdmin: boolean; canDelete: boolean; canPin: boolean };
+  requirements: { sourceCleanupRequired: boolean; autoPinMission: boolean };
+  mutate: () => Promise<T>;
+}): Promise<{ ok: false; reason: "permissions" } | { ok: true; result: T }> {
+  if (!setupPermissionProofAllowsStart(deps.permissions, deps.requirements)) return { ok: false, reason: "permissions" };
+  return { ok: true, result: await deps.mutate() };
+}
