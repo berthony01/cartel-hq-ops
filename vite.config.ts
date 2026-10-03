@@ -10,6 +10,24 @@ import { fileURLToPath } from "node:url";
 
 const EVENTS_NPM = fileURLToPath(new URL("./node_modules/events/events.js", import.meta.url));
 
+// WalletConnect (UniversalProvider, SignClient, Core) imports `events`.
+// Nitro's unenv aliases rewrite `events` -> `node:events` for every
+// environment, and the browser build then swaps `node:events` for Vite's
+// empty browser-external stub, so `new EventEmitter()` threw
+// "x.default is not a constructor" in production. Client build only:
+// resolve both specifiers to the real npm `events` package. Server
+// environments keep the runtime's native node:events.
+const browserEventsPlugin = {
+  name: "cartel:browser-events",
+  enforce: "pre" as const,
+  applyToEnvironment(env: { name: string }) {
+    return env.name === "client";
+  },
+  resolveId(id: string) {
+    return id === "events" || id === "node:events" ? EVENTS_NPM : null;
+  },
+};
+
 // unenv injects a shared `globalthis` polyfill that router-core and
 // supabase-realtime also use. Nitro's default per-package grouping let that
 // polyfill land inside the browser-only @reown/appkit chunk, so those
@@ -46,14 +64,7 @@ export default defineConfig({
     server: { entry: "server" },
   },
   vite: {
-    plugins: [mcpPlugin()],
-    // WalletConnect imports `events` (EventEmitter). The production client build
-    // replaced it with Vite's empty browser-external stub, so UniversalProvider
-    // threw "x.default is not a constructor" on start. Force the real npm package
-    // by absolute file path so builtin detection cannot intercept it.
-    resolve: {
-      alias: [{ find: /^(?:node:)?events$/, replacement: EVENTS_NPM }],
-    },
+    plugins: [mcpPlugin(), browserEventsPlugin],
     environments: {
       nitro: serverChunkIsolation,
       ssr: serverChunkIsolation,
