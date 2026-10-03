@@ -6,6 +6,9 @@
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 import { mcpPlugin } from "@lovable.dev/mcp-js/stacks/tanstack/vite";
+import { fileURLToPath } from "node:url";
+
+const EVENTS_NPM = fileURLToPath(new URL("./node_modules/events/events.js", import.meta.url));
 
 // unenv injects a shared `globalthis` polyfill that router-core and
 // supabase-realtime also use. Nitro's default per-package grouping let that
@@ -47,9 +50,9 @@ export default defineConfig({
     // WalletConnect imports `events` (EventEmitter). The production client build
     // replaced it with Vite's empty browser-external stub, so UniversalProvider
     // threw "x.default is not a constructor" on start. Force the real npm package
-    // (trailing slash = resolve the installed package, not the Node builtin).
+    // by absolute file path so builtin detection cannot intercept it.
     resolve: {
-      alias: [{ find: /^events$/, replacement: "events/" }],
+      alias: [{ find: /^events$/, replacement: EVENTS_NPM }],
     },
     environments: {
       nitro: serverChunkIsolation,
