@@ -37,3 +37,12 @@ export async function continueSetupDelivery<T>(
   if (!setupDeliveryMaySend(state)) return { sent: false, reason: "invalid" };
   return { sent: true, result: await send() };
 }
+
+export async function requestExactSetupCleanup<T>(deps: {
+  readExact: () => Promise<{ cleanupConfirmed: boolean }>;
+  requestCleanup: () => Promise<T>;
+}): Promise<{ ok: false } | { ok: true; result: T }> {
+  const exact = await deps.readExact();
+  if (!exact.cleanupConfirmed) return { ok: false };
+  return { ok: true, result: await deps.requestCleanup() };
+}

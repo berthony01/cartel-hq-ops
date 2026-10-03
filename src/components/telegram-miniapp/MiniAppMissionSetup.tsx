@@ -100,7 +100,7 @@ export function MiniAppMissionSetup({ initData }: { initData: string }) {
   const mutationBusy = saveMutation.isPending || startMutation.isPending || suggestMutation.isPending;
   const editorBusy = mutationBusy || frozen;
   return <>
-    {setup.state === "STARTING" ? <MiniAppNotice tone="warning" message="Mission start is in progress. The committed targets are locked while delivery completes." /> : null}
+    {setup.state === "STARTING" ? <MiniAppNotice tone="warning" message={recovery === "refresh" ? "Delivery is still being resolved. Refresh status; no resend will be attempted." : "The committed targets are locked. Continue start to resume the remaining steps."} /> : null}
     {setup.state === "STARTED" ? <MiniAppNotice tone="success" message="Mission started. These are the committed targets." /> : null}
     <MiniAppPanel heading={`Set up mission · ${setup.communityTitle}`} note={`Official post by @${setup.authorHandle}`}>
       <a href={setup.canonicalUrl} target="_blank" rel="noreferrer" className="block truncate text-xs text-gold underline">View official X post</a>

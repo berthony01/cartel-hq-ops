@@ -50,7 +50,7 @@ import {
   type CommunityDeps,
   type CommunityMissionDeps,
 } from "./mission-control-community.server";
-import { continueSetupDelivery, normalizeSetupDeliveryState, setupPermissionProofAllowsStart, type SetupDeliveryState } from "./mission-setup-orchestration";
+import { continueSetupDelivery, normalizeSetupDeliveryState, requestExactSetupCleanup, setupPermissionProofAllowsStart, type SetupDeliveryState } from "./mission-setup-orchestration";
 
 /** Existing SE-15 service-only RPCs. This bridge reuses them; it defines none. */
 export const MINIAPP_RPC = {
@@ -1074,20 +1074,28 @@ export const miniAppCloseCommunityLaunch = createServerFn({ method: "POST" })
     if (!resolved.ok) return resolved;
     if (!route.closeToken) return { ok: true, cleanup: "unavailable" };
     if (!(await isCurrentChatAdmin(token, resolved.chatId, auth.user.id))) return fail("community_launch_unavailable");
+    let cleanupResult: { data: unknown; error: unknown };
     if (route.kind === "setup") {
-      const { data: setup, error: setupError } = await admin.rpc(MINIAPP_RPC.readSetup, {
-        _candidate_id: route.candidateId, _group_connection_id: route.connectionId,
-        _telegram_user_id: auth.user.id, _verified_chat_id: Number(resolved.chatId), _close_token: route.closeToken,
+      const exact = await requestExactSetupCleanup({
+        readExact: async () => {
+          const { data: setup, error } = await admin.rpc(MINIAPP_RPC.readSetup, {
+            _candidate_id: route.candidateId, _group_connection_id: route.connectionId,
+            _telegram_user_id: auth.user.id, _verified_chat_id: Number(resolved.chatId), _close_token: route.closeToken,
+          });
+          return { cleanupConfirmed: !error && (setup as Record<string, unknown> | null)?.["cleanup_confirmed"] === true };
+        },
+        requestCleanup: () => admin.rpc(MINIAPP_RPC.closeLauncher, {
+          _telegram_user_id: auth.user.id, _group_connection_id: route.connectionId, _close_token: route.closeToken,
+        }),
       });
-      if (setupError || (setup as Record<string, unknown> | null)?.["cleanup_confirmed"] !== true) {
-        return fail("community_launch_unavailable");
-      }
+      if (!exact.ok) return fail("community_launch_unavailable");
+      cleanupResult = exact.result;
+    } else {
+      cleanupResult = await admin.rpc(MINIAPP_RPC.closeLauncher, {
+        _telegram_user_id: auth.user.id, _group_connection_id: route.connectionId, _close_token: route.closeToken,
+      });
     }
-    const { data: result, error } = await admin.rpc(MINIAPP_RPC.closeLauncher, {
-      _telegram_user_id: auth.user.id,
-      _group_connection_id: route.connectionId,
-      _close_token: route.closeToken,
-    });
+    const { data: result, error } = cleanupResult;
     const jobId = typeof result === "string" ? result : null;
     if (error || !jobId) return fail("unavailable");
     const supabaseUrl = process.env["SUPABASE_URL"] ?? "";

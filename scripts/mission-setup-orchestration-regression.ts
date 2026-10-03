@@ -5,6 +5,7 @@
 import {
   continueSetupDelivery,
   normalizeSetupDeliveryState,
+  requestExactSetupCleanup,
   setupDeliveryMaySend,
   setupPermissionProofAllowsStart,
   setupRecoveryAction,
@@ -47,6 +48,23 @@ const sent = await continueSetupDelivery("SENT", sender);
 check("ambiguous/sending/sent retries perform zero sends", sends === 0 && !ambiguous.sent && ambiguous.reason === "ambiguous" && !sending.sent && sending.reason === "ambiguous" && !sent.sent && sent.reason === "already_sent");
 const failed = await continueSetupDelivery("FAILED", sender);
 check("durable FAILED recovery performs exactly one existing transport call", sends === 1 && failed.sent && failed.result === "sent");
+
+let cleanupJobs = 0;
+const swapped = await requestExactSetupCleanup({
+  readExact: async () => ({ cleanupConfirmed: false }),
+  requestCleanup: async () => { cleanupJobs += 1; return "job"; },
+});
+check("swapped same-group launcher token is refused with zero cleanup jobs", !swapped.ok && cleanupJobs === 0);
+const crossCandidate = await requestExactSetupCleanup({
+  readExact: async () => ({ cleanupConfirmed: false }),
+  requestCleanup: async () => { cleanupJobs += 1; return "job"; },
+});
+check("cross-candidate close is refused with zero cleanup jobs", !crossCandidate.ok && cleanupJobs === 0);
+const exact = await requestExactSetupCleanup({
+  readExact: async () => ({ cleanupConfirmed: true }),
+  requestCleanup: async () => { cleanupJobs += 1; return "exact-job"; },
+});
+check("exact confirmed candidate prompt queues once", exact.ok && exact.result === "exact-job" && cleanupJobs === 1);
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail > 0) process.exit(1);
