@@ -630,7 +630,9 @@ const opts = { now: NOW_MS };
       )
         .split("\n")
         .filter(Boolean);
-      return hits.length === 1 && hits[0] === "src/lib/telegram-miniapp-bridge.functions.ts";
+      // Server-only modules (*.server.ts, blocked from client bundles) may reuse it.
+      const nonServer = hits.filter((h) => !h.endsWith(".server.ts"));
+      return nonServer.length === 1 && nonServer[0] === "src/lib/telegram-miniapp-bridge.functions.ts";
     })(),
   );
 }

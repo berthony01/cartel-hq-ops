@@ -1,14 +1,33 @@
 /**
  * MC-GL — `/missioncontrol` group launcher -> Mission Control Mini App.
+ * Behavior tests: run the PRODUCTION modules against controlled DB/Telegram
+ * doubles. No network, no real messages, no writes.
  * Run: bun scripts/mission-control-group-launcher-regression.ts
  */
 import { readFileSync } from "node:fs";
 import {
   computeInitDataHash,
   buildDataCheckString,
-  parseMissionControlStartParam,
+  isCurrentChatAdmin,
   validateTelegramInitData,
 } from "../src/lib/telegram-miniapp-auth.server";
+import {
+  COMMUNITY_MISSION_LIMIT,
+  fetchCommunityLiveMissions,
+  resolveCommunityLaunchCore,
+  routeStartParam,
+  type CommunityDeps,
+} from "../src/lib/mission-control-community.server";
+import {
+  MISSION_CONTROL_ADMIN_ONLY_TEXT,
+  MISSION_CONTROL_GROUP_TEXT,
+  MISSION_CONTROL_NOT_CONNECTED_TEXT,
+  MISSION_CONTROL_UNAVAILABLE_TEXT,
+  buildMissionControlDirectLink,
+  isMissionControlCommand,
+  runMissionControlGroupLauncher,
+  type LauncherDeps,
+} from "../supabase/functions/_shared/mission-control-launcher";
 
 let pass = 0;
 let fail = 0;
@@ -18,108 +37,295 @@ const check = (name: string, ok: boolean) => {
   console.log(`${ok ? "PASS" : "FAIL"} ${name}`);
 };
 
-const hook = readFileSync("supabase/functions/telegram-webhook/index.ts", "utf8");
-const mirror = readFileSync("backend-source/edge-functions/telegram-webhook/index.ts", "utf8");
-const bridge = readFileSync("src/lib/telegram-miniapp-bridge.functions.ts", "utf8");
-const home = readFileSync("src/routes/tg.index.tsx", "utf8");
-const between = (src: string, a: string, b: string) => {
-  const i = src.indexOf(a);
-  const j = src.indexOf(b, i + a.length);
-  return i >= 0 && j > i ? src.slice(i, j) : "";
-};
+const TOKEN = "123456:TEST_ONLY_TOKEN";
+const NOW = 1_800_000_000_000;
+const CONN = "11111111-2222-4333-8444-555555555555";
+const WS = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+const WS_OTHER = "99999999-bbbb-4ccc-8ddd-eeeeeeeeeeee";
+const CHAT_A = "-1001";
+const CHAT_B = "-1002";
 
-// Webhook
-const branch = between(hook, "const missionControlMatch", "// SE-4A");
-check("1.1 mirror identical", hook === mirror);
-check("1.2 canonical regex with optional @bot", hook.includes("text.match(/^\\/missioncontrol(?:@(\\w+))?\\s*$/i)"));
-check("1.3 foreign @bot suffix ignored", /missionControlMatch\[1\]\.toLowerCase\(\) === BOT_USERNAME\.toLowerCase\(\)/.test(branch));
-check("1.4 live getChatMember admin gate", /getChatMember[\s\S]*status === "administrator" \|\| status === "creator"/.test(branch));
-check("1.5 non-admin refusal, no link", /administrators only\."[\s\S]*?return json/.test(branch));
-check("1.6 exact chat connection, ambiguity fails closed", /\.eq\("telegram_chat_id", chatId\)[\s\S]*\.limit\(2\)/.test(branch) && /list\.length === 1 && missionControlConnectionOperational/.test(branch));
-check("1.7 link from server env only", branch.includes('Deno.env.get("MISSION_CONTROL_MINIAPP_LINK")'));
-check("1.8 unavailable copy when link missing", /if \(!directLink\)[\s\S]*MISSION_CONTROL_UNAVAILABLE_TEXT/.test(branch));
-const launcher = between(hook, "async function sendMissionControlLauncherAndCleanup", "/** SE-15 — the supporting");
-check("1.9 URL button, never web_app in group", /\{ text: "Open Mission Control", url: directLink \}/.test(launcher) && !launcher.includes("web_app"));
-check("1.10 cleanup only after confirmed post", launcher.indexOf("if (!sent) return null") < launcher.indexOf("deleteMessage"));
-check("1.11 private /missioncontrol opens console", /isMissionControlCommand && chat\?\.type === "private"[\s\S]*?mcOpenConsole/.test(branch));
-check("1.12 legacy /mission manage retained", hook.includes("sendMissionManageLauncherAndCleanup(") && hook.includes("/^\\/start(?:@\\w+)?\\s+mission_manage$/i"));
-check("1.13 legacy callbacks retained", hook.includes('callback_data: "mc_x"') && hook.includes("callbackData.match(/^pi_c_([0-9a-f-]{36})$/i)"));
-check("1.14 help + command registration", hook.includes("/missioncontrol — open this community's Mission Control") && hook.includes('command: "missioncontrol"'));
-
-// Pure link builder (extracted logic mirrored from source)
-const builderSrc = between(hook, "export function buildMissionControlDirectLink", "export function missionControlConnectionOperational");
-// eslint-disable-next-line @typescript-eslint/no-implied-eval
-const build = new Function(
-  "configured",
-  "connectionId",
-  `const BOT_USERNAME="PepeCartelHQBot";const MISSION_CONTROL_CONNECTION_UUID_RE=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;` +
-    builderSrc.replace(/^export function buildMissionControlDirectLink\([^)]*\): string \| null \{/, "").replace(/\}\s*$/, "").replace(/match\[1\]!/g, "match[1]"),
-) as (c: string, id: string) => string | null;
-const U = "11111111-2222-3333-4444-555555555555";
-check("2.1 Main Mini App form", build("https://t.me/PepeCartelHQBot", U) === `https://t.me/PepeCartelHQBot?startapp=mc_${U}`);
-check("2.2 named app form", build("https://t.me/PepeCartelHQBot/control", U) === `https://t.me/PepeCartelHQBot/control?startapp=mc_${U}`);
-check("2.3 empty config -> null", build("", U) === null);
-check("2.4 other bot -> null", build("https://t.me/OtherBot/app", U) === null);
-check("2.5 non-https/query -> null", build("http://t.me/PepeCartelHQBot", U) === null && build("https://t.me/PepeCartelHQBot?x=1", U) === null);
-check("2.6 bad id -> null", build("https://t.me/PepeCartelHQBot", "123") === null);
-
-// Signed start_param
-const TOKEN = "123456:TEST";
-async function signed(fields: Record<string, string>) {
-  const p = new URLSearchParams(fields);
-  p.set("hash", await computeInitDataHash(buildDataCheckString(p), TOKEN));
-  return p.toString();
+async function signed(extra: [string, string][]): Promise<string> {
+  const params = new URLSearchParams();
+  params.append("auth_date", String(Math.floor(NOW / 1000)));
+  params.append("user", JSON.stringify({ id: 42, first_name: "T" }));
+  for (const [k, v] of extra) params.append(k, v);
+  params.append("hash", await computeInitDataHash(buildDataCheckString(params), TOKEN));
+  return params.toString();
 }
-const now = Math.floor(Date.now() / 1000).toString();
-const user = JSON.stringify({ id: 42, first_name: "A" });
-const good = await validateTelegramInitData(await signed({ auth_date: now, user, start_param: `mc_${U}` }), TOKEN);
-check("3.1 verified start_param exposed", good.ok && good.startParam === `mc_${U}`);
-const none = await validateTelegramInitData(await signed({ auth_date: now, user }), TOKEN);
-check("3.2 absent -> null", none.ok && none.startParam === null);
-const tampered = (await signed({ auth_date: now, user, start_param: `mc_${U}` })).replace(U, "99999999-2222-3333-4444-555555555555");
-check("3.3 tampered start_param rejected", !(await validateTelegramInitData(tampered, TOKEN)).ok);
-check("3.4 parser accepts mc_<uuid>", parseMissionControlStartParam(`mc_${U.toUpperCase()}`) === U);
-check("3.5 parser rejects junk", parseMissionControlStartParam("mc_1") === null && parseMissionControlStartParam(U) === null);
+async function startState(extra: [string, string][]) {
+  const r = await validateTelegramInitData(await signed(extra), TOKEN, { now: NOW });
+  return r.ok ? r.startParam : null;
+}
 
-// Bridge authority
-const resolver = between(bridge, "async function resolveCommunityLaunch", "export const miniAppResolveCommunityLaunch");
-check("4.1 operator RPC scope required", resolver.includes("admin.rpc(MINIAPP_RPC.workspaces") && resolver.includes("!authorized.has(workspaceId)"));
-check("4.2 live admin check in resolved chat", resolver.includes("isCurrentChatAdmin(token, chatId, telegramUserId)"));
-check("4.3 revoked connection refused", resolver.includes("bot_removed_at") && resolver.includes('row["bot_is_admin"] === true'));
-check("4.4 single bounded refusal code", (resolver.match(/community_launch_unavailable/g) ?? []).length >= 2);
-const resolveFn = between(bridge, "export const miniAppResolveCommunityLaunch", "export const miniAppListMissions");
-check("4.5 hint read from verified start_param only", resolveFn.includes("auth.startParam") && !resolveFn.includes("data?.startParam"));
-check("4.6 malformed mc_ -> refusal", resolveFn.includes('fail("community_launch_invalid")'));
-const listFn = between(bridge, "export const miniAppListMissions", "const MINIAPP_LOGO_MAX_BYTES");
-check("4.7 scoped list re-proves launch", listFn.includes("resolveCommunityLaunch(admin, token, auth.user.id"));
-check("4.8 scoped list filters exact chat", listFn.includes('["telegram_chat_id"] ?? "") === scopedChatId'));
-check("4.9 entitlement gate preserved", listFn.includes('miniAppFeatureAllowed(admin, data.workspaceId, "x_missions"'));
-// 4.10 behavioral: execute the production filter predicate on two chats of the SAME workspace.
+// ---------- 1. Signed start_param -> route ----------
 {
-  const m = listFn.match(/\.filter\(\s*(\(row\)\s*=>[\s\S]*?=== scopedChatId),?\s*\)\s*\.map/);
-  let ok = false;
-  if (m) {
-    const src = m[1].replace(/\s+as Record<string, unknown>/g, "");
-    const mk = (scopedChatId: string | null) => new Function("scopedChatId", `return ${src};`)(scopedChatId) as (r: unknown) => boolean;
-    const rows = [
-      { mission_id: "a1", workspace_id: "w", telegram_chat_id: -1001 },
-      { mission_id: "b1", workspace_id: "w", telegram_chat_id: -1002 },
-      { mission_id: "a2", workspace_id: "w", telegram_chat_id: "-1001" },
-      { mission_id: "n1", workspace_id: "w" },
-    ];
-    const a = rows.filter(mk("-1001")).map((r) => r.mission_id).join(",");
-    const b = rows.filter(mk("-1002")).map((r) => r.mission_id).join(",");
-    const all = rows.filter(mk(null)).length;
-    ok = a === "a1,a2" && b === "b1" && all === 4;
-  }
-  check("4.10 same-workspace multi-group isolation (executed)", ok);
+  const absent = await startState([]);
+  check("1.1 absent start_param -> ordinary", absent?.state === "absent" && routeStartParam(absent).kind === "ordinary");
+  const valid = await startState([["start_param", `mc_${CONN}`]]);
+  const r = valid ? routeStartParam(valid) : null;
+  check("1.2 signed mc_<uuid> -> community", r?.kind === "community" && r.connectionId === CONN);
+  const upper = await startState([["start_param", `MC_${CONN.toUpperCase()}`]]);
+  const ru = upper ? routeStartParam(upper) : null;
+  check("1.3 MC_ prefix (any case) -> community, lowercased", ru?.kind === "community" && ru.connectionId === CONN);
+  const dup = await startState([["start_param", `mc_${CONN}`], ["start_param", `mc_${CONN}`]]);
+  check("1.4 duplicated signed start_param -> invalid refusal", dup?.state === "invalid" && routeStartParam(dup).kind === "invalid");
+  const big = await startState([["start_param", "a".repeat(513)]]);
+  check("1.5 oversized signed start_param -> invalid refusal", big?.state === "invalid" && routeStartParam(big).kind === "invalid");
+  const illegal = await startState([["start_param", "mc_bad value!"]]);
+  check("1.6 illegal chars -> invalid refusal", illegal?.state === "invalid" && routeStartParam(illegal).kind === "invalid");
+  const malformed = await startState([["start_param", "mc_not-a-uuid"]]);
+  check("1.7 malformed mc_ -> invalid refusal", malformed !== null && routeStartParam(malformed).kind === "invalid");
+  const mixed = await startState([["start_param", "Mc_zz"]]);
+  check("1.8 mixed-case malformed Mc_ -> invalid (no case gap)", mixed !== null && routeStartParam(mixed).kind === "invalid");
+  const other = await startState([["start_param", "ref_abc"]]);
+  check("1.9 unrelated payload -> ordinary", other !== null && routeStartParam(other).kind === "ordinary");
+  const tampered = (await signed([["start_param", `mc_${CONN}`]])).replace(CONN, WS);
+  const t = await validateTelegramInitData(tampered, TOKEN, { now: NOW });
+  check("1.10 tampered start_param fails signature", !t.ok && t.reason === "bad_signature");
 }
 
-// Mini App
-check("5.1 refusal does not pick another workspace", home.includes("if (!communityLaunch) return null;") && home.includes("if (launchRefused)"));
-check("5.2 picker hidden in community mode", home.includes("workspaces.length > 1 && !communityLaunch"));
-check("5.3 scoped list request", home.includes("groupConnectionId: communityLaunch?.connectionId ?? null"));
-check("5.4 initDataUnsafe never read", !home.includes(".initDataUnsafe"));
+// ---------- 2. resolveCommunityLaunchCore ----------
+const goodRow = () => ({
+  id: CONN,
+  workspace_id: WS,
+  telegram_chat_id: CHAT_A,
+  title: "Group A",
+  bot_is_admin: true,
+  metadata: {} as Record<string, unknown>,
+});
+function deps(o: Partial<{
+  workspaces: unknown[];
+  wsError: boolean;
+  rows: Record<string, unknown>[];
+  rowError: boolean;
+  admin: boolean | (() => Promise<boolean>);
+}> = {}): CommunityDeps & { adminCalls: string[] } {
+  const adminCalls: string[] = [];
+  return {
+    adminCalls,
+    listOperatorWorkspaces: async () => ({ rows: o.workspaces ?? [{ workspace_id: WS, workspace_name: "W" }], error: !!o.wsError }),
+    findConnection: async () => ({ rows: o.rows ?? [goodRow()], error: !!o.rowError }),
+    isChatAdmin: async (chatId) => {
+      adminCalls.push(chatId);
+      const a = o.admin ?? true;
+      return typeof a === "function" ? a() : a;
+    },
+  };
+}
+{
+  const d = deps();
+  const ok = await resolveCommunityLaunchCore(d, 42, CONN);
+  check("2.1 operator + live admin in exact chat -> launch", ok.ok && ok.chatId === CHAT_A && ok.launch.workspaceId === WS && d.adminCalls.join() === CHAT_A);
+
+  const reasons: [string, CommunityDeps][] = [
+    ["non-admin", deps({ admin: false })],
+    ["admin API failure", deps({ admin: async () => false })],
+    ["foreign workspace", deps({ workspaces: [{ workspace_id: WS_OTHER }] })],
+    ["no operator workspaces (copied link)", deps({ workspaces: [] })],
+    ["missing connection", deps({ rows: [] })],
+    ["duplicate connection rows", deps({ rows: [goodRow(), goodRow()] })],
+    ["revoked (bot removed)", deps({ rows: [{ ...goodRow(), metadata: { bot_removed_at: "2026-01-01" } }] })],
+    ["bot no longer admin", deps({ rows: [{ ...goodRow(), bot_is_admin: false }] })],
+  ];
+  for (const [label, dd] of reasons) {
+    const r = await resolveCommunityLaunchCore(dd, 42, CONN);
+    check(`2.2 ${label} -> uniform community_launch_unavailable`, !r.ok && r.reason === "community_launch_unavailable");
+  }
+  const foreignD = deps({ workspaces: [{ workspace_id: WS_OTHER }] });
+  await resolveCommunityLaunchCore(foreignD, 42, CONN);
+  check("2.3 foreign workspace never reaches Telegram admin call", foreignD.adminCalls.length === 0);
+  const outage = await resolveCommunityLaunchCore(deps({ wsError: true }), 42, CONN);
+  const dbOut = await resolveCommunityLaunchCore(deps({ rowError: true }), 42, CONN);
+  check("2.4 backend outage -> unavailable (separate)", !outage.ok && outage.reason === "unavailable" && !dbOut.ok && dbOut.reason === "unavailable");
+  const noChangeInfo = await resolveCommunityLaunchCore(deps({ rows: [{ ...goodRow(), metadata: { bot_can_change_info: false } }] }), 42, CONN);
+  check("2.5 bot_can_change_info=false does NOT block Mission Control", noChangeInfo.ok);
+
+  // Real production getChatMember helper fails closed on transport errors / non-admin.
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async () => { throw new Error("network down"); }) as typeof fetch;
+  const t1 = await isCurrentChatAdmin(TOKEN, CHAT_A, 42);
+  globalThis.fetch = (async () => new Response(JSON.stringify({ ok: true, result: { status: "member" } }))) as typeof fetch;
+  const t2 = await isCurrentChatAdmin(TOKEN, CHAT_A, 42);
+  globalThis.fetch = (async () => new Response("{}", { status: 400 })) as typeof fetch;
+  const t3 = await isCurrentChatAdmin(TOKEN, CHAT_A, 42);
+  globalThis.fetch = (async () => new Response(JSON.stringify({ ok: true, result: { status: "creator" } }))) as typeof fetch;
+  const t4 = await isCurrentChatAdmin(TOKEN, CHAT_A, 42);
+  globalThis.fetch = realFetch;
+  check("2.6 isCurrentChatAdmin fails closed (throw/member/400) and allows creator", !t1 && !t2 && !t3 && t4);
+}
+
+// ---------- 3. Scoped mission read: chat filter before limit ----------
+type Mission = { id: string; workspace_id: string; status: string; started_at: string; ends_at: string | null; social_posts: { author_handle: string } | null; social_mission_targets: { telegram_chat_id: string }[] };
+function fakeDb(missions: Mission[]) {
+  const calls: string[] = [];
+  const from = (table: string) => {
+    calls.push(`from:${table}`);
+    const filters: [string, unknown][] = [];
+    let orderBy: string | null = null;
+    const q = {
+      select: (c: string) => { calls.push(`select:${c}`); return q; },
+      eq: (col: string, v: unknown) => { calls.push(`eq:${col}`); filters.push([col, v]); return q; },
+      order: (col: string, o: { ascending: boolean }) => { calls.push(`order:${col}:${o.ascending}`); orderBy = col; return q; },
+      limit: async (n: number) => {
+        calls.push(`limit:${n}`);
+        // Generic PostgREST semantics: filters (incl. !inner embedded) -> order -> limit.
+        let rows = missions.map((m) => ({ ...m, social_mission_targets: [...m.social_mission_targets] }));
+        for (const [col, v] of filters) {
+          if (col.includes(".")) {
+            const [rel, field] = col.split(".") as [keyof Mission, string];
+            rows = rows
+              .map((r) => ({ ...r, [rel]: (r[rel] as Record<string, unknown>[]).filter((x) => String(x[field]) === String(v)) }))
+              .filter((r) => (r[rel] as unknown[]).length > 0);
+          } else rows = rows.filter((r) => String((r as Record<string, unknown>)[col]) === String(v));
+        }
+        if (orderBy) rows.sort((a, b) => String(b[orderBy as keyof Mission]).localeCompare(String(a[orderBy as keyof Mission])));
+        return { data: rows.slice(0, n), error: null };
+      },
+    };
+    return q;
+  };
+  return { from, calls };
+}
+{
+  const mk = (id: string, ws: string, chat: string, minute: number, status = "LIVE"): Mission => ({
+    id, workspace_id: ws, status, started_at: `2026-10-03T10:${String(minute).padStart(2, "0")}:00Z`, ends_at: null,
+    social_posts: { author_handle: `h_${id}` }, social_mission_targets: [{ telegram_chat_id: chat }],
+  });
+  const data: Mission[] = [
+    mk("a-old-1", WS, CHAT_A, 1),
+    mk("a-old-2", WS, CHAT_A, 2),
+    mk("a-ended", WS, CHAT_A, 3, "ENDED"),
+    mk("x-foreign", WS_OTHER, CHAT_A, 59),
+    ...Array.from({ length: 12 }, (_, i) => mk(`b-new-${i}`, WS, CHAT_B, 20 + i)),
+  ];
+  // Baseline proof of the defect: workspace-wide top-10 then chat filter hides Group A.
+  const wsTop10 = data.filter((m) => m.workspace_id === WS && m.status === "LIVE").sort((a, b) => b.started_at.localeCompare(a.started_at)).slice(0, 10);
+  check("3.0 old path (limit before chat filter) would hide every Group A mission", wsTop10.filter((m) => m.social_mission_targets[0]!.telegram_chat_id === CHAT_A).length === 0);
+
+  const db = fakeDb(data);
+  const res = await fetchCommunityLiveMissions(db.from as never, WS, CHAT_A);
+  const ids = res.ok ? res.rows.map((r) => r["mission_id"]).join(",") : "";
+  check("3.1 >10 newer sibling-group missions do not hide target group", ids === "a-old-2,a-old-1");
+  check("3.2 no foreign-workspace or non-LIVE rows", !ids.includes("x-foreign") && !ids.includes("a-ended"));
+  const iFilter = db.calls.indexOf("eq:social_mission_targets.telegram_chat_id");
+  const iLimit = db.calls.indexOf(`limit:${COMMUNITY_MISSION_LIMIT}`);
+  check("3.3 chat filter + inner join issued before limit", iFilter >= 0 && iLimit > iFilter && db.calls.some((c) => c.includes("social_mission_targets!inner")));
+  check("3.4 rows carry exact target chat + author", res.ok && res.rows.every((r) => r["telegram_chat_id"] === CHAT_A) && res.rows[0]!["author_handle"] === "h_a-old-2");
+  const resB = await fetchCommunityLiveMissions(fakeDb(data).from as never, WS, CHAT_B);
+  check("3.5 Group B capped at limit, only B rows", resB.ok && resB.rows.length === COMMUNITY_MISSION_LIMIT && resB.rows.every((r) => String(r["mission_id"]).startsWith("b-")));
+  const errDb = { from: () => ({ select() { return this; }, eq() { return this; }, order() { return this; }, limit: async () => ({ data: null, error: { message: "x" } }) }) };
+  const er = await fetchCommunityLiveMissions(errDb.from as never, WS, CHAT_A);
+  check("3.6 DB error fails closed", !er.ok);
+}
+
+// ---------- 4. Group launcher flow ----------
+type Log = string[];
+function launcher(o: Partial<LauncherDeps> & { rows?: unknown[]; status?: string | Error; sendOk?: boolean; deleteThrows?: boolean } = {}) {
+  const log: Log = [];
+  const d: LauncherDeps = {
+    botUsername: "PepeCartelHQBot",
+    configuredLink: "https://t.me/PepeCartelHQBot",
+    anonymousAdmin: false,
+    getSenderStatus: async () => {
+      log.push("getChatMember");
+      if (o.status instanceof Error) throw o.status;
+      return o.status ?? "administrator";
+    },
+    findConnections: async () => ({ rows: o.rows ?? [{ id: CONN, bot_is_admin: true, metadata: {} }], error: null }),
+    sendText: async (t) => { log.push(`text:${t}`); return { message_id: 9 }; },
+    sendLauncher: async (t, url) => { log.push(`launcher:${url}`); return o.sendOk === false ? null : { message_id: 10 }; },
+    deleteCommand: async (id) => { log.push(`delete:${id}`); if (o.deleteThrows) throw new Error("no rights"); },
+    sourceMessageId: 777,
+    ...o,
+  };
+  return { d, log };
+}
+{
+  check("4.0 command parsing", isMissionControlCommand("/missioncontrol", "PepeCartelHQBot") &&
+    isMissionControlCommand("/MissionControl@pepecartelhqbot ", "PepeCartelHQBot") &&
+    !isMissionControlCommand("/missioncontrol@OtherBot", "PepeCartelHQBot") &&
+    !isMissionControlCommand("/missioncontrol now", "PepeCartelHQBot") &&
+    !isMissionControlCommand("/mission manage", "PepeCartelHQBot"));
+
+  let t = launcher({ status: "member" });
+  let out = await runMissionControlGroupLauncher(t.d);
+  check("4.1 non-admin refused, no link, no delete", out === "refused_not_admin" && t.log.join("|") === `getChatMember|text:${MISSION_CONTROL_ADMIN_ONLY_TEXT}`);
+
+  t = launcher({ status: new Error("timeout") });
+  out = await runMissionControlGroupLauncher(t.d);
+  check("4.2 failed admin API -> refused", out === "refused_not_admin" && !t.log.some((l) => l.startsWith("launcher")));
+
+  t = launcher({ anonymousAdmin: true, status: "member" });
+  out = await runMissionControlGroupLauncher(t.d);
+  check("4.3 anonymous admin skips getChatMember, gets launcher", out === "launcher_sent" && !t.log.includes("getChatMember"));
+
+  for (const [label, rows] of [
+    ["unconnected", []],
+    ["duplicate connections", [{ id: CONN, bot_is_admin: true, metadata: {} }, { id: WS, bot_is_admin: true, metadata: {} }]],
+    ["revoked", [{ id: CONN, bot_is_admin: true, metadata: { bot_removed_at: "x" } }]],
+    ["bot not admin", [{ id: CONN, bot_is_admin: false, metadata: {} }]],
+  ] as [string, unknown[]][]) {
+    t = launcher({ rows });
+    out = await runMissionControlGroupLauncher(t.d);
+    check(`4.4 ${label} -> not connected, no link`, out === "not_connected" && t.log.at(-1) === `text:${MISSION_CONTROL_NOT_CONNECTED_TEXT}` && !t.log.some((l) => l.startsWith("launcher") || l.startsWith("delete")));
+  }
+  t = launcher({ findConnections: async () => ({ rows: [], error: { message: "db" } }) });
+  check("4.5 DB error -> not connected", (await runMissionControlGroupLauncher(t.d)) === "not_connected");
+
+  t = launcher({ rows: [{ id: CONN, bot_is_admin: true, metadata: { bot_can_change_info: false } }] });
+  check("4.6 bot_can_change_info=false still launches", (await runMissionControlGroupLauncher(t.d)) === "launcher_sent");
+
+  for (const link of ["", "https://t.me/OtherBot", "http://t.me/PepeCartelHQBot", "https://t.me/PepeCartelHQBot/a b"]) {
+    t = launcher({ configuredLink: link });
+    out = await runMissionControlGroupLauncher(t.d);
+    check(`4.7 link "${link}" -> unavailable copy, no button`, out === "link_unavailable" && t.log.at(-1) === `text:${MISSION_CONTROL_UNAVAILABLE_TEXT}` && !t.log.some((l) => l.startsWith("launcher")));
+  }
+
+  t = launcher({ sendOk: false });
+  out = await runMissionControlGroupLauncher(t.d);
+  check("4.8 unconfirmed launcher post -> command NOT deleted", out === "launcher_failed" && !t.log.some((l) => l.startsWith("delete")));
+
+  t = launcher();
+  out = await runMissionControlGroupLauncher(t.d);
+  const li = t.log.findIndex((l) => l.startsWith("launcher:"));
+  const di = t.log.indexOf("delete:777");
+  check("4.9 confirmed post then delete exactly the original command once", out === "launcher_sent" && li >= 0 && di > li && t.log.filter((l) => l.startsWith("delete")).length === 1);
+  check("4.10 Main Mini App URL carries mc_<connection>", t.log[li] === `launcher:https://t.me/PepeCartelHQBot?startapp=mc_${CONN}`);
+
+  t = launcher({ configuredLink: "https://t.me/PepeCartelHQBot/missions" });
+  await runMissionControlGroupLauncher(t.d);
+  check("4.11 named app URL form", t.log.some((l) => l === `launcher:https://t.me/PepeCartelHQBot/missions?startapp=mc_${CONN}`));
+
+  t = launcher({ deleteThrows: true });
+  check("4.12 cleanup failure tolerated", (await runMissionControlGroupLauncher(t.d)) === "launcher_sent");
+  t = launcher({ sourceMessageId: undefined });
+  await runMissionControlGroupLauncher(t.d);
+  check("4.13 no message id -> no delete", !t.log.some((l) => l.startsWith("delete")));
+  check("4.14 launcher text promises no access by itself", MISSION_CONTROL_GROUP_TEXT.includes("grants no access"));
+  check("4.15 link builder rejects non-UUID connection", buildMissionControlDirectLink("https://t.me/PepeCartelHQBot", "x", "PepeCartelHQBot") === null);
+}
+
+// ---------- 5. Wiring (production files use the tested modules) ----------
+{
+  const hook = readFileSync("supabase/functions/telegram-webhook/index.ts", "utf8");
+  const mirror = readFileSync("backend-source/edge-functions/telegram-webhook/index.ts", "utf8");
+  const shared = readFileSync("supabase/functions/_shared/mission-control-launcher.ts", "utf8");
+  const sharedMirror = readFileSync("backend-source/edge-functions/_shared/mission-control-launcher.ts", "utf8");
+  const bridge = readFileSync("src/lib/telegram-miniapp-bridge.functions.ts", "utf8");
+  const home = readFileSync("src/routes/tg.index.tsx", "utf8");
+  check("5.1 webhook + shared mirrors byte-identical", hook === mirror && shared === sharedMirror);
+  check("5.2 webhook delegates to shared launcher", hook.includes('from "../_shared/mission-control-launcher.ts"') && hook.includes("runMissionControlGroupLauncher({") && hook.includes("isMissionControlCommand(text, BOT_USERNAME)"));
+  check("5.3 legacy /mission manage + private entry retained", hook.includes("mission_manage") && hook.includes("mcOpenConsole("));
+  check("5.4 help + setMyCommands list missioncontrol", hook.includes("/missioncontrol") && hook.includes('command: "missioncontrol"'));
+  check("5.5 bridge uses tested core + scoped read", bridge.includes("resolveCommunityLaunchCore(communityDeps(admin, token)") && bridge.includes("routeStartParam(auth.startParam)") && bridge.includes("fetchCommunityLiveMissions("));
+  check("5.6 private/null path keeps workspace RPC", /scopedChatId === null\)[\s\S]{0,200}admin\.rpc\(MINIAPP_RPC\.missions/.test(bridge));
+  check("5.7 entitlement gate still precedes reads", bridge.indexOf('"x_missions"') < bridge.indexOf("fetchCommunityLiveMissions(\n"));
+  check("5.8 detail/mutation paths re-check live admin in mission's own chat", bridge.includes("isCurrentChatAdmin(token, binding.chatId, auth.user.id)"));
+  check("5.9 refusal never auto-selects another workspace", home.includes("if (!communityLaunch) return null;") && home.includes("if (launchRefused)"));
+  check("5.10 picker hidden + scoped request in community mode", home.includes("workspaces.length > 1 && !communityLaunch") && home.includes("groupConnectionId: communityLaunch?.connectionId ?? null"));
+  check("5.11 initDataUnsafe never read", !home.includes(".initDataUnsafe"));
+}
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail > 0) process.exit(1);

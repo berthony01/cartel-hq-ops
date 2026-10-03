@@ -40,9 +40,14 @@ import {
   isRequestId,
   isUuid,
   miniAppIdempotencyKey,
-  parseMissionControlStartParam,
   validateTelegramInitData,
 } from "./telegram-miniapp-auth.server";
+import {
+  fetchCommunityLiveMissions,
+  resolveCommunityLaunchCore,
+  routeStartParam,
+  type CommunityDeps,
+} from "./mission-control-community.server";
 
 /** Existing SE-15 service-only RPCs. This bridge reuses them; it defines none. */
 export const MINIAPP_RPC = {
@@ -655,49 +660,25 @@ async function resolveCommunityLaunch(
   telegramUserId: number,
   connectionId: string,
 ): Promise<{ ok: true; launch: MiniAppCommunityLaunch; chatId: string } | MiniAppFailure> {
-  const { data: workspaceRows, error } = await admin.rpc(MINIAPP_RPC.workspaces, {
-    _telegram_user_id: telegramUserId,
-  });
-  if (error) return fail("unavailable");
-  const authorized = new Map<string, string>();
-  for (const row of Array.isArray(workspaceRows) ? workspaceRows : []) {
-    const r = row as Record<string, unknown>;
-    const id = String(r["workspace_id"] ?? "");
-    if (isUuid(id)) authorized.set(id.toLowerCase(), String(r["workspace_name"] ?? "Workspace"));
-  }
-  if (authorized.size === 0) return fail("community_launch_unavailable");
+  const result = await resolveCommunityLaunchCore(communityDeps(admin, token), telegramUserId, connectionId);
+  return result.ok ? result : fail(result.reason);
+}
 
-  const { data: rows, error: rowError } = await admin
-    .from("telegram_group_connections")
-    .select("id, workspace_id, telegram_chat_id, title, bot_is_admin, metadata")
-    .eq("id", connectionId)
-    .limit(2);
-  if (rowError) return fail("unavailable");
-  const list = Array.isArray(rows) ? (rows as Record<string, unknown>[]) : [];
-  if (list.length !== 1) return fail("community_launch_unavailable");
-  const row = list[0]!;
-  const workspaceId = String(row["workspace_id"] ?? "").toLowerCase();
-  const chatId = String(row["telegram_chat_id"] ?? "");
-  const meta = (row["metadata"] ?? {}) as Record<string, unknown>;
-  const operational =
-    row["bot_is_admin"] === true &&
-    !meta["bot_removed_at"] &&
-    meta["bot_can_change_info"] !== false &&
-    /^-\d+$/.test(chatId);
-  if (!operational || !authorized.has(workspaceId)) return fail("community_launch_unavailable");
-
-  const isAdmin = await isCurrentChatAdmin(token, chatId, telegramUserId);
-  if (!isAdmin) return fail("not_group_admin");
-
+function communityDeps(admin: AdminClient, token: string): CommunityDeps {
   return {
-    ok: true,
-    chatId,
-    launch: {
-      connectionId: String(row["id"]),
-      workspaceId,
-      workspaceName: authorized.get(workspaceId)!,
-      communityTitle: String(row["title"] ?? "Community"),
+    listOperatorWorkspaces: async (telegramUserId) => {
+      const { data, error } = await admin.rpc(MINIAPP_RPC.workspaces, { _telegram_user_id: telegramUserId });
+      return { rows: Array.isArray(data) ? data : [], error: Boolean(error) };
     },
+    findConnection: async (connectionId) => {
+      const { data, error } = await admin
+        .from("telegram_group_connections")
+        .select("id, workspace_id, telegram_chat_id, title, bot_is_admin, metadata")
+        .eq("id", connectionId)
+        .limit(2);
+      return { rows: Array.isArray(data) ? (data as Record<string, unknown>[]) : [], error: Boolean(error) };
+    },
+    isChatAdmin: (chatId, telegramUserId) => isCurrentChatAdmin(token, chatId, telegramUserId),
   };
 }
 
@@ -712,12 +693,11 @@ export const miniAppResolveCommunityLaunch = createServerFn({ method: "POST" })
     const token = botToken();
     const auth = await validateTelegramInitData(data?.initData, token);
     if (!auth.ok) return fail(auth.reason);
-    if (auth.startParam === null) return { ok: true, launch: null };
-    if (!auth.startParam.startsWith("mc_")) return { ok: true, launch: null };
-    const connectionId = parseMissionControlStartParam(auth.startParam);
-    if (!connectionId) return fail("community_launch_invalid");
+    const route = routeStartParam(auth.startParam);
+    if (route.kind === "ordinary") return { ok: true, launch: null };
+    if (route.kind === "invalid") return fail("community_launch_invalid");
     const admin = await adminClient();
-    const resolved = await resolveCommunityLaunch(admin, token, auth.user.id, connectionId);
+    const resolved = await resolveCommunityLaunch(admin, token, auth.user.id, route.connectionId);
     if (!resolved.ok) return resolved;
     return { ok: true, launch: resolved.launch };
   });
@@ -751,20 +731,29 @@ export const miniAppListMissions = createServerFn({ method: "POST" })
     const entitled = await miniAppFeatureAllowed(admin, data.workspaceId, "x_missions", gate.actorUserId);
     if (entitled === null) return fail("unavailable");
     if (!entitled) return fail("missions_plan_required");
-    const { data: rows, error } = await admin.rpc(MINIAPP_RPC.missions, {
-      _telegram_user_id: auth.user.id,
-      _workspace_id: data.workspaceId,
-    });
-    if (error) return fail("unavailable");
+    let rows: unknown[];
+    if (scopedChatId === null) {
+      // Private/ordinary path: unchanged workspace-wide RPC.
+      const { data: rpcRows, error } = await admin.rpc(MINIAPP_RPC.missions, {
+        _telegram_user_id: auth.user.id,
+        _workspace_id: data.workspaceId,
+      });
+      if (error) return fail("unavailable");
+      rows = Array.isArray(rpcRows) ? rpcRows : [];
+    } else {
+      // Community path: chat filter applied in the database before the limit.
+      const scoped = await fetchCommunityLiveMissions(
+        (table) => admin.from(table as never) as never,
+        data.workspaceId.toLowerCase(),
+        scopedChatId,
+      );
+      if (!scoped.ok) return fail("unavailable");
+      rows = scoped.rows;
+    }
 
     return {
       ok: true,
-      missions: (Array.isArray(rows) ? rows : [])
-        .filter(
-          (row) =>
-            scopedChatId === null ||
-            String((row as Record<string, unknown>)["telegram_chat_id"] ?? "") === scopedChatId,
-        )
+      missions: rows
         .map((row) => {
           const r = row as Record<string, unknown>;
           return {
