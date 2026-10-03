@@ -35,7 +35,7 @@ create or replace function public.prepare_mission_control_launcher_binding(
   _group_connection_id uuid,
   _close_token_hash text
 ) returns boolean
-language plpgsql security definer set search_path = public
+language plpgsql security definer set search_path = pg_catalog
 as $$
 declare v_connection public.telegram_group_connections%rowtype;
 begin
@@ -57,7 +57,7 @@ create or replace function public.confirm_mission_control_launcher_binding(
   _binding_id uuid,
   _telegram_message_id bigint
 ) returns uuid
-language plpgsql security definer set search_path = public
+language plpgsql security definer set search_path = pg_catalog
 as $$
 declare v public.mission_control_launcher_bindings%rowtype;
 declare v_job_id uuid;
@@ -97,7 +97,7 @@ end;
 $$;
 
 create or replace function public.abandon_mission_control_launcher_binding(_binding_id uuid)
-returns void language sql security definer set search_path = public
+returns void language sql security definer set search_path = pg_catalog
 as $$
   update public.mission_control_launcher_bindings
   set status = 'expired', updated_at = now()
@@ -109,7 +109,7 @@ create or replace function public.request_mission_control_launcher_cleanup(
   _group_connection_id uuid,
   _close_token text
 ) returns uuid
-language plpgsql security definer set search_path = public, extensions
+language plpgsql security definer set search_path = pg_catalog
 as $$
 declare v_binding public.mission_control_launcher_bindings%rowtype;
 declare v_uid uuid;
@@ -152,7 +152,7 @@ $$;
 
 create or replace function public.claim_mission_control_launcher_cleanup_job(_job_id uuid)
 returns table(job_id uuid, telegram_chat_id bigint, telegram_message_id bigint, cleanup_kind text, attempt_count integer)
-language plpgsql security definer set search_path = public
+language plpgsql security definer set search_path = pg_catalog
 as $$
 begin
   return query
