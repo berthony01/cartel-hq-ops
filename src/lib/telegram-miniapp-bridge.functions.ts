@@ -50,7 +50,7 @@ import {
   type CommunityDeps,
   type CommunityMissionDeps,
 } from "./mission-control-community.server";
-import { continueSetupDelivery, normalizeSetupDeliveryState, requestExactSetupCleanup, saveSetupDraft, setupPermissionProofAllowsStart, suggestSetupTargets, type SetupDeliveryState } from "./mission-setup-orchestration";
+import { continueSetupDelivery, normalizeSetupDeliveryState, requestExactSetupCleanup, saveSetupDraft, setupCommercialAccessAllows, setupPermissionProofAllowsStart, suggestSetupTargets, type SetupDeliveryState } from "./mission-setup-orchestration";
 
 /** Existing SE-15 service-only RPCs. This bridge reuses them; it defines none. */
 export const MINIAPP_RPC = {
@@ -891,8 +891,16 @@ export const miniAppSuggestMissionSetup = createServerFn({ method: "POST" })
     if (!actor.ok) return actor;
     const identity = await gate.admin.rpc("can_use_project_tools", { _workspace_id: gate.launch.workspaceId, _user_id: actor.actorUserId });
     if (identity.error || identity.data !== true) return fail("project_identity_required");
-    const entitled = await miniAppFeatureAllowed(gate.admin, gate.launch.workspaceId, "x_missions", actor.actorUserId);
-    if (entitled !== true) return fail(entitled === false ? "missions_plan_required" : "unavailable");
+    const { data: currentSetup, error: currentSetupError } = await gate.admin.rpc(MINIAPP_RPC.readSetup, {
+      _candidate_id: gate.route.candidateId, _group_connection_id: gate.route.connectionId,
+      _telegram_user_id: gate.telegramUserId, _verified_chat_id: Number(gate.chatId), _close_token: gate.route.closeToken,
+    });
+    const setupState = String((currentSetup as Record<string, unknown> | null)?.["outcome"] ?? "");
+    if (currentSetupError || !["READY", "STARTING", "STARTED"].includes(setupState)) return fail("mission_setup_unavailable");
+    const accessResult = await miniAppFeatureAccess(gate.admin, gate.launch.workspaceId, "x_missions", actor.actorUserId);
+    if (!accessResult) return fail("unavailable");
+    const exactCommittedRecovery = ["STARTING", "STARTED"].includes(setupState) && isUuid((currentSetup as Record<string, unknown>)["mission_id"]);
+    if (!setupCommercialAccessAllows(accessResult, exactCommittedRecovery)) return fail("missions_plan_required");
     const bearer = process.env["X_API_BEARER_TOKEN"] ?? "";
     const { readMissionSetupMetrics } = await import("./x-mission-autoselect.server");
     const orchestration = await suggestSetupTargets({
@@ -1736,6 +1744,16 @@ async function miniAppFeatureAllowed(
   feature: string,
   actorUserId: string,
 ): Promise<boolean | null> {
+  const access = await miniAppFeatureAccess(admin, workspaceId, feature, actorUserId);
+  return access ? access.allowed && !access.wouldBlock : null;
+}
+
+async function miniAppFeatureAccess(
+  admin: AdminClient,
+  workspaceId: string,
+  feature: string,
+  actorUserId: string,
+): Promise<{ allowed: boolean; wouldBlock: boolean; reason: string } | null> {
   const { data, error } = await admin.rpc(MINIAPP_COMMERCIAL_RPC.access, {
     _workspace_id: workspaceId,
     _feature_key: feature,
@@ -1743,7 +1761,11 @@ async function miniAppFeatureAllowed(
   });
   if (error || !data || typeof data !== "object") return null;
   const access = data as Record<string, unknown>;
-  return access["allowed"] === true && access["would_block"] !== true;
+  return {
+    allowed: access["allowed"] === true,
+    wouldBlock: access["would_block"] === true,
+    reason: String(access["reason"] ?? ""),
+  };
 }
 
 export const miniAppCommercialStatus = createServerFn({ method: "POST" })

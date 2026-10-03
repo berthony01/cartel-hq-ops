@@ -11,6 +11,7 @@ import {
   setupDeliveryMaySend,
   setupPermissionProofAllowsStart,
   setupRecoveryAction,
+  setupCommercialAccessAllows,
 } from "../src/lib/mission-setup-orchestration";
 import { setupSuggestionTargets, setupTargets } from "../src/lib/telegram-miniapp-bridge.functions";
 
@@ -79,6 +80,11 @@ const suggested = await suggestSetupTargets({
   suggest: async (snapshot) => ({ likes: snapshot.likes, replies: snapshot.replies }),
 });
 check("production suggest orchestration performs one provider read and preserves missing metrics", suggested.available && providers === 1 && suggested.suggestion.likes === null && suggested.suggestion.replies === 8 && transports === 0);
+
+const atLimit = { allowed: false, wouldBlock: true, reason: "PLAN_LIMIT_REACHED" };
+check("at-last-slot exact committed recovery survives PLAN_LIMIT_REACHED", setupCommercialAccessAllows(atLimit, true));
+check("at-last-slot new mission cannot bypass PLAN_LIMIT_REACHED", !setupCommercialAccessAllows(atLimit, false));
+check("disabled or suspended access still blocks committed recovery", !setupCommercialAccessAllows({ allowed: false, wouldBlock: true, reason: "SUBSCRIPTION_INACTIVE" }, true));
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail > 0) process.exit(1);
