@@ -50,7 +50,7 @@ import {
   type CommunityDeps,
   type CommunityMissionDeps,
 } from "./mission-control-community.server";
-import { continueSetupDelivery, normalizeSetupDeliveryState, requestExactSetupCleanup, saveSetupDraft, setupCommercialAccessAllows, setupPermissionProofAllowsStart, type SetupDeliveryState } from "./mission-setup-orchestration";
+import { continueSetupDelivery, normalizeSetupDeliveryState, requestExactSetupCleanup, saveSetupDraft, setupCandidateIsExactCommittedRecovery, setupCommercialAccessAllows, setupPermissionProofAllowsStart, type SetupDeliveryState } from "./mission-setup-orchestration";
 
 /** Existing SE-15 service-only RPCs. This bridge reuses them; it defines none. */
 export const MINIAPP_RPC = {
@@ -1019,12 +1019,20 @@ export const miniAppStartMissionSetup = createServerFn({ method: "POST" })
     if (!actor.ok) return actor;
     const identity = await gate.admin.rpc("can_use_project_tools", { _workspace_id: gate.launch.workspaceId, _user_id: actor.actorUserId });
     if (identity.error || identity.data !== true) return fail("project_identity_required");
+    const { data: currentSetup, error: currentSetupError } = await gate.admin.rpc(MINIAPP_RPC.readSetup, {
+      _candidate_id: gate.route.candidateId, _group_connection_id: gate.route.connectionId,
+      _telegram_user_id: gate.telegramUserId, _verified_chat_id: Number(gate.chatId), _close_token: gate.route.closeToken,
+    });
+    const setup = (currentSetup ?? {}) as Record<string, unknown>;
+    const setupState = String(setup["outcome"] ?? "");
+    if (currentSetupError || !["READY", "STARTING", "STARTED"].includes(setupState)) return fail("mission_setup_unavailable");
+    if (String(setup["group_connection_id"] ?? "").toLowerCase() !== gate.route.connectionId || String(setup["workspace_id"] ?? "").toLowerCase() !== gate.launch.workspaceId) return fail("mission_setup_unavailable");
+    const exactCommittedRecovery = setupCandidateIsExactCommittedRecovery(setupState, setup["mission_id"]);
     const access = await miniAppFeatureAccess(gate.admin, gate.launch.workspaceId, "x_missions", actor.actorUserId);
     if (!access) return fail("unavailable");
-    // PLAN_LIMIT_REACHED may proceed only to the atomic RPC so it can distinguish
-    // exact recovery / an existing same-group duplicate from a genuinely new row.
-    // The RPC applies quota again before every new insert.
-    if (!setupCommercialAccessAllows(access, true)) return fail("missions_plan_required");
+    // Only this exact candidate's already-committed mission may pass a full
+    // quota. READY/new starts remain quota-gated; all other denial reasons fail.
+    if (!setupCommercialAccessAllows(access, exactCommittedRecovery)) return fail("missions_plan_required");
     const permissions = await botMissionPermissions(gate.token, gate.chatId);
     const { data: started, error } = await gate.admin.rpc(MINIAPP_RPC.startSetup, {
       _candidate_id: gate.route.candidateId, _group_connection_id: gate.route.connectionId,

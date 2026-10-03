@@ -83,6 +83,15 @@ export function setupCommercialAccessAllows(
   return exactCommittedRecovery && access.reason === "PLAN_LIMIT_REACHED";
 }
 
+export function setupCandidateIsExactCommittedRecovery(
+  state: string,
+  missionId: unknown,
+): boolean {
+  return (state === "STARTING" || state === "STARTED")
+    && typeof missionId === "string"
+    && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(missionId);
+}
+
 export type ActiveSetupMission = {
   missionId: string;
   candidateId: string | null;

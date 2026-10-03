@@ -11,6 +11,7 @@ import {
   setupDeliveryMaySend,
   setupPermissionProofAllowsStart,
   setupRecoveryAction,
+  setupCandidateIsExactCommittedRecovery,
   setupCommercialAccessAllows,
   classifyActiveSetupMission,
 } from "../src/lib/mission-setup-orchestration";
@@ -86,6 +87,11 @@ const atLimit = { allowed: false, wouldBlock: true, reason: "PLAN_LIMIT_REACHED"
 check("at-last-slot exact committed recovery survives PLAN_LIMIT_REACHED", setupCommercialAccessAllows(atLimit, true));
 check("at-last-slot new mission cannot bypass PLAN_LIMIT_REACHED", !setupCommercialAccessAllows(atLimit, false));
 check("disabled or suspended access still blocks committed recovery", !setupCommercialAccessAllows({ allowed: false, wouldBlock: true, reason: "SUBSCRIPTION_INACTIVE" }, true));
+const committedMissionId = "11111111-2222-4333-8444-555555555555";
+check("production Start gate recognizes exact STARTING candidate mission recovery", setupCommercialAccessAllows(atLimit, setupCandidateIsExactCommittedRecovery("STARTING", committedMissionId)));
+check("production Start gate recognizes exact STARTED candidate mission recovery", setupCommercialAccessAllows(atLimit, setupCandidateIsExactCommittedRecovery("STARTED", committedMissionId)));
+check("production Start gate keeps READY candidate fully quota-gated", !setupCommercialAccessAllows(atLimit, setupCandidateIsExactCommittedRecovery("READY", committedMissionId)));
+check("production Start gate does not treat missing or malformed mission binding as recovery", !setupCommercialAccessAllows(atLimit, setupCandidateIsExactCommittedRecovery("STARTING", null)) && !setupCandidateIsExactCommittedRecovery("STARTING", "not-a-mission"));
 
 const activeWinner = {
   missionId: "11111111-2222-4333-8444-555555555555",
