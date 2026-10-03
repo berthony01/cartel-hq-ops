@@ -841,8 +841,10 @@ export const miniAppReadMissionSetup = createServerFn({ method: "POST" })
     if (!gate.ok) return gate;
     const { data: row, error } = await gate.admin.rpc(MINIAPP_RPC.readSetup, {
       _candidate_id: gate.route.candidateId,
+      _group_connection_id: gate.route.connectionId,
       _telegram_user_id: gate.telegramUserId,
       _verified_chat_id: Number(gate.chatId),
+      _close_token: gate.route.closeToken,
     });
     const r = (row ?? {}) as Record<string, unknown>;
     const state = String(r["outcome"] ?? "");
@@ -1683,7 +1685,8 @@ async function miniAppFeatureAllowed(
     _user_id: actorUserId,
   });
   if (error || !data || typeof data !== "object") return null;
-  return (data as Record<string, unknown>)["allowed"] === true;
+  const access = data as Record<string, unknown>;
+  return access["allowed"] === true && access["would_block"] !== true;
 }
 
 export const miniAppCommercialStatus = createServerFn({ method: "POST" })
