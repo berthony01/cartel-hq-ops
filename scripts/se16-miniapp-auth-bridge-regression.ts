@@ -86,8 +86,8 @@ const opts = { now: NOW_MS };
   // Exact success envelope: bounded fields only, no signed payload, no secret.
   const topKeys = Object.keys(ok).sort();
   check(
-    "2.4a success result exposes exactly ok/authDate/user",
-    JSON.stringify(topKeys) === JSON.stringify(["authDate", "ok", "user"]),
+    "2.4a success result exposes exactly ok/authDate/startParam/user",
+    JSON.stringify(topKeys) === JSON.stringify(["authDate", "ok", "startParam", "user"]),
     topKeys.join(","),
   );
   const userKeys = ok.ok === true ? Object.keys(ok.user).sort() : [];
