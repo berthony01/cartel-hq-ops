@@ -40,6 +40,7 @@ import {
   isRequestId,
   isUuid,
   miniAppIdempotencyKey,
+  parseMissionControlStartParam,
   validateTelegramInitData,
 } from "./telegram-miniapp-auth.server";
 
@@ -630,14 +631,119 @@ export const miniAppListMissionWorkspaces = createServerFn({ method: "POST" })
     };
   });
 
+/* ------------------------------------------- COMMUNITY LAUNCH (/missioncontrol) */
+
+export type MiniAppCommunityLaunch = {
+  connectionId: string;
+  workspaceId: string;
+  workspaceName: string;
+  communityTitle: string;
+};
+
+/**
+ * Resolves a `/missioncontrol` direct-link launch. The `mc_<connection>` hint
+ * comes ONLY from the HMAC-verified `start_param`; it grants nothing. Access
+ * requires ALL of: an existing, still-operational group connection; its
+ * workspace in the verified user's operator set (existing RPC — owner/admin/
+ * authorized partner exactly as today); and a LIVE administrator/creator check
+ * in that exact chat. Missing, foreign and revoked collapse into one bounded
+ * refusal so nothing about another community is disclosed.
+ */
+async function resolveCommunityLaunch(
+  admin: AdminClient,
+  token: string,
+  telegramUserId: number,
+  connectionId: string,
+): Promise<{ ok: true; launch: MiniAppCommunityLaunch; chatId: string } | MiniAppFailure> {
+  const { data: workspaceRows, error } = await admin.rpc(MINIAPP_RPC.workspaces, {
+    _telegram_user_id: telegramUserId,
+  });
+  if (error) return fail("unavailable");
+  const authorized = new Map<string, string>();
+  for (const row of Array.isArray(workspaceRows) ? workspaceRows : []) {
+    const r = row as Record<string, unknown>;
+    const id = String(r["workspace_id"] ?? "");
+    if (isUuid(id)) authorized.set(id.toLowerCase(), String(r["workspace_name"] ?? "Workspace"));
+  }
+  if (authorized.size === 0) return fail("community_launch_unavailable");
+
+  const { data: rows, error: rowError } = await admin
+    .from("telegram_group_connections")
+    .select("id, workspace_id, telegram_chat_id, title, bot_is_admin, metadata")
+    .eq("id", connectionId)
+    .limit(2);
+  if (rowError) return fail("unavailable");
+  const list = Array.isArray(rows) ? (rows as Record<string, unknown>[]) : [];
+  if (list.length !== 1) return fail("community_launch_unavailable");
+  const row = list[0]!;
+  const workspaceId = String(row["workspace_id"] ?? "").toLowerCase();
+  const chatId = String(row["telegram_chat_id"] ?? "");
+  const meta = (row["metadata"] ?? {}) as Record<string, unknown>;
+  const operational =
+    row["bot_is_admin"] === true &&
+    !meta["bot_removed_at"] &&
+    meta["bot_can_change_info"] !== false &&
+    /^-\d+$/.test(chatId);
+  if (!operational || !authorized.has(workspaceId)) return fail("community_launch_unavailable");
+
+  const isAdmin = await isCurrentChatAdmin(token, chatId, telegramUserId);
+  if (!isAdmin) return fail("not_group_admin");
+
+  return {
+    ok: true,
+    chatId,
+    launch: {
+      connectionId: String(row["id"]),
+      workspaceId,
+      workspaceName: authorized.get(workspaceId)!,
+      communityTitle: String(row["title"] ?? "Community"),
+    },
+  };
+}
+
+/**
+ * Returns `launch: null` for an ordinary open (no `mc_` start_param). A present
+ * but malformed / foreign / revoked hint is a refusal — the caller must NOT
+ * fall back to another workspace.
+ */
+export const miniAppResolveCommunityLaunch = createServerFn({ method: "POST" })
+  .inputValidator((input: { initData: string }) => input)
+  .handler(async ({ data }): Promise<{ ok: true; launch: MiniAppCommunityLaunch | null } | MiniAppFailure> => {
+    const token = botToken();
+    const auth = await validateTelegramInitData(data?.initData, token);
+    if (!auth.ok) return fail(auth.reason);
+    if (auth.startParam === null) return { ok: true, launch: null };
+    if (!auth.startParam.startsWith("mc_")) return { ok: true, launch: null };
+    const connectionId = parseMissionControlStartParam(auth.startParam);
+    if (!connectionId) return fail("community_launch_invalid");
+    const admin = await adminClient();
+    const resolved = await resolveCommunityLaunch(admin, token, auth.user.id, connectionId);
+    if (!resolved.ok) return resolved;
+    return { ok: true, launch: resolved.launch };
+  });
+
 export const miniAppListMissions = createServerFn({ method: "POST" })
-  .inputValidator((input: { initData: string; workspaceId: string }) => input)
+  .inputValidator((input: { initData: string; workspaceId: string; groupConnectionId?: string | null }) => input)
   .handler(async ({ data }): Promise<{ ok: true; missions: MiniAppMission[] } | MiniAppFailure> => {
-    const auth = await validateTelegramInitData(data?.initData, botToken());
+    const token = botToken();
+    const auth = await validateTelegramInitData(data?.initData, token);
     if (!auth.ok) return fail(auth.reason);
     if (!isUuid(data?.workspaceId)) return fail("invalid_workspace_id");
+    const scopedConnection = data?.groupConnectionId ?? null;
+    if (scopedConnection !== null && !isUuid(scopedConnection)) return fail("community_launch_invalid");
 
     const admin = await adminClient();
+    // Community scope re-proves the full launch authority on every read: the
+    // client-held connection id is only a hint.
+    let scopedChatId: string | null = null;
+    if (scopedConnection !== null) {
+      const resolved = await resolveCommunityLaunch(admin, token, auth.user.id, scopedConnection.toLowerCase());
+      if (!resolved.ok) return resolved;
+      if (resolved.launch.workspaceId !== data.workspaceId.toLowerCase()) {
+        return fail("community_launch_unavailable");
+      }
+      scopedChatId = resolved.chatId;
+    }
     // C3A — server-side x_missions entitlement, same derived actor + authority
     // as the commercial status read. Fails closed; lifecycle paths untouched.
     const gate = await miniAppCommercialActor(admin, auth.user.id, data.workspaceId);
@@ -653,15 +759,21 @@ export const miniAppListMissions = createServerFn({ method: "POST" })
 
     return {
       ok: true,
-      missions: (Array.isArray(rows) ? rows : []).map((row) => {
-        const r = row as Record<string, unknown>;
-        return {
-          missionId: String(r["mission_id"] ?? ""),
-          authorHandle: r["author_handle"] ? String(r["author_handle"]) : null,
-          endsAt: r["ends_at"] ? String(r["ends_at"]) : null,
-          status: String(r["status"] ?? "LIVE"),
-        };
-      }),
+      missions: (Array.isArray(rows) ? rows : [])
+        .filter(
+          (row) =>
+            scopedChatId === null ||
+            String((row as Record<string, unknown>)["telegram_chat_id"] ?? "") === scopedChatId,
+        )
+        .map((row) => {
+          const r = row as Record<string, unknown>;
+          return {
+            missionId: String(r["mission_id"] ?? ""),
+            authorHandle: r["author_handle"] ? String(r["author_handle"]) : null,
+            endsAt: r["ends_at"] ? String(r["ends_at"]) : null,
+            status: String(r["status"] ?? "LIVE"),
+          };
+        }),
     };
   });
 
