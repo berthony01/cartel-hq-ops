@@ -24,6 +24,7 @@ const browserEventsPlugin = {
     return env.name === "client";
   },
   resolveId(id: string) {
+    if (id.includes("events")) console.error("CBE", id);
     return id === "events" || id === "node:events" ? EVENTS_NPM : null;
   },
 };
