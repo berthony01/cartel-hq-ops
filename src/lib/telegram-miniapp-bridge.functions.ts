@@ -1019,8 +1019,12 @@ export const miniAppStartMissionSetup = createServerFn({ method: "POST" })
     if (!actor.ok) return actor;
     const identity = await gate.admin.rpc("can_use_project_tools", { _workspace_id: gate.launch.workspaceId, _user_id: actor.actorUserId });
     if (identity.error || identity.data !== true) return fail("project_identity_required");
-    const entitled = await miniAppFeatureAllowed(gate.admin, gate.launch.workspaceId, "x_missions", actor.actorUserId);
-    if (entitled !== true) return fail(entitled === false ? "missions_plan_required" : "unavailable");
+    const access = await miniAppFeatureAccess(gate.admin, gate.launch.workspaceId, "x_missions", actor.actorUserId);
+    if (!access) return fail("unavailable");
+    // PLAN_LIMIT_REACHED may proceed only to the atomic RPC so it can distinguish
+    // exact recovery / an existing same-group duplicate from a genuinely new row.
+    // The RPC applies quota again before every new insert.
+    if (!setupCommercialAccessAllows(access, true)) return fail("missions_plan_required");
     const permissions = await botMissionPermissions(gate.token, gate.chatId);
     const { data: started, error } = await gate.admin.rpc(MINIAPP_RPC.startSetup, {
       _candidate_id: gate.route.candidateId, _group_connection_id: gate.route.connectionId,
