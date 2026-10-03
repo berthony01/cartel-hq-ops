@@ -67,6 +67,8 @@ Historical items above are preserved as technical evidence; staged vs production
 - [ ] Create the Safe with a signer wallet — waiting on owner authorization; no transaction sent yet.
 
 ## Mission Control group launcher — 3 October 2026
-- [x] /missioncontrol group command -> Mission Control Mini App for that community (code + tests; not deployed)
-- [ ] Owner: set up Mini App in BotFather and add MISSION_CONTROL_MINIAPP_LINK to bot backend secrets
+- [ ] /missioncontrol group command -> community Mission Control — STAGED (code + QA-correction pass + tests; not deployed, not complete)
+- [ ] Owner: set up Main Mini App in BotFather and add MISSION_CONTROL_MINIAPP_LINK to bot backend secrets
 - [ ] Deploy telegram-webhook + publish site — waiting on owner approval
+- [ ] Real Telegram end-to-end check (admin, non-admin, copied link) after deploy
+- [ ] Known limit: opening/changing a mission outside the project's 10 newest live mission targets fails closed (existing database read; needs an approved SQL change)
