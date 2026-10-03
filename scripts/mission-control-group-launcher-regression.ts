@@ -425,7 +425,7 @@ check("7.3 replay authorization precedes existing mission response", stagedSetup
 check("7.4 winner request and reviewed targets are stable across retry", stagedSetupSql.includes("v_winner_request:=_request_id") && stagedSetupSql.includes("'request_id',v_winner_request") && stagedSetupSql.includes("'reviewed_targets',v_winner_targets"));
 check("7.5 explicit mission candidate preserves automatic detector setting", stagedSetupSql.includes("create_social_mission_setup_candidate") && stagedSetupSql.includes("handle_not_official") && !stagedSetupSql.includes("update public.social_mission_settings"));
 const webhookSetup = readFileSync("backend-source/edge-functions/telegram-webhook/index.ts", "utf8");
-check("7.6 explicit close reaches preserved close lifecycle before X parsing", webhookSetup.indexOf('toLowerCase() === "close"') < webhookSetup.indexOf('const parsed = parseXStatusUrl(String(missionMatch[1]')));
+check("7.6 explicit close reaches preserved close lifecycle before X parsing", webhookSetup.indexOf('toLowerCase() === "close"') < webhookSetup.indexOf('const parsed = parseXStatusUrl(String(missionMatch[1]'));
 check("7.7 explicit link uses setup candidate while automatic finder remains gated", webhookSetup.includes('requireLinkFinderEnabled ? "create_social_mission_link_candidate" : "create_social_mission_setup_candidate"') && webhookSetup.includes('offerLinkFinderCandidate(parsed, Number(message?.message_id), Number(from.id), false)'));
 
 console.log(`\n${pass}/${pass + fail} passed`);
