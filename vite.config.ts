@@ -6,6 +6,27 @@
 // You can pass additional config via defineConfig({ vite: { ... }, etc... }) if needed.
 import { defineConfig } from "@lovable.dev/vite-tanstack-config";
 import { mcpPlugin } from "@lovable.dev/mcp-js/stacks/tanstack/vite";
+import { fileURLToPath } from "node:url";
+
+const EVENTS_NPM = fileURLToPath(new URL("./node_modules/events/events.js", import.meta.url));
+
+// WalletConnect (UniversalProvider, SignClient, Core) imports `events`.
+// Nitro's unenv aliases rewrite `events` -> `node:events` for every
+// environment, and the browser build then swaps `node:events` for Vite's
+// empty browser-external stub, so `new EventEmitter()` threw
+// "x.default is not a constructor" in production. Client build only:
+// resolve both specifiers to the real npm `events` package. Server
+// environments keep the runtime's native node:events.
+const browserEventsPlugin = {
+  name: "cartel:browser-events",
+  enforce: "pre" as const,
+  applyToEnvironment(env: { name: string }) {
+    return env.name === "client";
+  },
+  resolveId(id: string) {
+    return id === "events" || id === "node:events" ? EVENTS_NPM : null;
+  },
+};
 
 // unenv injects a shared `globalthis` polyfill that router-core and
 // supabase-realtime also use. Nitro's default per-package grouping let that
@@ -43,7 +64,14 @@ export default defineConfig({
     server: { entry: "server" },
   },
   vite: {
-    plugins: [mcpPlugin()],
+    plugins: [mcpPlugin(), browserEventsPlugin],
+    // Vite's native alias fast-path resolves Nitro's `events` -> `node:events`
+    // alias without consulting plugins. An alias entry with a customResolver
+    // makes Vite use the JS alias plugin, which forwards the rewritten id
+    // through browserEventsPlugin. This entry itself never changes resolution.
+    resolve: {
+      alias: [{ find: "\0cartel-alias-js-path", replacement: "\0cartel-alias-js-path", customResolver: () => null }],
+    },
     environments: {
       nitro: serverChunkIsolation,
       ssr: serverChunkIsolation,
