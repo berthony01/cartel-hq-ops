@@ -13,6 +13,7 @@ import { closeTelegramMiniApp, miniAppFailureMessage, newRequestId, parseOptiona
 import { MiniAppActionButton, MiniAppFieldRow, MiniAppMessage, MiniAppNotice, MiniAppPanel, MiniAppRetryButton, MiniAppSkeleton } from "./MiniAppPieces";
 
 type Draft = { likes: string; replies: string; reposts: string; bookmarks: string };
+type Suggestion = { available: boolean; basis: string; observedAt: string | null; targets: Record<string, number> };
 const EMPTY: Draft = { likes: "", replies: "", reposts: "", bookmarks: "" };
 
 function values(draft: Draft) {
@@ -34,7 +35,7 @@ export function MiniAppMissionSetup({ initData }: { initData: string }) {
   const suggest = useServerFn(miniAppSuggestMissionSetup);
   const [draft, setDraft] = useState<Draft>(EMPTY);
   const [notice, setNotice] = useState<{ tone: "success" | "warning" | "error"; message: string } | null>(null);
-  const [suggestion, setSuggestion] = useState<NonNullable<typeof setup>["suggestion"] | null>(null);
+  const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
   const query = useQuery({ queryKey: ["tg", "mission-setup"], retry: false, queryFn: () => read({ data: { initData } }) });
   const setup = query.data?.ok ? query.data.setup : null;
   useEffect(() => {
@@ -60,7 +61,10 @@ export function MiniAppMissionSetup({ initData }: { initData: string }) {
       if (!result.ok) throw new Error(miniAppFailureMessage(result.reason));
       return result;
     },
-    onSuccess: () => setNotice({ tone: "success", message: "Mission started with the reviewed targets." }),
+    onSuccess: async () => {
+      await query.refetch();
+      setNotice({ tone: "success", message: "Mission started with the committed reviewed targets." });
+    },
     onError: (error) => setNotice({ tone: "error", message: String(error instanceof Error ? error.message : "Mission could not be started.").slice(0, 180) }),
   });
   const closeMutation = useMutation({
@@ -90,6 +94,8 @@ export function MiniAppMissionSetup({ initData }: { initData: string }) {
   const frozen = setup.state !== "READY" || startMutation.isSuccess;
   const busy = saveMutation.isPending || startMutation.isPending || suggestMutation.isPending || frozen;
   return <>
+    {setup.state === "STARTING" ? <MiniAppNotice tone="warning" message="Mission start is in progress. The committed targets are locked while delivery completes." /> : null}
+    {setup.state === "STARTED" ? <MiniAppNotice tone="success" message="Mission started. These are the committed targets." /> : null}
     <MiniAppPanel heading={`Set up mission · ${setup.communityTitle}`} note={`Official post by @${setup.authorHandle}`}>
       <a href={setup.canonicalUrl} target="_blank" rel="noreferrer" className="block truncate text-xs text-gold underline">View official X post</a>
       <div className="mt-4 grid grid-cols-2 gap-x-3 gap-y-1">
