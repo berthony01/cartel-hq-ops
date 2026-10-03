@@ -113,6 +113,20 @@ export function miniAppFailureMessage(reason: string | null | undefined): string
       return "This Mission Control link is not valid. Send /missioncontrol in your community to get a fresh one.";
     case "community_launch_unavailable":
       return "Mission Control for this community is not available to your account, or the community is no longer connected.";
+    case "mission_setup_invalid":
+    case "mission_setup_unavailable":
+      return "This mission setup is invalid, expired, or no longer available to your account.";
+    case "project_identity_required":
+      return "Complete this project's identity before starting a mission.";
+    case "mission_permissions_required":
+      return "CARTEL HQ needs the required Telegram admin permissions before this mission can start.";
+    case "delivery_ambiguous":
+      return "Mission delivery is unresolved. Do not retry immediately.";
+    case "delivery_failed":
+    case "schedule_unavailable":
+    case "pin_unavailable":
+    case "finalize_unavailable":
+      return "The mission could not finish starting. Retry only after checking its current status.";
     case "invalid_mission_id":
     case "invalid_workspace_id":
       return "That mission link is not valid.";

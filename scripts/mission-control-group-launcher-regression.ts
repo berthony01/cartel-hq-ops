@@ -26,6 +26,7 @@ import {
   MISSION_CONTROL_NOT_CONNECTED_TEXT,
   MISSION_CONTROL_UNAVAILABLE_TEXT,
   buildMissionControlDirectLink,
+  buildMissionSetupDirectLink,
   isMissionControlCommand,
   runMissionControlGroupLauncher,
   type LauncherDeps,
@@ -42,6 +43,7 @@ const check = (name: string, ok: boolean) => {
 const TOKEN = "123456:TEST_ONLY_TOKEN";
 const NOW = 1_800_000_000_000;
 const CONN = "11111111-2222-4333-8444-555555555555";
+const CANDIDATE = "22222222-2222-4222-8222-222222222222";
 const WS = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee";
 const WS_OTHER = "99999999-bbbb-4ccc-8ddd-eeeeeeeeeeee";
 const CHAT_A = "-1001";
@@ -85,6 +87,12 @@ async function startState(extra: [string, string][]) {
   const tampered = (await signed([["start_param", `mc_${CONN}`]])).replace(CONN, WS);
   const t = await validateTelegramInitData(tampered, TOKEN, { now: NOW });
   check("1.10 tampered start_param fails signature", !t.ok && t.reason === "bad_signature");
+  const setup = await startState([["start_param", `ms_${CANDIDATE}_${CONN}`]]);
+  const sr = setup ? routeStartParam(setup) : null;
+  check("1.11 signed setup route binds candidate and community", sr?.kind === "setup" && sr.candidateId === CANDIDATE && sr.connectionId === CONN);
+  const malformedSetup = await startState([["start_param", `ms_${CANDIDATE}_bad`]]);
+  check("1.12 malformed setup route fails closed", malformedSetup !== null && routeStartParam(malformedSetup).kind === "invalid");
+  check("1.13 setup URL uses the same configured Mini App", buildMissionSetupDirectLink("https://t.me/PepeCartelHQBot", CANDIDATE, CONN, "PepeCartelHQBot") === `https://t.me/PepeCartelHQBot?startapp=ms_${CANDIDATE}_${CONN}`);
 }
 
 // ---------- 2. resolveCommunityLaunchCore ----------

@@ -9,6 +9,7 @@
 import {
   parseMissionControlCloseToken,
   parseMissionControlStartParam,
+  parseMissionSetupStartParam,
   type StartParamState,
 } from "./telegram-miniapp-auth.server";
 
@@ -31,9 +32,11 @@ export type CommunityRefusal =
 export type StartParamRoute =
   | { kind: "ordinary" }
   | { kind: "community"; connectionId: string; closeToken: string | null }
+  | { kind: "setup"; candidateId: string; connectionId: string; closeToken: string | null }
   | { kind: "invalid" };
 
 const MC_PREFIX = /^mc_/i;
+const MS_PREFIX = /^ms_/i;
 
 /**
  * absent -> ordinary launch. Present-but-invalid (duplicate/oversized/illegal)
@@ -43,6 +46,10 @@ const MC_PREFIX = /^mc_/i;
 export function routeStartParam(startParam: StartParamState): StartParamRoute {
   if (startParam.state === "absent") return { kind: "ordinary" };
   if (startParam.state === "invalid") return { kind: "invalid" };
+  if (MS_PREFIX.test(startParam.value)) {
+    const setup = parseMissionSetupStartParam(startParam.value);
+    return setup ? { kind: "setup", ...setup } : { kind: "invalid" };
+  }
   if (!MC_PREFIX.test(startParam.value)) return { kind: "ordinary" };
   const connectionId = parseMissionControlStartParam(startParam.value);
   return connectionId

@@ -22,6 +22,7 @@ import {
   miniAppCloseCommunityLaunch,
   miniAppResolveCommunityLaunch,
 } from "@/lib/telegram-miniapp-bridge.functions";
+import { MiniAppMissionSetup } from "@/components/telegram-miniapp/MiniAppMissionSetup";
 import { MiniAppInbox } from "@/components/telegram-miniapp/MiniAppInbox";
 import { MiniAppCustomMedia } from "@/components/telegram-miniapp/MiniAppCustomMedia";
 import {
@@ -219,6 +220,7 @@ function MiniAppHome() {
     queryFn: () => resolveLaunch({ data: { initData: initData as string } }),
   });
   const communityLaunch = launchQuery.data?.ok ? launchQuery.data.launch : null;
+  const setupActive = launchQuery.data?.ok && launchQuery.data.mode === "setup";
   const launchRefused = Boolean(launchQuery.data && !launchQuery.data.ok) || launchQuery.isError;
   // True whenever a community launch is pending, resolved or refused.
   const launchActive = launchQuery.isPending || launchRefused || communityLaunch !== null;
@@ -371,6 +373,15 @@ function MiniAppHome() {
             />
           }
         />
+      </MiniAppFrame>
+    );
+  }
+
+  if (setupActive) {
+    return (
+      <MiniAppFrame>
+        <MiniAppIdentity title="Mission Setup" />
+        <MiniAppMissionSetup initData={initData} />
       </MiniAppFrame>
     );
   }

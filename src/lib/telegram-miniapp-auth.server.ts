@@ -88,6 +88,8 @@ export const START_PARAM_PATTERN = /^[A-Za-z0-9_-]{1,512}$/;
 /** `mc_<connection UUID>[_<opaque close token>]` -> bounded routing parts. */
 const MISSION_CONTROL_START_PARAM =
   /^mc_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:_([A-Za-z0-9_-]{22,64}))?$/i;
+const MISSION_SETUP_START_PARAM =
+  /^ms_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})_([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(?:_([A-Za-z0-9_-]{22,64}))?$/i;
 export function parseMissionControlStartParam(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const match = value.match(MISSION_CONTROL_START_PARAM);
@@ -98,6 +100,21 @@ export function parseMissionControlCloseToken(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const match = value.match(MISSION_CONTROL_START_PARAM);
   return match?.[2] ?? null;
+}
+
+export function parseMissionSetupStartParam(value: unknown): {
+  candidateId: string;
+  connectionId: string;
+  closeToken: string | null;
+} | null {
+  if (typeof value !== "string") return null;
+  const match = value.match(MISSION_SETUP_START_PARAM);
+  if (!match) return null;
+  return {
+    candidateId: match[1]!.toLowerCase(),
+    connectionId: match[2]!.toLowerCase(),
+    closeToken: match[3] ?? null,
+  };
 }
 
 /**

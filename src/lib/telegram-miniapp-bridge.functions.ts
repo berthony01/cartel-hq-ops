@@ -70,6 +70,10 @@ export const MINIAPP_RPC = {
   finishScheduleEvent: "finish_social_mission_schedule_event",
   recordPin: "record_social_mission_target_pin",
   closeLauncher: "request_mission_control_launcher_cleanup",
+  readSetup: "read_social_mission_candidate_setup",
+  saveSetup: "save_social_mission_candidate_setup",
+  startSetup: "start_social_mission_candidate_setup",
+  finalizeSetup: "finalize_social_mission_link_candidate_start",
 } as const;
 
 /** MINI-HQ-1C — the in-place final-state transport action (same as the bot). */
@@ -690,6 +694,20 @@ export type MiniAppCommunityLaunch = {
   cleanupAvailable: boolean;
 };
 
+export type MiniAppMissionSetup = {
+  candidateId: string;
+  connectionId: string;
+  workspaceId: string;
+  workspaceName: string;
+  communityTitle: string;
+  canonicalUrl: string;
+  authorHandle: string;
+  expiresAt: string;
+  cleanupAvailable: boolean;
+  targets: { likes: number | null; replies: number | null; reposts: number | null; bookmarks: number | null };
+  suggestion: { available: false; basis: string };
+};
+
 /**
  * Resolves a `/missioncontrol` direct-link launch. The `mc_<connection>` hint
  * comes ONLY from the HMAC-verified `start_param`; it grants nothing. Access
@@ -765,20 +783,193 @@ function communityMissionDeps(admin: AdminClient, token: string): CommunityMissi
  */
 export const miniAppResolveCommunityLaunch = createServerFn({ method: "POST" })
   .inputValidator((input: { initData: string }) => input)
-  .handler(async ({ data }): Promise<{ ok: true; launch: MiniAppCommunityLaunch | null } | MiniAppFailure> => {
+  .handler(async ({ data }): Promise<{ ok: true; mode: "ordinary" | "community" | "setup"; launch: MiniAppCommunityLaunch | null } | MiniAppFailure> => {
     const token = botToken();
     const auth = await validateTelegramInitData(data?.initData, token);
     if (!auth.ok) return fail(auth.reason);
     const route = routeStartParam(auth.startParam);
-    if (route.kind === "ordinary") return { ok: true, launch: null };
+    if (route.kind === "ordinary") return { ok: true, mode: "ordinary", launch: null };
+    if (route.kind === "setup") return { ok: true, mode: "setup", launch: null };
     if (route.kind === "invalid") return fail("community_launch_invalid");
     const admin = await adminClient();
     const resolved = await resolveCommunityLaunch(admin, token, auth.user.id, route.connectionId);
     if (!resolved.ok) return resolved;
     return {
       ok: true,
+      mode: "community",
       launch: { ...resolved.launch, cleanupAvailable: Boolean(route.closeToken) },
     };
+  });
+
+async function authorizeCandidateSetup(initData: unknown): Promise<
+  | { ok: true; admin: AdminClient; token: string; telegramUserId: number; route: Extract<ReturnType<typeof routeStartParam>, { kind: "setup" }>; launch: Omit<MiniAppCommunityLaunch, "cleanupAvailable">; chatId: string }
+  | MiniAppFailure
+> {
+  const token = botToken();
+  const auth = await validateTelegramInitData(initData, token);
+  if (!auth.ok) return fail(auth.reason);
+  const route = routeStartParam(auth.startParam);
+  if (route.kind !== "setup") return fail("mission_setup_invalid");
+  const admin = await adminClient();
+  const launch = await resolveCommunityLaunch(admin, token, auth.user.id, route.connectionId);
+  if (!launch.ok) return launch;
+  return { ok: true, admin, token, telegramUserId: auth.user.id, route, launch: launch.launch, chatId: launch.chatId };
+}
+
+function setupTarget(value: unknown): number | null | undefined {
+  if (value === null || value === undefined || value === "") return null;
+  const n = Number(value);
+  return Number.isSafeInteger(n) && n > 0 && n <= 2_147_483_647 ? n : undefined;
+}
+
+export const miniAppReadMissionSetup = createServerFn({ method: "POST" })
+  .inputValidator((input: { initData: string }) => input)
+  .handler(async ({ data }): Promise<{ ok: true; setup: MiniAppMissionSetup } | MiniAppFailure> => {
+    const gate = await authorizeCandidateSetup(data?.initData);
+    if (!gate.ok) return gate;
+    const { data: row, error } = await gate.admin.rpc(MINIAPP_RPC.readSetup, {
+      _candidate_id: gate.route.candidateId,
+      _telegram_user_id: gate.telegramUserId,
+      _verified_chat_id: Number(gate.chatId),
+    });
+    const r = (row ?? {}) as Record<string, unknown>;
+    if (error || String(r["outcome"] ?? "") !== "READY") return fail(String(r["reason"] ?? "mission_setup_unavailable"));
+    if (String(r["group_connection_id"] ?? "").toLowerCase() !== gate.route.connectionId || String(r["workspace_id"] ?? "").toLowerCase() !== gate.launch.workspaceId) return fail("mission_setup_unavailable");
+    const goals = (r["reviewed_targets"] ?? {}) as Record<string, unknown>;
+    return { ok: true, setup: {
+      candidateId: gate.route.candidateId,
+      connectionId: gate.route.connectionId,
+      workspaceId: gate.launch.workspaceId,
+      workspaceName: gate.launch.workspaceName,
+      communityTitle: gate.launch.communityTitle,
+      canonicalUrl: String(r["canonical_url"] ?? ""),
+      authorHandle: String(r["author_handle"] ?? ""),
+      expiresAt: String(r["expires_at"] ?? ""),
+      cleanupAvailable: Boolean(gate.route.closeToken),
+      targets: { likes: positiveInt(goals["likes"]), replies: positiveInt(goals["replies"]), reposts: positiveInt(goals["reposts"]), bookmarks: positiveInt(goals["bookmarks"]) },
+      suggestion: { available: false, basis: "Auto-select needs an official X baseline. No pre-start engagement metrics are available, so choose targets manually." },
+    } };
+  });
+
+export const miniAppSaveMissionSetup = createServerFn({ method: "POST" })
+  .inputValidator((input: { initData: string; requestId: string; likes?: number | null; replies?: number | null; reposts?: number | null; bookmarks?: number | null }) => input)
+  .handler(async ({ data }): Promise<{ ok: true; outcome: string } | MiniAppFailure> => {
+    if (!isRequestId(data?.requestId)) return fail("invalid_request_id");
+    const targets = { likes: setupTarget(data.likes), replies: setupTarget(data.replies), reposts: setupTarget(data.reposts), bookmarks: setupTarget(data.bookmarks) };
+    if (Object.values(targets).some((value) => value === undefined) || Object.values(targets).every((value) => value === null)) return fail("invalid_target");
+    const gate = await authorizeCandidateSetup(data.initData);
+    if (!gate.ok) return gate;
+    const { data: result, error } = await gate.admin.rpc(MINIAPP_RPC.saveSetup, {
+      _candidate_id: gate.route.candidateId, _telegram_user_id: gate.telegramUserId,
+      _verified_chat_id: Number(gate.chatId), _request_id: data.requestId, _targets: targets,
+    });
+    if (error) return fail("unavailable");
+    const outcome = String((result as Record<string, unknown> | null)?.["outcome"] ?? "DENIED");
+    return outcome === "SAVED" || outcome === "REPLAYED" ? { ok: true, outcome } : fail("mission_setup_unavailable");
+  });
+
+async function botMissionPermissions(token: string, chatId: string): Promise<boolean> {
+  const botId = Number(token.split(":")[0]);
+  if (!Number.isSafeInteger(botId) || botId <= 0) return false;
+  try {
+    const response = await fetch(`https://api.telegram.org/bot${token}/getChatMember`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chatId, user_id: botId }), signal: AbortSignal.timeout(10_000) });
+    const body = await response.json() as { ok?: boolean; result?: Record<string, unknown> };
+    const member = body.result ?? {};
+    return response.ok && body.ok === true && ["administrator", "creator"].includes(String(member["status"] ?? "")) && member["can_delete_messages"] === true && member["can_pin_messages"] === true;
+  } catch { return false; }
+}
+
+async function sendSetupMissionCard(args: {
+  workspaceId: string;
+  missionId: string;
+  targetId: string;
+  requestId: string;
+  actorUserId: string;
+}): Promise<"sent" | "replayed" | "ambiguous" | "failed"> {
+  const supabaseUrl = process.env["SUPABASE_URL"] ?? "";
+  const serviceKey = process.env["SUPABASE_SERVICE_ROLE_KEY"] ?? "";
+  if (!supabaseUrl || !serviceKey) return "failed";
+  try {
+    const response = await fetch(`${supabaseUrl.replace(/\/$/, "")}/functions/v1/${MINIAPP_TRANSPORT_FUNCTION}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+        "X-Cartel-Internal-Source": MINIAPP_TRANSPORT_INTERNAL_SOURCE,
+        "X-Cartel-Actor-User-Id": args.actorUserId,
+      },
+      body: JSON.stringify({
+        action: "send_mission",
+        workspaceId: args.workspaceId,
+        missionId: args.missionId,
+        targetId: args.targetId,
+        clientRequestId: args.requestId,
+      }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
+    const state = String(payload?.["deliveryState"] ?? "").toUpperCase();
+    if (state === "SENT") return payload?.["duplicate"] === true ? "replayed" : "sent";
+    if (state === "SENDING" || state === "AMBIGUOUS") return "ambiguous";
+    return "failed";
+  } catch {
+    return "ambiguous";
+  }
+}
+
+export const miniAppStartMissionSetup = createServerFn({ method: "POST" })
+  .inputValidator((input: { initData: string; requestId: string; likes?: number | null; replies?: number | null; reposts?: number | null; bookmarks?: number | null }) => input)
+  .handler(async ({ data }): Promise<{ ok: true; outcome: string; missionId?: string } | MiniAppFailure> => {
+    if (!isRequestId(data?.requestId)) return fail("invalid_request_id");
+    const targets = { likes: setupTarget(data.likes), replies: setupTarget(data.replies), reposts: setupTarget(data.reposts), bookmarks: setupTarget(data.bookmarks) };
+    if (Object.values(targets).some((value) => value === undefined) || Object.values(targets).every((value) => value === null)) return fail("invalid_target");
+    const gate = await authorizeCandidateSetup(data.initData);
+    if (!gate.ok) return gate;
+    const actor = await miniAppCommercialActor(gate.admin, gate.telegramUserId, gate.launch.workspaceId);
+    if (!actor.ok) return actor;
+    const identity = await gate.admin.rpc("can_use_project_tools", { _workspace_id: gate.launch.workspaceId, _user_id: actor.actorUserId });
+    if (identity.error || identity.data !== true) return fail("project_identity_required");
+    const entitled = await miniAppFeatureAllowed(gate.admin, gate.launch.workspaceId, "x_missions", actor.actorUserId);
+    if (entitled !== true) return fail(entitled === false ? "missions_plan_required" : "unavailable");
+    if (!(await botMissionPermissions(gate.token, gate.chatId))) return fail("mission_permissions_required");
+    const { data: started, error } = await gate.admin.rpc(MINIAPP_RPC.startSetup, {
+      _candidate_id: gate.route.candidateId, _telegram_user_id: gate.telegramUserId,
+      _verified_chat_id: Number(gate.chatId), _request_id: data.requestId, _targets: targets,
+    });
+    const start = (started ?? {}) as Record<string, unknown>;
+    if (error) return fail("unavailable");
+    const outcome = String(start["outcome"] ?? "");
+    const missionId = String(start["mission_id"] ?? "");
+    const targetId = String(start["target_id"] ?? "");
+    if (outcome === "FINALIZED") return { ok: true, outcome, missionId };
+    if (!["CREATED", "EXISTING"].includes(outcome) || !isUuid(missionId) || !isUuid(targetId)) return fail(String(start["reason"] ?? "mission_setup_unavailable"));
+    const delivery = String(start["delivery_state"] ?? "");
+    if (delivery === "SENDING" || delivery === "AMBIGUOUS") return fail("delivery_ambiguous");
+    const sent = delivery === "SENT" ? "replayed" : await sendSetupMissionCard({ workspaceId: gate.launch.workspaceId, missionId, targetId, requestId: data.requestId, actorUserId: actor.actorUserId });
+    if (sent !== "sent" && sent !== "replayed") return fail(sent === "ambiguous" ? "delivery_ambiguous" : "delivery_failed");
+    const activated = await gate.admin.rpc("activate_social_mission_schedule", { _mission_id: missionId, _target_id: targetId });
+    const activation = String((activated.data as Record<string, unknown> | null)?.["outcome"] ?? "");
+    if (activated.error || !["ACTIVATED", "EXISTING"].includes(activation)) return fail("schedule_unavailable");
+    const { data: target } = await gate.admin.from("social_mission_targets").select("telegram_message_id,pinned_by_hq").eq("id", targetId).maybeSingle();
+    const targetRow = (target ?? {}) as Record<string, unknown>;
+    if (targetRow["pinned_by_hq"] !== true) {
+      const messageId = Number(targetRow["telegram_message_id"]);
+      if (!Number.isSafeInteger(messageId) || messageId <= 0) return fail("delivery_ambiguous");
+      try {
+        const pin = await fetch(`https://api.telegram.org/bot${gate.token}/pinChatMessage`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: gate.chatId, message_id: messageId, disable_notification: true }), signal: AbortSignal.timeout(10_000) });
+        const pinBody = await pin.json() as { ok?: boolean; description?: string };
+        if (!pin.ok || (pinBody.ok !== true && !/not modified/i.test(String(pinBody.description ?? "")))) return fail("pin_unavailable");
+      } catch { return fail("pin_unavailable"); }
+      const recorded = await gate.admin.rpc("record_social_mission_target_pin", { _target_id: targetId, _pinned: true });
+      if (recorded.error) return fail("pin_unavailable");
+    }
+    const finalized = await gate.admin.rpc(MINIAPP_RPC.finalizeSetup, { _candidate_id: gate.route.candidateId, _telegram_user_id: gate.telegramUserId, _verified_chat_id: Number(gate.chatId), _mission_id: missionId });
+    const finalOutcome = String((finalized.data as Record<string, unknown> | null)?.["outcome"] ?? "");
+    if (finalized.error || !["FINALIZED", "ALREADY_FINALIZED"].includes(finalOutcome)) return fail("finalize_unavailable");
+    const promptId = Number(start["prompt_message_id"]);
+    if (Number.isSafeInteger(promptId) && promptId > 0) void fetch(`https://api.telegram.org/bot${gate.token}/deleteMessage`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: gate.chatId, message_id: promptId }) }).catch(() => undefined);
+    return { ok: true, outcome: "STARTED", missionId };
   });
 
 /**
@@ -794,7 +985,7 @@ export const miniAppCloseCommunityLaunch = createServerFn({ method: "POST" })
     const auth = await validateTelegramInitData(data?.initData, token);
     if (!auth.ok) return fail(auth.reason);
     const route = routeStartParam(auth.startParam);
-    if (route.kind !== "community") return fail("community_launch_invalid");
+    if (route.kind !== "community" && route.kind !== "setup") return fail("community_launch_invalid");
     const admin = await adminClient();
     const resolved = await resolveCommunityLaunch(admin, token, auth.user.id, route.connectionId);
     if (!resolved.ok) return resolved;

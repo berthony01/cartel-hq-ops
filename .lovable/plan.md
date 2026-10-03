@@ -1,42 +1,27 @@
-# Release record correction: telegram-webhook live version (read-only)
+# Pre-start Mission Setup
 
-## Goal
-Correct the earlier statements ("not deployed", "live still v110"). The owner independently saw `telegram-webhook` ACTIVE at v112, updated 2026-10-03 15:00:34 UTC, running the new `/missioncontrol` launcher code. Find out what can actually be proven about how it got deployed, then record the facts in the roadmap. No feature work.
+## Scope
+- Reuse the existing `/tg` Mini App, Telegram webhook, link candidate, mission sender, authorization, commercial gates, and cleanup machinery.
+- Route official-link prompts and `/mission <link>` through candidate setup; preserve `/mission`, `/mission close`, `/mission manage`, and existing live mission controls.
+- Add a candidate-scoped setup screen with editable likes, replies, reposts, and bookmarks, plus honest auto suggestions and an explicit Start Mission action.
+- Stage, but do not apply, one SQL file that stores the reviewed candidate configuration and atomically claims/finalizes one winner before the existing single-send launch flow.
+- Include the already-authorized presentation mirror, UTF-16 regression, and truthful Close & clear error-state fixes only if absent from the current tree.
 
-## Hard limits
-- No production writes, deploys, publishes, secret or config changes, and no bot messages.
-- No source edits other than `roadmap.md`.
-- Don't guess the cause. Anything the evidence can't prove is reported as UNPROVEN.
+## Security and behavior
+- Signed Telegram `initData` and candidate routing are hints only; every read, save, and start rechecks linked workspace operator status and current admin status for the candidate’s exact connected group.
+- Anonymous `sender_chat` may create a setup offer but cannot authorize setup changes or Start.
+- No mission, target, schedule, metric fetch, or quota use occurs before explicit Start.
+- Start preserves official-X, identity, commercial, permission, transport, ambiguity, pinning, source-cleanup, and finalization contracts.
+- Concurrent starts commit one reviewed configuration; losing/replayed attempts cannot overwrite it or emit a second card.
 
-## Steps
-1. **Agent actions:** search this project's chat history for any deploy action on `telegram-webhook` (manual deploy tool calls, approvals) between v110 and now. Record whether I called a deploy in any turn.
-2. **Repository timeline:** use `git log` with timestamps on `supabase/functions/telegram-webhook/` and `supabase/functions/_shared/mission-control-launcher.ts`. Find the commit(s) that landed just before 15:00:34 UTC and check whether the live version's timing lines up with an automatic save.
-3. **Supabase evidence (read-only):**
-   - Edge function logs for `telegram-webhook`: boot and shutdown times around 15:00 UTC. The latest visible boot is a fresh boot, consistent with a new version.
-   - Analytics `function_edge_logs` around the same window: requests served after the switch, no message content.
-   - Read-only DB queries can't see Supabase function versions or deploy actors. I'll record that as a limit.
-4. **Compare the live code to the repository:** only if a read-only way to see the deployed source exists. Otherwise report it as UNPROVEN and rely on the owner's independent file listing.
-5. **Classify the cause**, from evidence only:
-   - Manual: a deploy tool call by me or a user approval exists.
-   - Automatic platform sync: no manual call, and the version timing matches an automatic save of edge function files. The platform may deploy edge functions automatically when their source changes, so a staged commit isn't proof that nothing went live.
-   - Unknown: the evidence doesn't decide it. No guessing.
+## Allowed files
+- Existing Telegram webhook source and mirror.
+- Existing Mini App auth/bridge/client, `/tg` route, and small Mini App presentation components.
+- Existing mission launcher shared helper only if candidate URL construction belongs there.
+- One narrow staged SQL file under `docs/sql/`.
+- Focused regression scripts, `roadmap.md`, and `AGENTS.md` only for durable architecture/status records.
 
-## Roadmap update (`roadmap.md` only)
-Replace the "not deployed / live v110" wording on the Mission Control group-launcher lines with:
-- Live `telegram-webhook` is ACTIVE v112 (2026-10-03 15:00:34 UTC), running the `/missioncontrol` launcher. Observed by the owner independently; the cause is recorded as manual, automatic or unknown, according to the evidence.
-- **Platform limitation:** saving changes to edge function source in this project can push them live without a separate deploy step. "Staged, not deployed" can't be promised for bot code.
-- **Still unconfirmed:**
-  - Mini App publication (the community-binding fix is app code, not part of the bot).
-  - BotFather Mini App setup.
-  - `MISSION_CONTROL_MINIAPP_LINK`. Until it's set, live `/missioncontrol` shows the safe "link not available" message.
-  - Real Telegram end-to-end test.
-- Bot-side behavior worth noting: admins in groups can now trigger `/missioncontrol` live. It posts only the safe message with no button while the link isn't set.
-
-## Report back
-- Live versions observed.
-- Evidence for each step.
-- The manual vs automatic vs unknown verdict, with PASS/UNPROVEN for each claim.
-- A plain correction of my earlier false statement.
-- What stays unconfirmed.
-
-Then stop.
+## Verification
+- Mocked regressions for admin/member/anonymous, expired/foreign/cross-group, commercial/owner paths, duplicate/racing starts, no pre-start mission side effects, auto-suggestion unknown-vs-zero, cleanup binding, legacy routing, and one-send behavior.
+- Mirror byte comparisons, TypeScript check, and production build.
+- No SQL application, real mission mutation, Telegram test message, manual deployment, or publication.
