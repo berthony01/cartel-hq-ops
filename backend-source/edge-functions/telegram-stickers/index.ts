@@ -4,6 +4,7 @@ import { requireProjectToolAccess } from "../_shared/project-identity.ts";
 import { requireCommercialAccess } from "../_shared/commercial-access.ts";
 import { PNG } from "npm:pngjs@7.0.0";
 import { Buffer } from "node:buffer";
+import { presentTelegramPayload } from "../_shared/telegram-presentation.ts";
 
 const BUCKET = "workspace-assets";
 const TG_BASE = "https://api.telegram.org";
@@ -57,7 +58,7 @@ async function tgFetch(url: string, init: RequestInit, timeoutMs = TELEGRAM_TIME
 async function telegramJson(token: string, method: string, body?: Record<string, unknown>) {
   let res: Response;
   try {
-    res = await tgFetch(`${TG_BASE}/bot${token}/${method}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body ?? {}) });
+    res = await tgFetch(`${TG_BASE}/bot${token}/${method}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(presentTelegramPayload(method, body ?? {})) });
   } catch {
     throw new TelegramError("Could not reach Telegram. Try again shortly.");
   }
