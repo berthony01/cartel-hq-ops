@@ -140,7 +140,13 @@ export async function runMissionControlGroupLauncher(deps: LauncherDeps): Promis
     return "link_unavailable";
   }
 
-  const sent = await deps.sendLauncher(MISSION_CONTROL_GROUP_TEXT, link);
+  let sent: unknown = null;
+  try {
+    sent = await deps.sendLauncher(MISSION_CONTROL_GROUP_TEXT, link);
+  } catch {
+    if (closeBinding) await deps.abandonCloseBinding?.(closeBinding.bindingId).catch(() => undefined);
+    return "launcher_failed";
+  }
   const launcherMessageId = Number((sent as { message_id?: unknown } | null)?.message_id);
   if (!sent) {
     if (closeBinding) await deps.abandonCloseBinding?.(closeBinding.bindingId).catch(() => undefined);

@@ -137,20 +137,26 @@ Deno.serve(async (request) => {
     auth: { persistSession: false, autoRefreshToken: false },
   });
 
+  const fastJobId = request.headers.get("x-cartel-cleanup-job-id");
+  const bearer = request.headers.get("authorization") ?? "";
+  if (fastJobId) {
+    if (bearer !== `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`) return json({ error: "UNAUTHORIZED" }, 401);
+    const delayed = new Promise((resolve) => setTimeout(resolve, 5_000)).then(async () => {
+      const { data, error } = await admin.rpc("claim_mission_control_launcher_cleanup_job", { _job_id: fastJobId });
+      const fastJobs = (data ?? []) as FastJob[];
+      if (error || fastJobs.length !== 1 || fastJobs[0]?.cleanup_kind !== "mission_control_launcher") return;
+      await processJobs(admin, TELEGRAM_BOT_TOKEN, fastJobs);
+    }).catch(() => console.error("[telegram-message-cleanup] fast cleanup failed"));
+    try { (globalThis as any).EdgeRuntime?.waitUntil?.(delayed); } catch { return json({ error: "FAST_PATH_UNAVAILABLE" }, 503); }
+    return json({ accepted: true }, 202);
+  }
+
   // The secret itself is only ever compared inside the database.
   const { data: secretOk, error: secretError } = await admin.rpc(
     "telegram_message_cleanup_scheduler_secret_matches",
     { p_secret: providedSecret },
   );
   if (secretError || secretOk !== true) return json({ error: "UNAUTHORIZED" }, 401);
-
-  const fastJobId = request.headers.get("x-cartel-cleanup-job-id");
-  if (fastJobId) {
-    const { data, error } = await admin.rpc("claim_mission_control_launcher_cleanup_job", { _job_id: fastJobId });
-    const fastJobs = (data ?? []) as FastJob[];
-    if (error || fastJobs.length !== 1 || fastJobs[0]?.cleanup_kind !== "mission_control_launcher") return json({ error: "NOT_CLAIMED" }, 409);
-    return json(await processJobs(admin, TELEGRAM_BOT_TOKEN, fastJobs));
-  }
 
   const { data: claimed, error: claimError } = await admin.rpc(
     "claim_telegram_message_cleanup_jobs",

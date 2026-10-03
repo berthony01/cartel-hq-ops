@@ -805,10 +805,13 @@ export const miniAppCloseCommunityLaunch = createServerFn({ method: "POST" })
     const supabaseUrl = process.env["SUPABASE_URL"] ?? "";
     const serviceKey = process.env["SUPABASE_SERVICE_ROLE_KEY"] ?? "";
     if (supabaseUrl.startsWith("https://") && serviceKey) {
-      void fetch(`${supabaseUrl}/functions/v1/telegram-message-cleanup`, {
+      const fastResponse = await fetch(`${supabaseUrl}/functions/v1/telegram-message-cleanup`, {
         method: "POST",
         headers: { Authorization: `Bearer ${serviceKey}`, "x-cartel-cleanup-job-id": jobId },
-      }).catch(() => undefined);
+      }).catch(() => null);
+      if (!fastResponse?.ok) return fail("unavailable");
+    } else {
+      return fail("unavailable");
     }
     return { ok: true, cleanup: "queued" };
   });
