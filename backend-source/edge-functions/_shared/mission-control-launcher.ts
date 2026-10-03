@@ -47,6 +47,25 @@ export function buildMissionControlDirectLink(
   return url.toString();
 }
 
+/** Candidate-scoped setup route. Candidate and connection are routing hints only. */
+export function buildMissionSetupDirectLink(
+  configured: string,
+  candidateId: string,
+  connectionId: string,
+  botUsername: string,
+  closeToken?: string | null,
+): string | null {
+  if (!UUID_RE.test(candidateId) || !UUID_RE.test(connectionId)) return null;
+  if (closeToken != null && !CLOSE_TOKEN_RE.test(closeToken)) return null;
+  const raw = String(configured ?? "").trim().replace(/\/+$/, "");
+  const match = raw.match(/^https:\/\/t\.me\/([A-Za-z0-9_]{5,32})(?:\/([A-Za-z0-9_]{3,30}))?$/);
+  if (!match || match[1]!.toLowerCase() !== botUsername.toLowerCase()) return null;
+  const url = new URL(raw);
+  const payload = `ms_${candidateId.toLowerCase()}_${connectionId.toLowerCase()}${closeToken ? `_${closeToken}` : ""}`;
+  url.search = new URLSearchParams({ startapp: payload }).toString();
+  return url.toString();
+}
+
 /**
  * Bot present and admin. `bot_can_change_info` (chat title/photo permission) is
  * a community-branding readiness signal, not a Mission Control requirement.
