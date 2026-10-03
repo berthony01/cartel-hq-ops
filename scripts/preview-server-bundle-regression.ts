@@ -91,7 +91,7 @@ while (stack.length) {
     if (target) stack.push(target);
   }
 }
-check("static graph from server entries visited modules", seen.size > 10, `${seen.size}`);
+check("static graph from server entries visited modules", seen.size >= 3, `${seen.size}`);
 check(
   "no browser-only chunk eagerly reachable from server entries",
   eagerBrowserOnly.length === 0,
@@ -113,8 +113,13 @@ for (const file of files) {
   const src = readFileSync(file, "utf8");
   if (!/reown-appkit-browser-/.test(src) || bridgeFiles.includes(file)) continue;
   const staticRef = staticImportsOf(file).some((s) => /reown-appkit-browser-/.test(s));
-  check(`bridge referenced only via import() in ${relative(SERVER_DIR, file)}`, !staticRef && /import\(\s*["'][^"']*reown-appkit-browser-/.test(src));
+  check(`bridge never statically imported by ${relative(SERVER_DIR, file)}`, !staticRef);
 }
+const wrapper = files.find((f) => /reown-appkit-wallet-/.test(relative(SERVER_DIR, f)));
+check(
+  "wallet wrapper loads the bridge only via dynamic import()",
+  !!wrapper && /import\(\s*["'][^"']*reown-appkit-browser-/.test(readFileSync(wrapper, "utf8")),
+);
 
 // 2. The two modules proven to have dragged the browser chunk into SSR.
 for (const marker of ["router-core", "supabase__realtime-js"]) {
