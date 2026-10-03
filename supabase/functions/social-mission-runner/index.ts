@@ -210,7 +210,7 @@ async function callTelegram(
     response = await fetch(`${TELEGRAM_API}/bot${botToken}/${method}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(presentTelegramPayload(method, payload)),
+      body: JSON.stringify(presentTelegramPayload(method, payload, "platform")),
       signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS),
     });
   } catch {

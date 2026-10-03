@@ -84,7 +84,7 @@ async function sendMessage(
         chat_id: chatId,
         text,
         disable_web_page_preview: true,
-      })),
+      }, "frozen")),
       signal: controller.signal,
     });
     let payload: any = null;

@@ -514,7 +514,7 @@ Deno.serve(async (req: Request) => {
             parse_mode: "HTML",
             disable_web_page_preview: true,
             ...(keyboardRows.length ? { reply_markup: { inline_keyboard: keyboardRows } } : {}),
-          })),
+          }, "platform")),
           signal: AbortSignal.timeout(SEND_TIMEOUT_MS),
         });
 

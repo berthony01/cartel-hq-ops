@@ -39,7 +39,7 @@ async function telegramJson(token: string, method: string, body: Record<string, 
     res = await fetch(`${TG_BASE}/bot${token}/${method}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(presentTelegramPayload(method, body)),
+      body: JSON.stringify(presentTelegramPayload(method, body, "platform")),
       signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS),
     });
   } catch {
@@ -80,7 +80,7 @@ async function sendMessageWithOutcome(
     res = await fetch(`${TG_BASE}/bot${token}/sendMessage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(presentTelegramPayload("sendMessage", { chat_id: chatId, text, disable_web_page_preview: true, ...extra })),
+      body: JSON.stringify(presentTelegramPayload("sendMessage", { chat_id: chatId, text, disable_web_page_preview: true, ...extra }, "platform")),
       signal: AbortSignal.timeout(TELEGRAM_TIMEOUT_MS),
     });
   } catch (error) {

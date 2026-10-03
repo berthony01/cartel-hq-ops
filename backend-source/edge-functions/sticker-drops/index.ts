@@ -15,7 +15,7 @@ async function telegramJson(token: string, method: string, body: Record<string, 
   const res = await fetch(`${TG_BASE}/bot${token}/${method}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(presentTelegramPayload(method, body)),
+    body: JSON.stringify(presentTelegramPayload(method, body, "authored")),
   });
   const payload = await res.json().catch(() => null) as any;
   if (!res.ok || !payload?.ok) throw new Error(String(payload?.description ?? `Telegram request failed (${res.status}).`));
