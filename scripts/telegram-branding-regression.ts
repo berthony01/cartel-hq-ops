@@ -84,6 +84,10 @@ check("shared presentation mirrors are byte-identical", backendHelper === deploy
 for (const path of ["telegram-webhook", "social-mission-telegram", "social-mission-runner"]) {
   check(`${path} source mirror is byte-identical`, readFileSync(`backend-source/edge-functions/${path}/index.ts`, "utf8") === readFileSync(`supabase/functions/${path}/index.ts`, "utf8"));
 }
+for (const path of ["backend-source/edge-functions/social-mission-telegram/index.ts", "supabase/functions/social-mission-telegram/index.ts"]) {
+  const source = readFileSync(path, "utf8");
+  check(`${path} applies bounded platform presentation to multipart in the original call`, source.includes('body: multipart ? presentTelegramFormData(method, body, "platform") : JSON.stringify(presentTelegramPayload(method, body, "platform"))'));
+}
 for (const path of ["telegram-webhook", "social-mission-telegram", "social-mission-runner", "telegram-group", "launch-notifications", "project-inbox-delivery", "sticker-drops", "telegram-stickers"]) {
   check(`${path} imports presentation helper`, readFileSync(`backend-source/edge-functions/${path}/index.ts`, "utf8").includes("telegram-presentation.ts"));
 }

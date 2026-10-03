@@ -219,7 +219,7 @@ const PREFIX = `${PLAIN_BRANDED_HEADER}\n\n`;
 }
 {
   const body = "&amp;".repeat(TELEGRAM_TEXT_LIMIT - PREFIX.length);
-  check("C5 HTML visible length decodes references", telegramHtmlVisibleLength("<b>&lt;x&gt;</b> &#128056;") === 5);
+  check("C5 HTML visible length decodes references in UTF-16 units", telegramHtmlVisibleLength("<b>&lt;x&gt;</b> &#128056;") === 6);
   const h1 = presentTelegramPayload("sendMessage", { text: `<b>${body}</b>`, parse_mode: "HTML" }, "platform") as any;
   check("C5 HTML at visible capacity is decorated (tags/escapes not counted raw)", h1.text.startsWith("<tg-emoji") && h1.text.endsWith(`<b>${body}</b>`));
   const h2 = presentTelegramPayload("sendMessage", { text: `<b>${body}&amp;</b>`, parse_mode: "HTML" }, "platform") as any;

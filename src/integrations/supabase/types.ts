@@ -1699,6 +1699,70 @@ export type Database = {
           },
         ]
       }
+      mission_control_launcher_bindings: {
+        Row: {
+          cleanup_job_id: string | null
+          close_token_hash: string
+          created_at: string
+          expires_at: string
+          group_connection_id: string
+          id: string
+          status: string
+          telegram_chat_id: number
+          telegram_message_id: number | null
+          updated_at: string
+          workspace_id: string
+        }
+        Insert: {
+          cleanup_job_id?: string | null
+          close_token_hash: string
+          created_at?: string
+          expires_at?: string
+          group_connection_id: string
+          id?: string
+          status?: string
+          telegram_chat_id: number
+          telegram_message_id?: number | null
+          updated_at?: string
+          workspace_id: string
+        }
+        Update: {
+          cleanup_job_id?: string | null
+          close_token_hash?: string
+          created_at?: string
+          expires_at?: string
+          group_connection_id?: string
+          id?: string
+          status?: string
+          telegram_chat_id?: number
+          telegram_message_id?: number | null
+          updated_at?: string
+          workspace_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mission_control_launcher_bindings_cleanup_job_id_fkey"
+            columns: ["cleanup_job_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_message_cleanup_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mission_control_launcher_bindings_group_connection_id_fkey"
+            columns: ["group_connection_id"]
+            isOneToOne: false
+            referencedRelation: "telegram_group_connections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "mission_control_launcher_bindings_workspace_id_fkey"
+            columns: ["workspace_id"]
+            isOneToOne: false
+            referencedRelation: "workspaces"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       partner_agreement_acceptances: {
         Row: {
           accepted_at: string
@@ -5056,6 +5120,10 @@ export type Database = {
           isSetofReturn: false
         }
       }
+      abandon_mission_control_launcher_binding: {
+        Args: { _binding_id: string }
+        Returns: undefined
+      }
       accept_partner_agreement: {
         Args: { _terms_version: number }
         Returns: Json
@@ -5718,6 +5786,16 @@ export type Database = {
           telegram_user_id: number
         }[]
       }
+      claim_mission_control_launcher_cleanup_job: {
+        Args: { _job_id: string }
+        Returns: {
+          attempt_count: number
+          cleanup_kind: string
+          job_id: string
+          telegram_chat_id: number
+          telegram_message_id: number
+        }[]
+      }
       claim_project_inbox_deliveries: {
         Args: { _limit?: number }
         Returns: {
@@ -5761,6 +5839,10 @@ export type Database = {
           _workspace_id: string
         }
         Returns: number
+      }
+      confirm_mission_control_launcher_binding: {
+        Args: { _binding_id: string; _telegram_message_id: number }
+        Returns: string
       }
       correct_verified_launch_contract: {
         Args: {
@@ -7528,6 +7610,14 @@ export type Database = {
         Args: { _candidate_id: string; _telegram_user_id: number }
         Returns: Json
       }
+      prepare_mission_control_launcher_binding: {
+        Args: {
+          _binding_id: string
+          _close_token_hash: string
+          _group_connection_id: string
+        }
+        Returns: boolean
+      }
       project_identity_ready: {
         Args: { _workspace_id: string }
         Returns: boolean
@@ -7628,6 +7718,14 @@ export type Database = {
       repair_and_expire_social_missions_for_metrics: {
         Args: { _limit?: number }
         Returns: Json
+      }
+      request_mission_control_launcher_cleanup: {
+        Args: {
+          _close_token: string
+          _group_connection_id: string
+          _telegram_user_id: number
+        }
+        Returns: string
       }
       request_partner_payout: {
         Args: { _amount_cents: number }
