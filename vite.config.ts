@@ -24,7 +24,6 @@ const browserEventsPlugin = {
     return env.name === "client";
   },
   resolveId(id: string) {
-    if (id.includes("events")) console.error("CBE", id);
     return id === "events" || id === "node:events" ? EVENTS_NPM : null;
   },
 };
@@ -66,6 +65,13 @@ export default defineConfig({
   },
   vite: {
     plugins: [mcpPlugin(), browserEventsPlugin],
+    // Vite's native alias fast-path resolves Nitro's `events` -> `node:events`
+    // alias without consulting plugins. An alias entry with a customResolver
+    // makes Vite use the JS alias plugin, which forwards the rewritten id
+    // through browserEventsPlugin. This entry itself never changes resolution.
+    resolve: {
+      alias: [{ find: "\0cartel-alias-js-path", replacement: "\0cartel-alias-js-path", customResolver: () => null }],
+    },
     environments: {
       nitro: serverChunkIsolation,
       ssr: serverChunkIsolation,
