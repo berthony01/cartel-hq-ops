@@ -800,8 +800,17 @@ export const miniAppCloseCommunityLaunch = createServerFn({ method: "POST" })
       _group_connection_id: route.connectionId,
       _close_token: route.closeToken,
     });
-    if (error) return fail("unavailable");
-    return { ok: true, cleanup: result === true ? "queued" : "unavailable" };
+    const jobId = typeof result === "string" ? result : null;
+    if (error || !jobId) return fail("unavailable");
+    const supabaseUrl = process.env["SUPABASE_URL"] ?? "";
+    const serviceKey = process.env["SUPABASE_SERVICE_ROLE_KEY"] ?? "";
+    if (supabaseUrl.startsWith("https://") && serviceKey) {
+      void fetch(`${supabaseUrl}/functions/v1/telegram-message-cleanup`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${serviceKey}`, "x-cartel-cleanup-job-id": jobId },
+      }).catch(() => undefined);
+    }
+    return { ok: true, cleanup: "queued" };
   });
 
 export const miniAppListMissions = createServerFn({ method: "POST" })
