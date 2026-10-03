@@ -983,10 +983,8 @@ export const miniAppStartMissionSetup = createServerFn({ method: "POST" })
     if (identity.error || identity.data !== true) return fail("project_identity_required");
     const entitled = await miniAppFeatureAllowed(gate.admin, gate.launch.workspaceId, "x_missions", actor.actorUserId);
     if (entitled !== true) return fail(entitled === false ? "missions_plan_required" : "unavailable");
-    const { data: settings } = await gate.admin.from("social_mission_settings").select("auto_pin_mission").eq("workspace_id", gate.launch.workspaceId).maybeSingle();
-    const autoPin = (settings as Record<string, unknown> | null)?.["auto_pin_mission"] !== false;
     const permissions = await botMissionPermissions(gate.token, gate.chatId);
-    if (!permissions.resolved || !permissions.isAdmin || !permissions.canDelete || (autoPin && !permissions.canPin)) return fail("mission_permissions_required");
+    if (!permissions.resolved || !permissions.isAdmin || !permissions.canDelete) return fail("mission_permissions_required");
     const { data: started, error } = await gate.admin.rpc(MINIAPP_RPC.startSetup, {
       _candidate_id: gate.route.candidateId, _group_connection_id: gate.route.connectionId,
       _telegram_user_id: gate.telegramUserId, _verified_chat_id: Number(gate.chatId), _request_id: data.requestId, _targets: targets,
@@ -1000,6 +998,20 @@ export const miniAppStartMissionSetup = createServerFn({ method: "POST" })
     if (!["CREATED", "EXISTING"].includes(outcome) || !isUuid(missionId) || !isUuid(targetId)) return fail(String(start["reason"] ?? "mission_setup_unavailable"));
     const winnerRequestId = String(start["request_id"] ?? "");
     if (!isRequestId(winnerRequestId)) return fail("mission_setup_unavailable");
+    const autoPin = start["auto_pin_mission"] !== false;
+    if (autoPin && !permissions.canPin) return fail("mission_permissions_required");
+    if (!start["source_deleted_at"]) {
+      const sourceMessageId = Number(start["source_message_id"]);
+      if (!Number.isSafeInteger(sourceMessageId) || sourceMessageId <= 0) return fail("source_cleanup_required");
+      try {
+        const cleanup = await fetch(`https://api.telegram.org/bot${gate.token}/deleteMessage`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: gate.chatId, message_id: sourceMessageId }), signal: AbortSignal.timeout(10_000) });
+        const cleanupBody = await cleanup.json() as { ok?: boolean; description?: string };
+        const alreadyGone = /message to delete not found/i.test(String(cleanupBody.description ?? ""));
+        if ((!cleanup.ok || cleanupBody.ok !== true) && !alreadyGone) return fail("source_cleanup_required");
+        const recorded = await gate.admin.rpc("record_social_mission_link_candidate_source_cleanup", { _candidate_id: gate.route.candidateId, _deleted: true, _reason: alreadyGone ? "already_absent" : "deleted" });
+        if (recorded.error) return fail("source_cleanup_required");
+      } catch { return fail("source_cleanup_required"); }
+    }
     const delivery = String(start["delivery_state"] ?? "");
     if (delivery === "SENDING" || delivery === "AMBIGUOUS") return fail("delivery_ambiguous");
     const sent = delivery === "SENT" ? "replayed" : await sendSetupMissionCard({ workspaceId: gate.launch.workspaceId, missionId, targetId, requestId: winnerRequestId, actorUserId: actor.actorUserId });

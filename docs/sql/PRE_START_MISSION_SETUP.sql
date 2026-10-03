@@ -95,7 +95,7 @@ begin
   if coalesce((v_access->>'allowed')::boolean,false) is not true or coalesce((v_access->>'would_block')::boolean,false) is true then return jsonb_build_object('outcome','REJECTED','reason','commercial_access_denied'); end if;
   if v.setup_mission_id is not null then
     select t.id,t.delivery_state,coalesce(m.metadata->'effective_config'->'metric_targets','{}'::jsonb),(m.metadata->>'setup_request_id')::uuid into v_target,v_delivery,v_winner_targets,v_winner_request from public.social_missions m join public.social_mission_targets t on t.mission_id=m.id and t.workspace_id=m.workspace_id where m.id=v.setup_mission_id and m.workspace_id=v.workspace_id and t.group_connection_id=_group_connection_id and t.telegram_chat_id=_verified_chat_id limit 1;
-    return jsonb_build_object('outcome',case when v.state='STARTED' then 'FINALIZED' else 'EXISTING' end,'mission_id',v.setup_mission_id,'target_id',v_target,'delivery_state',v_delivery,'request_id',v_winner_request,'reviewed_targets',v_winner_targets,'prompt_message_id',v.prompt_message_id);
+    return jsonb_build_object('outcome',case when v.state='STARTED' then 'FINALIZED' else 'EXISTING' end,'mission_id',v.setup_mission_id,'target_id',v_target,'delivery_state',v_delivery,'request_id',v_winner_request,'reviewed_targets',v_winner_targets,'auto_pin_mission',coalesce((select (m.metadata->'effective_config'->>'auto_pin_mission')::boolean from public.social_missions m where m.id=v.setup_mission_id),true),'prompt_message_id',v.prompt_message_id,'source_message_id',v.telegram_message_id,'source_deleted_at',v.source_deleted_at);
   end if;
   if v.state<>'PENDING' or v.expires_at<=now() then return jsonb_build_object('outcome','REJECTED','reason','candidate_unavailable'); end if;
   select x_url into v_x from public.project_profiles where workspace_id=v.workspace_id limit 1;
@@ -114,7 +114,7 @@ begin
   end if;
   if v_winner_request is null then return jsonb_build_object('outcome','REJECTED','reason','existing_mission_not_setup_managed'); end if;
   update public.social_mission_link_candidates set reviewed_targets=v_winner_targets,setup_request_id=v_winner_request,setup_started_at=coalesce(setup_started_at,now()),setup_mission_id=v_mission where id=v.id;
-  return jsonb_build_object('outcome',case when v_winner_request=_request_id then 'CREATED' else 'EXISTING' end,'mission_id',v_mission,'target_id',v_target,'delivery_state',v_delivery,'request_id',v_winner_request,'reviewed_targets',v_winner_targets,'prompt_message_id',v.prompt_message_id,'source_message_id',v.telegram_message_id,'source_deleted_at',v.source_deleted_at);
+  return jsonb_build_object('outcome',case when v_winner_request=_request_id then 'CREATED' else 'EXISTING' end,'mission_id',v_mission,'target_id',v_target,'delivery_state',v_delivery,'request_id',v_winner_request,'reviewed_targets',v_winner_targets,'auto_pin_mission',coalesce((select (m.metadata->'effective_config'->>'auto_pin_mission')::boolean from public.social_missions m where m.id=v_mission),true),'prompt_message_id',v.prompt_message_id,'source_message_id',v.telegram_message_id,'source_deleted_at',v.source_deleted_at);
 exception when no_data_found or too_many_rows then return jsonb_build_object('outcome','REJECTED','reason','candidate_unavailable');
 end $$;
 
