@@ -67,22 +67,26 @@ Historical items above are preserved as technical evidence; staged vs production
 - [ ] Create the Safe with a signer wallet — waiting on owner authorization; no transaction sent yet.
 
 ## Mission Control group launcher — 3 October 2026
-- [ ] /missioncontrol group command -> community Mission Control — bot code LIVE, feature NOT complete
+- [x] /missioncontrol group command -> community Mission Control — reviewed bot code LIVE; authenticated Telegram acceptance remains pending below
 - [x] Correction: live telegram-webhook observed ACTIVE v112 (updated 2026-10-03 15:00:34 UTC) with the /missioncontrol launcher. No manual deploy was run by the agent; the saves at 14:56:03/14:56:41 UTC were followed ~4 min later by v112, consistent with automatic platform sync (cause UNPROVEN). Limitation: saving bot code can push it live without a separate deploy step.
 - [x] Read-only Telegram check (3 Oct 15:08): getMe OK, username matches, has_main_web_app = false; private menu button = commands (no Mini App URL)
-- [ ] Owner: enable Main Mini App in BotFather (currently OFF per getMe) and add MISSION_CONTROL_MINIAPP_LINK to bot backend secrets (not in project secrets; bot-backend value unverifiable here). Until then live /missioncontrol shows the safe "link not available" message
-- [ ] Publish site (Mini App community-binding fix is app code, not yet published) — waiting on owner approval
+- [x] Main Mini App configuration and launcher link were owner-configured; later read-only Telegram verification observed `has_main_web_app=true`
+- [x] Frontend publish request `2db3d4d6-6ce4-4c39-be32-dc37859466bd` submitted from source API SHA `56c2682b8712119f402242a388a4bb63b317e044`; live bundle verification recorded below
 - [ ] Real Telegram end-to-end check (admin, non-admin, copied link)
-- [x] Community sessions: opening/changing/ending a mission binds exactly to the launching group via a direct mission read (no 10-mission list limit, no SQL) — app code, not published
+- [x] Community sessions: opening/changing/ending a mission binds exactly to the launching group via a direct mission read (no 10-mission list limit, no SQL); published bundle is live
 - [ ] Known limit (private sessions only): opening a mission from the private, project-wide Mission Control still uses the 10-newest list; unchanged by request
 
-## Telegram presentation + launcher cleanup — staged for review
+## Telegram presentation + launcher cleanup — released; acceptance pending
 - [x] Shared PepeCartel presentation helper staged across audited bot send/edit transports; validated animated custom-emoji IDs keep visible Unicode fallback, native button styles only, tenant-authored/frozen bodies unchanged
 - [x] Explicit Mini App “Close & clear” UI and signed exact-launch routing staged; legacy unbound links safely close without deletion authority
-- [ ] Apply `docs/sql/MC_BRANDING_LAUNCHER_CLEANUP.sql` — BLOCKED pending independent review and explicit owner approval; until applied, launcher cleanup stays unavailable and legacy behavior remains
-- [ ] Deploy/synchronize backend sender sources and publish `/tg` — BLOCKED pending independent review and explicit owner approval
+- [x] `MC_BRANDING_LAUNCHER_CLEANUP` was previously applied and reviewed; do not reapply
+- [x] Reviewed sender sources synchronized and `/tg` published; native Telegram X/minimize still cannot reliably signal close and is not claimed to auto-delete
 - [ ] Real Telegram E2E for animated emoji eligibility, native button rendering, exact launcher cleanup, non-admin denial, copied-link denial, and abandoned-prompt expiry — PENDING after activation
 
-## Pre-start Mission Setup — staged for root review
-- [x] Candidate-scoped setup source complete: Auto-select stays on the external Supabase credential boundary with independent authorization; Start derives the last-slot exemption only from an exact READY/STARTING/STARTED candidate read with a committed mission; any active same-post/exact-community mission owned by another candidate returns a stable duplicate result without binding, sending, scheduling, or overwriting; SQL remains staged and unapplied
-- [ ] Root review/application, `social-mission-setup` Edge deployment with its listed source dependencies, frontend publication, and real admin/non-admin Telegram acceptance — PENDING after source verification
+## Pre-start Mission Setup — released; authenticated acceptance pending
+- [x] Candidate-scoped setup source complete: Auto-select stays on the external Supabase credential boundary with independent authorization; Start derives the last-slot exemption only from an exact READY/STARTING/STARTED candidate read with a committed mission; any active same-post/exact-community mission owned by another candidate returns a stable duplicate result without binding, sending, scheduling, or overwriting
+- [x] Root applied reviewed migration `pre_start_mission_setup_reviewed` to external Supabase `ocoinbnjgstkmnwwvnhi`; root independently verified service-only privileges, fixed `pg_catalog` search paths, valid partial target acceptance, rejection of NULL/empty/decimal/overflow/unknown/null-metric targets, and NULL read/save/start RPC rejection
+- [x] `social-mission-setup` v1 ACTIVE with `verify_jwt=true`, canonical Telegram auth and shared X helper; reviewed `telegram-webhook` v128 ACTIVE with `verify_jwt=false` and custom webhook-secret body intact
+- [x] Focused source verification: Edge 7/7, core 34/34, routing 105/105, TypeScript exit 0, production build exit 0
+- [x] Read-only release verification (3 Oct 2026): `https://pepecartelhq.com/tg` returned 200; `https://cartel-hq-ops.lovable.app/tg` returned 302 to the custom-domain `/tg`; published `tg.index-B1sEjVh4.js` returned 200, SHA-256 `0b8c2cbb0a8fc8f602df611448709d4965e196a09ad1167bc683b7ecf0337f24`, and contains `Set up mission`, `Auto-select suggestion`, `Continue start`, and `Start Mission`; anonymous `social-mission-setup` returned 401 `UNAUTHORIZED_NO_AUTH_HEADER`; outside Telegram settled to the guarded “Open Mission Control from Telegram” screen with zero browser errors
+- [ ] Authenticated Telegram group-to-app admin flow, non-admin refusal, copied-link refusal, exact cleanup, and motion/native-button rendering acceptance — PENDING; no Telegram message, fake identity, mission mutation, authenticated start, deployment, or publication was performed during final verification
