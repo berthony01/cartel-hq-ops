@@ -445,6 +445,9 @@ check("7.16 committed setup winner cannot enter legacy IGNORED or EXPIRED states
 check("7.17 start-v-Ignore precheck refuses committed winner and permits unresolved candidate", !candidateIgnoreAllowed("aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee") && candidateIgnoreAllowed(null));
 const ignoreBranch = webhookSetup.slice(webhookSetup.indexOf("Clear preflight feedback for legacy Ignore"), webhookSetup.indexOf("// SE-7"));
 check("7.18 Ignore checks exact candidate after authorization and before resolver", ignoreBranch.includes('.select("setup_mission_id")') && ignoreBranch.includes('.eq("id", candidateId)') && ignoreBranch.includes('.eq("telegram_chat_id", candidateChatId)') && ignoreBranch.includes("candidateIgnoreAllowed") && ignoreBranch.includes("already starting"));
+const startHandler = bridgeSetup.slice(bridgeSetup.indexOf("export const miniAppStartMissionSetup"), bridgeSetup.indexOf("export const miniAppCloseMission"));
+check("7.19 Start reads exact candidate state before raw commercial evaluation", startHandler.includes("MINIAPP_RPC.readSetup") && startHandler.indexOf("MINIAPP_RPC.readSetup") < startHandler.indexOf("miniAppFeatureAccess") && startHandler.includes("setupCandidateIsExactCommittedRecovery"));
+check("7.20 Start quota bypass is candidate-state-derived while Suggest remains READY-only", startHandler.includes("setupCommercialAccessAllows(access, exactCommittedRecovery)") && bridgeSetup.includes('setupState !== "READY"') && bridgeSetup.includes("setupCommercialAccessAllows(accessResult, false)"));
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail > 0) process.exit(1);
