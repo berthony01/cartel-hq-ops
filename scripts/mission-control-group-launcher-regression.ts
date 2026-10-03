@@ -94,6 +94,26 @@ const listFn = between(bridge, "export const miniAppListMissions", "const MINIAP
 check("4.7 scoped list re-proves launch", listFn.includes("resolveCommunityLaunch(admin, token, auth.user.id"));
 check("4.8 scoped list filters exact chat", listFn.includes('["telegram_chat_id"] ?? "") === scopedChatId'));
 check("4.9 entitlement gate preserved", listFn.includes('miniAppFeatureAllowed(admin, data.workspaceId, "x_missions"'));
+// 4.10 behavioral: execute the production filter predicate on two chats of the SAME workspace.
+{
+  const m = listFn.match(/\.filter\(\s*(\(row\)\s*=>[\s\S]*?=== scopedChatId),?\s*\)\s*\.map/);
+  let ok = false;
+  if (m) {
+    const src = m[1].replace(/\s+as Record<string, unknown>/g, "");
+    const mk = (scopedChatId: string | null) => new Function("scopedChatId", `return ${src};`)(scopedChatId) as (r: unknown) => boolean;
+    const rows = [
+      { mission_id: "a1", workspace_id: "w", telegram_chat_id: -1001 },
+      { mission_id: "b1", workspace_id: "w", telegram_chat_id: -1002 },
+      { mission_id: "a2", workspace_id: "w", telegram_chat_id: "-1001" },
+      { mission_id: "n1", workspace_id: "w" },
+    ];
+    const a = rows.filter(mk("-1001")).map((r) => r.mission_id).join(",");
+    const b = rows.filter(mk("-1002")).map((r) => r.mission_id).join(",");
+    const all = rows.filter(mk(null)).length;
+    ok = a === "a1,a2" && b === "b1" && all === 4;
+  }
+  check("4.10 same-workspace multi-group isolation (executed)", ok);
+}
 
 // Mini App
 check("5.1 refusal does not pick another workspace", home.includes("if (!communityLaunch) return null;") && home.includes("if (launchRefused)"));
