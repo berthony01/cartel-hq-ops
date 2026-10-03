@@ -390,7 +390,12 @@ function MiniAppHome() {
   const closeAndClear = communityLaunch
     ? async () => {
         if (closing || !initData) return;
+        if (!communityLaunch.cleanupAvailable) {
+          closeTelegramMiniApp();
+          return;
+        }
         setClosing(true);
+        setCloseFailure(false);
         try {
           const result = await closeLaunch({ data: { initData } });
           if (result.ok && result.cleanup === "queued") {
@@ -399,6 +404,8 @@ function MiniAppHome() {
           } else {
             setCloseFailure(true);
           }
+        } catch {
+          setCloseFailure(true);
         } finally {
           setClosing(false);
         }
@@ -410,13 +417,19 @@ function MiniAppHome() {
       <MiniAppIdentity
         title="Operator Console"
         subtitle={activeWorkspace?.workspaceName}
-        {...(closeAndClear ? { onClose: closeAndClear, closePending: closing } : {})}
+        {...(closeAndClear
+          ? {
+              onClose: closeAndClear,
+              closePending: closing,
+              closeLabel: communityLaunch?.cleanupAvailable ? "Close and clear launcher post" : "Close Mission Control",
+            }
+          : {})}
       />
 
       {closeFailure ? (
         <MiniAppMessage
           title="Launcher post was not cleared"
-          description="You can close Mission Control normally. The launcher post will expire on its existing schedule."
+          description="Cleanup could not be confirmed. You can retry or close normally. A fresh /missioncontrol post supports cleanup."
         />
       ) : null}
 

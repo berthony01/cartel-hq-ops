@@ -687,6 +687,7 @@ export type MiniAppCommunityLaunch = {
   workspaceId: string;
   workspaceName: string;
   communityTitle: string;
+  cleanupAvailable: boolean;
 };
 
 /**
@@ -703,7 +704,7 @@ async function resolveCommunityLaunch(
   token: string,
   telegramUserId: number,
   connectionId: string,
-): Promise<{ ok: true; launch: MiniAppCommunityLaunch; chatId: string } | MiniAppFailure> {
+): Promise<{ ok: true; launch: Omit<MiniAppCommunityLaunch, "cleanupAvailable">; chatId: string } | MiniAppFailure> {
   const result = await resolveCommunityLaunchCore(communityDeps(admin, token), telegramUserId, connectionId);
   return result.ok ? result : fail(result.reason);
 }
@@ -774,7 +775,10 @@ export const miniAppResolveCommunityLaunch = createServerFn({ method: "POST" })
     const admin = await adminClient();
     const resolved = await resolveCommunityLaunch(admin, token, auth.user.id, route.connectionId);
     if (!resolved.ok) return resolved;
-    return { ok: true, launch: resolved.launch };
+    return {
+      ok: true,
+      launch: { ...resolved.launch, cleanupAvailable: Boolean(route.closeToken) },
+    };
   });
 
 /**

@@ -104,7 +104,9 @@ check("prepare rejects NULL close-token hash explicitly", sql.includes("or _clos
 check("cleanup request token uses anchored base64url syntax", sql.includes("_close_token !~ '^[A-Za-z0-9_-]{22,64}$'"));
 const tgRoute = readFileSync("src/routes/tg.index.tsx", "utf8");
 check("Mini App closes only after queued acknowledgement", tgRoute.includes('result.ok && result.cleanup === "queued"'));
-check("Mini App reports cleanup failure and permits normal close", tgRoute.includes("Launcher post was not cleared") && tgRoute.includes("close Mission Control normally"));
+check("Mini App catches thrown cleanup failures", /catch\s*\{\s*setCloseFailure\(true\)/.test(tgRoute));
+check("cleanup failure copy does not promise legacy expiry", tgRoute.includes("Cleanup could not be confirmed. You can retry or close normally. A fresh /missioncontrol post supports cleanup.") && !tgRoute.includes("launcher post will expire"));
+check("legacy launch control closes normally without requesting cleanup", tgRoute.includes("if (!communityLaunch.cleanupAvailable)") && tgRoute.includes('closeLabel: communityLaunch?.cleanupAvailable ? "Close and clear launcher post" : "Close Mission Control"'));
 
 console.log(`\n${passed}/${passed + failed} passed`);
 if (failed) process.exit(1);
