@@ -3,6 +3,7 @@ import { createClient } from "npm:@supabase/supabase-js@2";
 import { requireProjectToolAccess } from "../_shared/project-identity.ts";
 import { requireCommercialAccess } from "../_shared/commercial-access.ts";
 import {
+  buildMissionSetupDirectLink,
   isMissionControlCommand,
   runMissionControlGroupLauncher,
 } from "../_shared/mission-control-launcher.ts";
@@ -4654,15 +4655,41 @@ Deno.serve(async (req: Request) => {
       // EXISTING = a webhook retry or a repost of the same message: silent.
       if (created.outcome !== "CREATED" || !created.candidate_id) return false;
 
+      const { data: connectionRows, error: connectionError } = await admin
+        .from("telegram_group_connections")
+        .select("id")
+        .eq("telegram_chat_id", chatId)
+        .limit(2);
+      const connectionId = !connectionError && Array.isArray(connectionRows) && connectionRows.length === 1
+        ? String(connectionRows[0]?.id ?? "")
+        : "";
+      const configuredLink = Deno.env.get("MISSION_CONTROL_MINIAPP_LINK") ?? "";
+      let setupBinding: { token: string; bindingId: string } | null = null;
+      if (connectionId) {
+        const tokenBytes = crypto.getRandomValues(new Uint8Array(24));
+        const token = btoa(String.fromCharCode(...tokenBytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+        const bindingId = crypto.randomUUID();
+        const { data: prepared, error } = await admin.rpc("prepare_mission_control_launcher_binding", {
+          _binding_id: bindingId, _group_connection_id: connectionId, _close_token_hash: await sha256Hex(token),
+        });
+        if (!error && prepared === true) setupBinding = { token, bindingId };
+      }
+      const setupUrl = buildMissionSetupDirectLink(
+        configuredLink, String(created.candidate_id), connectionId, BOT_USERNAME, setupBinding?.token,
+      );
+      if (!setupUrl) {
+        if (setupBinding) await admin.rpc("abandon_mission_control_launcher_binding", { _binding_id: setupBinding.bindingId });
+        return false;
+      }
       const prompt = await telegramJson(TELEGRAM_BOT_TOKEN, "sendMessage", {
         chat_id: chatId,
-        text: "This is an official project post. Admins can start a Social Mission for it.",
+        text: "This is an official project post. Current admins can review mission targets before starting.",
         reply_to_message_id: Number(sourceMessageId),
         disable_notification: true,
         disable_web_page_preview: true,
         reply_markup: {
           inline_keyboard: [[
-            { text: "START MISSION", callback_data: `sm_lf_start_${created.candidate_id}` },
+            { text: "🔥 SET UP MISSION", url: setupUrl, style: "primary" },
             { text: "IGNORE", callback_data: `sm_lf_ignore_${created.candidate_id}` },
           ]],
         },
@@ -4675,7 +4702,16 @@ Deno.serve(async (req: Request) => {
           { _candidate_id: created.candidate_id, _prompt_message_id: promptId },
         );
         promptAttached = !attachError && attached === true;
+        if (promptAttached && setupBinding) {
+          const { data: cleanupJob, error: cleanupError } = await admin.rpc("confirm_mission_control_launcher_binding", {
+            _binding_id: setupBinding.bindingId, _telegram_message_id: promptId,
+          });
+          if (cleanupError || typeof cleanupJob !== "string") {
+            await admin.rpc("abandon_mission_control_launcher_binding", { _binding_id: setupBinding.bindingId });
+          }
+        }
       }
+      if (!promptAttached && setupBinding) await admin.rpc("abandon_mission_control_launcher_binding", { _binding_id: setupBinding.bindingId });
 
       // SE-9 — the ORIGINAL source message is removed here, immediately after
       // the prompt is CONFIRMED sent AND attached, and never before. A prompt
@@ -4821,15 +4857,20 @@ Deno.serve(async (req: Request) => {
       return json({ ok: true });
     }
 
-    if (missionMatch && from?.is_bot !== true) {
-      await runMissionCommand({
-        chatId,
-        chatType: String(chat?.type ?? ""),
-        updateId: update?.update_id,
-        messageId: message?.message_id,
-        telegramUserId: Number(from.id),
-        argument: String(missionMatch[1] ?? ""),
-      });
+    if (missionMatch && from?.is_bot !== true && isGroupChat) {
+      const parsed = parseXStatusUrl(String(missionMatch[1] ?? ""));
+      if (!parsed) {
+        await sendMessage(TELEGRAM_BOT_TOKEN, chatId, MISSION_USAGE, { parse_mode: "HTML" });
+        return json({ ok: true });
+      }
+      const status = await telegramJson(TELEGRAM_BOT_TOKEN, "getChatMember", { chat_id: chatId, user_id: Number(from.id) })
+        .then((member) => String((member as { status?: unknown })?.status ?? ""))
+        .catch(() => "");
+      if (status !== "administrator" && status !== "creator") {
+        await sendMessage(TELEGRAM_BOT_TOKEN, chatId, "Only current administrators of this group can set up a Social Mission.");
+        return json({ ok: true });
+      }
+      await offerLinkFinderCandidate(parsed, Number(message?.message_id), Number(from.id));
       return json({ ok: true });
     }
 
@@ -4875,6 +4916,12 @@ Deno.serve(async (req: Request) => {
       );
       const parsedLink = linkMatch ? parseXStatusUrl(String(linkMatch[0])) : null;
       if (parsedLink) {
+        if (linkFinderSender.posterId !== null) {
+          const status = await telegramJson(TELEGRAM_BOT_TOKEN, "getChatMember", { chat_id: chatId, user_id: linkFinderSender.posterId })
+            .then((member) => String((member as { status?: unknown })?.status ?? ""))
+            .catch(() => "");
+          if (status !== "administrator" && status !== "creator") return json({ ok: true });
+        }
         const handled = await offerLinkFinderCandidate(
           parsedLink,
           Number(message?.message_id),
