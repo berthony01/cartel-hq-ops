@@ -27,3 +27,13 @@ export function setupPermissionProofAllowsStart(
 export function setupDeliveryMaySend(state: SetupDeliveryState): boolean {
   return state === "PENDING" || state === "FAILED";
 }
+
+export async function continueSetupDelivery<T>(
+  state: SetupDeliveryState,
+  send: () => Promise<T>,
+): Promise<{ sent: false; reason: "ambiguous" | "invalid" } | { sent: true; result: T } | { sent: false; reason: "already_sent" }> {
+  if (state === "SENDING" || state === "AMBIGUOUS") return { sent: false, reason: "ambiguous" };
+  if (state === "SENT") return { sent: false, reason: "already_sent" };
+  if (!setupDeliveryMaySend(state)) return { sent: false, reason: "invalid" };
+  return { sent: true, result: await send() };
+}

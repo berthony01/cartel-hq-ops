@@ -3,6 +3,7 @@
  * Run: bun scripts/mission-setup-orchestration-regression.ts
  */
 import {
+  continueSetupDelivery,
   normalizeSetupDeliveryState,
   setupDeliveryMaySend,
   setupPermissionProofAllowsStart,
@@ -37,6 +38,15 @@ for (const state of ["SENDING", "AMBIGUOUS", "UNKNOWN"] as const) {
 check("READY exposes first start", setupRecoveryAction("READY", "PENDING") === "start");
 check("STARTED exposes no start action", setupRecoveryAction("STARTED", "SENT") === "complete");
 check("only durable PENDING/FAILED delivery may invoke sender", setupDeliveryMaySend(normalizeSetupDeliveryState("PENDING")) && setupDeliveryMaySend(normalizeSetupDeliveryState("FAILED")) && !setupDeliveryMaySend(normalizeSetupDeliveryState("SENDING")) && !setupDeliveryMaySend(normalizeSetupDeliveryState("AMBIGUOUS")) && !setupDeliveryMaySend(normalizeSetupDeliveryState("SENT")));
+
+let sends = 0;
+const sender = async () => { sends += 1; return "sent" as const; };
+const ambiguous = await continueSetupDelivery("AMBIGUOUS", sender);
+const sending = await continueSetupDelivery("SENDING", sender);
+const sent = await continueSetupDelivery("SENT", sender);
+check("ambiguous/sending/sent retries perform zero sends", sends === 0 && !ambiguous.sent && ambiguous.reason === "ambiguous" && !sending.sent && sending.reason === "ambiguous" && !sent.sent && sent.reason === "already_sent");
+const failed = await continueSetupDelivery("FAILED", sender);
+check("durable FAILED recovery performs exactly one existing transport call", sends === 1 && failed.sent && failed.result === "sent");
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail > 0) process.exit(1);

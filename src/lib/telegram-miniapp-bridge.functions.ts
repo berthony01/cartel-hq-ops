@@ -50,7 +50,7 @@ import {
   type CommunityDeps,
   type CommunityMissionDeps,
 } from "./mission-control-community.server";
-import { normalizeSetupDeliveryState, setupDeliveryMaySend, setupPermissionProofAllowsStart, type SetupDeliveryState } from "./mission-setup-orchestration";
+import { continueSetupDelivery, normalizeSetupDeliveryState, setupPermissionProofAllowsStart, type SetupDeliveryState } from "./mission-setup-orchestration";
 
 /** Existing SE-15 service-only RPCs. This bridge reuses them; it defines none. */
 export const MINIAPP_RPC = {
@@ -1027,10 +1027,9 @@ export const miniAppStartMissionSetup = createServerFn({ method: "POST" })
       } catch { return fail("source_cleanup_required"); }
     }
     const delivery = normalizeSetupDeliveryState(start["delivery_state"]);
-    if (delivery === "SENDING" || delivery === "AMBIGUOUS") return fail("delivery_ambiguous");
-    const sent = delivery === "SENT" ? "replayed" : setupDeliveryMaySend(delivery)
-      ? await sendSetupMissionCard({ workspaceId: gate.launch.workspaceId, missionId, targetId, requestId: winnerRequestId, actorUserId: actor.actorUserId })
-      : "failed";
+    const continuation = await continueSetupDelivery(delivery, () => sendSetupMissionCard({ workspaceId: gate.launch.workspaceId, missionId, targetId, requestId: winnerRequestId, actorUserId: actor.actorUserId }));
+    if (!continuation.sent && continuation.reason === "ambiguous") return fail("delivery_ambiguous");
+    const sent = continuation.sent ? continuation.result : continuation.reason === "already_sent" ? "replayed" : "failed";
     if (sent !== "sent" && sent !== "replayed") return fail(sent === "ambiguous" ? "delivery_ambiguous" : "delivery_failed");
     const activated = await gate.admin.rpc("activate_social_mission_schedule", { _mission_id: missionId, _target_id: targetId });
     const activation = String((activated.data as Record<string, unknown> | null)?.["outcome"] ?? "");

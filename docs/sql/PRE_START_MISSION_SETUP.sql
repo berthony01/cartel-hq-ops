@@ -69,8 +69,7 @@ end $$;
 
 create or replace function public.save_social_mission_candidate_setup(
   _candidate_id uuid, _group_connection_id uuid, _telegram_user_id bigint,
-  _verified_chat_id bigint, _request_id uuid, _targets jsonb,
-  _bot_permissions_resolved boolean, _bot_is_admin boolean, _bot_can_delete boolean, _bot_can_pin boolean
+  _verified_chat_id bigint, _request_id uuid, _targets jsonb
 ) returns jsonb language plpgsql security definer set search_path = pg_catalog as $$
 declare v public.social_mission_link_candidates%rowtype; v_uid uuid;
 begin
@@ -87,7 +86,8 @@ end $$;
 
 create or replace function public.start_social_mission_candidate_setup(
   _candidate_id uuid, _group_connection_id uuid, _telegram_user_id bigint,
-  _verified_chat_id bigint, _request_id uuid, _targets jsonb
+  _verified_chat_id bigint, _request_id uuid, _targets jsonb,
+  _bot_permissions_resolved boolean, _bot_is_admin boolean, _bot_can_delete boolean, _bot_can_pin boolean
 ) returns jsonb language plpgsql security definer set search_path = pg_catalog as $$
 declare v public.social_mission_link_candidates%rowtype; v_uid uuid; v_x text; v_handle text; v_post uuid; v_mission uuid; v_target uuid; v_delivery text; v_settings public.social_mission_settings%rowtype; v_config jsonb; v_access jsonb; v_winner_targets jsonb; v_winner_request uuid; v_auto_pin boolean; v_cleanup_required boolean;
 begin
