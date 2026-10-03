@@ -877,6 +877,45 @@ async function botMissionPermissions(token: string, chatId: string): Promise<boo
   } catch { return false; }
 }
 
+async function sendSetupMissionCard(args: {
+  workspaceId: string;
+  missionId: string;
+  targetId: string;
+  requestId: string;
+  actorUserId: string;
+}): Promise<"sent" | "replayed" | "ambiguous" | "failed"> {
+  const supabaseUrl = process.env["SUPABASE_URL"] ?? "";
+  const serviceKey = process.env["SUPABASE_SERVICE_ROLE_KEY"] ?? "";
+  if (!supabaseUrl || !serviceKey) return "failed";
+  try {
+    const response = await fetch(`${supabaseUrl.replace(/\/$/, "")}/functions/v1/${MINIAPP_TRANSPORT_FUNCTION}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+        "X-Cartel-Internal-Source": MINIAPP_TRANSPORT_INTERNAL_SOURCE,
+        "X-Cartel-Actor-User-Id": args.actorUserId,
+      },
+      body: JSON.stringify({
+        action: "send_mission",
+        workspaceId: args.workspaceId,
+        missionId: args.missionId,
+        targetId: args.targetId,
+        clientRequestId: args.requestId,
+      }),
+      signal: AbortSignal.timeout(30_000),
+    });
+    const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
+    const state = String(payload?.["deliveryState"] ?? "").toUpperCase();
+    if (state === "SENT") return payload?.["duplicate"] === true ? "replayed" : "sent";
+    if (state === "SENDING" || state === "AMBIGUOUS") return "ambiguous";
+    return "failed";
+  } catch {
+    return "ambiguous";
+  }
+}
+
 export const miniAppStartMissionSetup = createServerFn({ method: "POST" })
   .inputValidator((input: { initData: string; requestId: string; likes?: number | null; replies?: number | null; reposts?: number | null; bookmarks?: number | null }) => input)
   .handler(async ({ data }): Promise<{ ok: true; outcome: string; missionId?: string } | MiniAppFailure> => {
@@ -903,8 +942,10 @@ export const miniAppStartMissionSetup = createServerFn({ method: "POST" })
     const targetId = String(start["target_id"] ?? "");
     if (outcome === "FINALIZED") return { ok: true, outcome, missionId };
     if (!["CREATED", "EXISTING"].includes(outcome) || !isUuid(missionId) || !isUuid(targetId)) return fail(String(start["reason"] ?? "mission_setup_unavailable"));
-    const refresh = await callMissionTransport({ action: "send_mission", workspaceId: gate.launch.workspaceId, missionId, targetId, clientRequestId: data.requestId, actorUserId: actor.actorUserId });
-    if (refresh !== "edited" && refresh !== "replayed") return fail(refresh === "ambiguous" ? "delivery_ambiguous" : "delivery_failed");
+    const delivery = String(start["delivery_state"] ?? "");
+    if (delivery === "SENDING" || delivery === "AMBIGUOUS") return fail("delivery_ambiguous");
+    const sent = delivery === "SENT" ? "replayed" : await sendSetupMissionCard({ workspaceId: gate.launch.workspaceId, missionId, targetId, requestId: data.requestId, actorUserId: actor.actorUserId });
+    if (sent !== "sent" && sent !== "replayed") return fail(sent === "ambiguous" ? "delivery_ambiguous" : "delivery_failed");
     const activated = await gate.admin.rpc("activate_social_mission_schedule", { _mission_id: missionId, _target_id: targetId });
     const activation = String((activated.data as Record<string, unknown> | null)?.["outcome"] ?? "");
     if (activated.error || !["ACTIVATED", "EXISTING"].includes(activation)) return fail("schedule_unavailable");
@@ -942,7 +983,7 @@ export const miniAppCloseCommunityLaunch = createServerFn({ method: "POST" })
     const auth = await validateTelegramInitData(data?.initData, token);
     if (!auth.ok) return fail(auth.reason);
     const route = routeStartParam(auth.startParam);
-    if (route.kind !== "community") return fail("community_launch_invalid");
+    if (route.kind !== "community" && route.kind !== "setup") return fail("community_launch_invalid");
     const admin = await adminClient();
     const resolved = await resolveCommunityLaunch(admin, token, auth.user.id, route.connectionId);
     if (!resolved.ok) return resolved;
