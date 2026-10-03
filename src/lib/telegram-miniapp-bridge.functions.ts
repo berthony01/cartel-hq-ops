@@ -795,13 +795,26 @@ export const miniAppCloseCommunityLaunch = createServerFn({ method: "POST" })
     const resolved = await resolveCommunityLaunch(admin, token, auth.user.id, route.connectionId);
     if (!resolved.ok) return resolved;
     if (!route.closeToken) return { ok: true, cleanup: "unavailable" };
+    if (!(await isCurrentChatAdmin(token, resolved.chatId, auth.user.id))) return fail("community_launch_unavailable");
     const { data: result, error } = await admin.rpc(MINIAPP_RPC.closeLauncher, {
       _telegram_user_id: auth.user.id,
       _group_connection_id: route.connectionId,
       _close_token: route.closeToken,
     });
-    if (error) return fail("unavailable");
-    return { ok: true, cleanup: result === true ? "queued" : "unavailable" };
+    const jobId = typeof result === "string" ? result : null;
+    if (error || !jobId) return fail("unavailable");
+    const supabaseUrl = process.env["SUPABASE_URL"] ?? "";
+    const serviceKey = process.env["SUPABASE_SERVICE_ROLE_KEY"] ?? "";
+    if (supabaseUrl.startsWith("https://") && serviceKey) {
+      const fastResponse = await fetch(`${supabaseUrl}/functions/v1/telegram-message-cleanup`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${serviceKey}`, "x-cartel-cleanup-job-id": jobId },
+      }).catch(() => null);
+      if (!fastResponse?.ok) return fail("unavailable");
+    } else {
+      return fail("unavailable");
+    }
+    return { ok: true, cleanup: "queued" };
   });
 
 export const miniAppListMissions = createServerFn({ method: "POST" })

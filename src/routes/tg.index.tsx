@@ -188,6 +188,7 @@ function MiniAppHome() {
   const [initData, setInitData] = useState<string | null>(null);
   const [booting, setBooting] = useState(true);
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+  const [closeFailure, setCloseFailure] = useState(false);
   const search = Route.useSearch();
   const [activeTab, setActiveTab] = useState<MiniAppTab>(search.tab ?? "home");
   const [conversationId, setConversationId] = useState<string | null>(search.conversation ?? null);
@@ -392,7 +393,12 @@ function MiniAppHome() {
         setClosing(true);
         try {
           const result = await closeLaunch({ data: { initData } });
-          if (result.ok) closeTelegramMiniApp();
+          if (result.ok && result.cleanup === "queued") {
+            setCloseFailure(false);
+            closeTelegramMiniApp();
+          } else {
+            setCloseFailure(true);
+          }
         } finally {
           setClosing(false);
         }
@@ -406,6 +412,13 @@ function MiniAppHome() {
         subtitle={activeWorkspace?.workspaceName}
         {...(closeAndClear ? { onClose: closeAndClear, closePending: closing } : {})}
       />
+
+      {closeFailure ? (
+        <MiniAppMessage
+          title="Launcher post was not cleared"
+          description="You can close Mission Control normally. The launcher post will expire on its existing schedule."
+        />
+      ) : null}
 
       {workspacesQuery.isPending ? <MiniAppSkeleton label="Loading projects…" /> : null}
 

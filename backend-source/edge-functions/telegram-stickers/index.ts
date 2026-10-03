@@ -58,7 +58,7 @@ async function tgFetch(url: string, init: RequestInit, timeoutMs = TELEGRAM_TIME
 async function telegramJson(token: string, method: string, body?: Record<string, unknown>) {
   let res: Response;
   try {
-    res = await tgFetch(`${TG_BASE}/bot${token}/${method}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(presentTelegramPayload(method, body ?? {})) });
+    res = await tgFetch(`${TG_BASE}/bot${token}/${method}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(presentTelegramPayload(method, body ?? {}, "authored")) });
   } catch {
     throw new TelegramError("Could not reach Telegram. Try again shortly.");
   }

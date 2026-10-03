@@ -7,6 +7,7 @@
  */
 
 export const TELEGRAM_PRESENTATION_VERSION = "pepecartel_v1";
+export type TelegramPresentationContext = "platform" | "authored" | "frozen";
 
 export const CARTEL_CUSTOM_EMOJI = {
   announce: { emoji: "📣", id: "5309984423003823246", animated: true, video: false },
@@ -19,16 +20,11 @@ export const CARTEL_CUSTOM_EMOJI = {
 type TelegramButton = Record<string, unknown> & { text?: unknown };
 type TelegramKeyboard = { inline_keyboard?: unknown } & Record<string, unknown>;
 
-const ACCENTS = Object.values(CARTEL_CUSTOM_EMOJI);
 const DESTRUCTIVE = /\b(stop|delete|remove|cancel|end|mute|disconnect|close)\b/i;
 const ACTION = /\b(open|start|join|watch|enable|save|send|confirm|retry|publish|connect|add|continue|view|reply|launch|manage)\b/i;
 
-function accentFor(text: string) {
-  return ACCENTS.find((accent) => text.includes(accent.emoji)) ?? null;
-}
-
 /** Adds only Bot API presentation fields; callback_data and url are untouched. */
-export function presentInlineKeyboard(value: unknown): unknown {
+export function presentInlineKeyboard(value: unknown, context: TelegramPresentationContext = "authored"): unknown {
   if (!value || typeof value !== "object") return value;
   const keyboard = value as TelegramKeyboard;
   if (!Array.isArray(keyboard.inline_keyboard)) return value;
@@ -40,12 +36,14 @@ export function presentInlineKeyboard(value: unknown): unknown {
             if (!rawButton || typeof rawButton !== "object") return rawButton;
             const button = rawButton as TelegramButton;
             const text = typeof button.text === "string" ? button.text : "";
-            const accent = accentFor(text);
-            const style = DESTRUCTIVE.test(text) ? "danger" : ACTION.test(text) ? "success" : undefined;
+            const existingStyle = typeof button.style === "string" ? button.style : undefined;
+            const existingIcon = typeof button.icon_custom_emoji_id === "string" ? button.icon_custom_emoji_id : undefined;
+            const style = existingStyle ?? (DESTRUCTIVE.test(text) ? "danger" : ACTION.test(text) ? "success" : undefined);
+            const generatedIcon = context === "platform" && ACTION.test(text) ? CARTEL_CUSTOM_EMOJI.announce.id : undefined;
             return {
               ...button,
               ...(style ? { style } : {}),
-              ...(accent ? { icon_custom_emoji_id: accent.id } : {}),
+              ...((existingIcon ?? generatedIcon) ? { icon_custom_emoji_id: existingIcon ?? generatedIcon } : {}),
             };
           })
         : rawRow,
@@ -53,15 +51,15 @@ export function presentInlineKeyboard(value: unknown): unknown {
   };
 }
 
-/** Animates one existing accent in HTML while preserving its visible fallback. */
-export function presentHtmlText(text: string): string {
-  if (!text || text.includes("<tg-emoji")) return text;
-  const accent = accentFor(text);
-  if (!accent) return text;
-  return text.replace(
-    accent.emoji,
-    `<tg-emoji emoji-id="${accent.id}">${accent.emoji}</tg-emoji>`,
-  );
+/** Creates one generated header; authored HTML is never searched or rewritten. */
+export function brandedHeader(accent: keyof typeof CARTEL_CUSTOM_EMOJI = "energy"): string {
+  const selected = CARTEL_CUSTOM_EMOJI[accent];
+  return `<tg-emoji emoji-id="${selected.id}">${selected.emoji}</tg-emoji> <b>PEPECARTEL · CARTEL HQ</b>`;
+}
+
+export function presentHtmlText(text: string, context: TelegramPresentationContext = "authored"): string {
+  if (!text || context !== "platform" || text.startsWith("<tg-emoji")) return text;
+  return `${brandedHeader()}\n\n${text}`;
 }
 
 /**
@@ -72,15 +70,16 @@ export function presentHtmlText(text: string): string {
 export function presentTelegramPayload(
   method: string,
   body: Record<string, unknown>,
+  context: TelegramPresentationContext = "authored",
 ): Record<string, unknown> {
-  if (!/^(sendMessage|sendPhoto|sendAnimation|editMessageText|editMessageCaption)$/.test(method)) {
+  if (!/^(sendMessage|sendPhoto|sendAnimation|sendDocument|sendVideo|sendSticker|editMessageText|editMessageCaption|editMessageReplyMarkup)$/.test(method)) {
     return body;
   }
   const next = { ...body };
-  if (next.reply_markup) next.reply_markup = presentInlineKeyboard(next.reply_markup);
-  if (next.parse_mode === "HTML") {
-    if (typeof next.text === "string") next.text = presentHtmlText(next.text);
-    if (typeof next.caption === "string") next.caption = presentHtmlText(next.caption);
+  if (next.reply_markup) next.reply_markup = presentInlineKeyboard(next.reply_markup, context);
+  if (context === "platform" && next.parse_mode === "HTML") {
+    if (typeof next.text === "string") next.text = presentHtmlText(next.text, context);
+    if (typeof next.caption === "string") next.caption = presentHtmlText(next.caption, context);
   }
   return next;
 }

@@ -361,7 +361,7 @@ async function callTelegram(
       method: "POST",
       // multipart/form-data sets its own boundary header; JSON keeps the old one.
       ...(multipart ? {} : { headers: { "Content-Type": "application/json" } }),
-      body: multipart ? body : JSON.stringify(presentTelegramPayload(method, body)),
+      body: multipart ? body : JSON.stringify(presentTelegramPayload(method, body, "platform")),
       signal: controller.signal,
     });
 
