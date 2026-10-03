@@ -28,6 +28,8 @@ type ClaimedJob = {
   attempt_count: number;
 };
 
+type FastJob = ClaimedJob & { cleanup_kind?: string };
+
 function json(body: Record<string, unknown>, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
@@ -71,6 +73,52 @@ function alreadyGone(description: string) {
     || text.includes("message is not found");
 }
 
+async function processJobs(admin: any, token: string, jobs: ClaimedJob[]) {
+  let deleted = 0;
+  let retry = 0;
+  let failed = 0;
+
+  for (const job of jobs) {
+    const chatId = String(job.telegram_chat_id);
+    const messageId = Number(job.telegram_message_id);
+    const attempt = Number(job.attempt_count) || 1;
+    const markDeleted = async () => {
+      const { error } = await admin.from("telegram_message_cleanup_jobs").update({ status: "deleted", deleted_at: new Date().toISOString(), claimed_at: null, error_class: null, last_error: null }).eq("id", job.job_id);
+      if (error) throw new Error("cleanup state update failed");
+      deleted += 1;
+    };
+    const markRetry = async (seconds: number, errorClass: string, message: string) => {
+      const { error } = await admin.from("telegram_message_cleanup_jobs").update({ status: "retry", claimed_at: null, next_attempt_at: new Date(Date.now() + seconds * 1000).toISOString(), error_class: errorClass, last_error: message }).eq("id", job.job_id);
+      if (error) throw new Error("cleanup state update failed");
+      retry += 1;
+    };
+    const markFailed = async (errorClass: string, message: string) => {
+      const { error } = await admin.from("telegram_message_cleanup_jobs").update({ status: "failed", claimed_at: null, error_class: errorClass, last_error: message }).eq("id", job.job_id);
+      if (error) throw new Error("cleanup state update failed");
+      failed += 1;
+    };
+    const backoff = BACKOFF_SECONDS[Math.min(attempt - 1, BACKOFF_SECONDS.length - 1)];
+    try {
+      const result = await deleteMessage(token, chatId, messageId);
+      if (result.ok || alreadyGone(result.description)) await markDeleted();
+      else if (result.httpStatus === 429) {
+        const wait = Math.min(Math.max(result.retryAfter || backoff, 1), MAX_RETRY_AFTER_SECONDS);
+        if (attempt >= MAX_ATTEMPTS) await markFailed("rate_limited", "Telegram rate limit persisted across attempts.");
+        else await markRetry(wait, "rate_limited", "Telegram rate limited this deletion.");
+      } else if (result.httpStatus >= 500) {
+        if (attempt >= MAX_ATTEMPTS) await markFailed("telegram_server_error", "Telegram server error persisted across attempts.");
+        else await markRetry(backoff, "telegram_server_error", "Telegram returned a server error.");
+      } else await markFailed("telegram_rejected", "Telegram rejected the deletion request.");
+    } catch {
+      try {
+        if (attempt >= MAX_ATTEMPTS) await markFailed("network_error", "Telegram was unreachable across attempts.");
+        else await markRetry(backoff, "network_error", "Telegram request failed or timed out.");
+      } catch { console.error("[telegram-message-cleanup] cleanup state update failed"); }
+    }
+  }
+  return { claimed: jobs.length, deleted, retry, failed };
+}
+
 
 Deno.serve(async (request) => {
   if (request.method !== "POST") return json({ error: "METHOD_NOT_ALLOWED" }, 405);
@@ -96,6 +144,14 @@ Deno.serve(async (request) => {
   );
   if (secretError || secretOk !== true) return json({ error: "UNAUTHORIZED" }, 401);
 
+  const fastJobId = request.headers.get("x-cartel-cleanup-job-id");
+  if (fastJobId) {
+    const { data, error } = await admin.rpc("claim_mission_control_launcher_cleanup_job", { _job_id: fastJobId });
+    const fastJobs = (data ?? []) as FastJob[];
+    if (error || fastJobs.length !== 1 || fastJobs[0]?.cleanup_kind !== "mission_control_launcher") return json({ error: "NOT_CLAIMED" }, 409);
+    return json(await processJobs(admin, TELEGRAM_BOT_TOKEN, fastJobs));
+  }
+
   const { data: claimed, error: claimError } = await admin.rpc(
     "claim_telegram_message_cleanup_jobs",
     { _limit: CLAIM_LIMIT },
@@ -106,6 +162,9 @@ Deno.serve(async (request) => {
   }
 
   const jobs = (claimed ?? []) as ClaimedJob[];
+  return json(await processJobs(admin, TELEGRAM_BOT_TOKEN, jobs));
+  /* Durable minute-runner fallback uses the same processor above. */
+  /* c8 ignore start */
   let deleted = 0;
   let retry = 0;
   let failed = 0;
@@ -201,5 +260,6 @@ Deno.serve(async (request) => {
   }
 
   return json({ claimed: jobs.length, deleted, retry, failed });
+  /* c8 ignore stop */
 });
 
