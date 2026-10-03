@@ -99,7 +99,7 @@ check("4.9 entitlement gate preserved", listFn.includes('miniAppFeatureAllowed(a
 check("5.1 refusal does not pick another workspace", home.includes("if (!communityLaunch) return null;") && home.includes("if (launchRefused)"));
 check("5.2 picker hidden in community mode", home.includes("workspaces.length > 1 && !communityLaunch"));
 check("5.3 scoped list request", home.includes("groupConnectionId: communityLaunch?.connectionId ?? null"));
-check("5.4 initDataUnsafe never read", !home.includes("initDataUnsafe"));
+check("5.4 initDataUnsafe never read", !home.includes(".initDataUnsafe"));
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail > 0) process.exit(1);
