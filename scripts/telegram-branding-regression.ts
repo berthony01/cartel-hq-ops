@@ -93,7 +93,11 @@ check("staged SQL qualifies pgcrypto digest", sql.includes("extensions.digest(_c
 check("all staged security-definer routines use fixed pg_catalog search paths", (sql.match(/security definer set search_path = pg_catalog/g) ?? []).length === 5 && !sql.includes("search_path = public"));
 check("staged SQL revokes binding table from browser roles", sql.includes("revoke all on table public.mission_control_launcher_bindings from public, anon, authenticated"));
 check("cleanup queue remains service-only", sql.includes("revoke all on table public.telegram_message_cleanup_jobs from public, anon, authenticated") && sql.includes("grant all on table public.telegram_message_cleanup_jobs to service_role"));
-check("fast worker path is service-only, delayed, and exact-job claimed", readFileSync("backend-source/edge-functions/telegram-message-cleanup/index.ts", "utf8").includes("Bearer ${SUPABASE_SERVICE_ROLE_KEY}") && readFileSync("backend-source/edge-functions/telegram-message-cleanup/index.ts", "utf8").includes("setTimeout(resolve, 5_000)") && sql.includes("claim_mission_control_launcher_cleanup_job"));
+// Fast-lane behavior is executed against the real handler in
+// scripts/telegram-cleanup-fastpath-regression.ts (not string-checked here).
+check("staged SQL defines the exact-job fast claim", sql.includes("claim_mission_control_launcher_cleanup_job"));
+check("prepare rejects NULL close-token hash explicitly", sql.includes("or _close_token_hash is null"));
+check("cleanup request token uses anchored base64url syntax", sql.includes("_close_token !~ '^[A-Za-z0-9_-]{22,64}$'"));
 const tgRoute = readFileSync("src/routes/tg.index.tsx", "utf8");
 check("Mini App closes only after queued acknowledgement", tgRoute.includes('result.ok && result.cleanup === "queued"'));
 check("Mini App reports cleanup failure and permits normal close", tgRoute.includes("Launcher post was not cleared") && tgRoute.includes("close Mission Control normally"));
