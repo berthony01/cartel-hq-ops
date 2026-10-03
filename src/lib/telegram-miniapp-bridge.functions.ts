@@ -783,18 +783,20 @@ function communityMissionDeps(admin: AdminClient, token: string): CommunityMissi
  */
 export const miniAppResolveCommunityLaunch = createServerFn({ method: "POST" })
   .inputValidator((input: { initData: string }) => input)
-  .handler(async ({ data }): Promise<{ ok: true; launch: MiniAppCommunityLaunch | null } | MiniAppFailure> => {
+  .handler(async ({ data }): Promise<{ ok: true; mode: "ordinary" | "community" | "setup"; launch: MiniAppCommunityLaunch | null } | MiniAppFailure> => {
     const token = botToken();
     const auth = await validateTelegramInitData(data?.initData, token);
     if (!auth.ok) return fail(auth.reason);
     const route = routeStartParam(auth.startParam);
-    if (route.kind === "ordinary" || route.kind === "setup") return { ok: true, launch: null };
+    if (route.kind === "ordinary") return { ok: true, mode: "ordinary", launch: null };
+    if (route.kind === "setup") return { ok: true, mode: "setup", launch: null };
     if (route.kind === "invalid") return fail("community_launch_invalid");
     const admin = await adminClient();
     const resolved = await resolveCommunityLaunch(admin, token, auth.user.id, route.connectionId);
     if (!resolved.ok) return resolved;
     return {
       ok: true,
+      mode: "community",
       launch: { ...resolved.launch, cleanupAvailable: Boolean(route.closeToken) },
     };
   });
