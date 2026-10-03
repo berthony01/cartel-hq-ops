@@ -82,3 +82,7 @@ Historical items above are preserved as technical evidence; staged vs production
 - [ ] Apply `docs/sql/MC_BRANDING_LAUNCHER_CLEANUP.sql` — BLOCKED pending independent review and explicit owner approval; until applied, launcher cleanup stays unavailable and legacy behavior remains
 - [ ] Deploy/synchronize backend sender sources and publish `/tg` — BLOCKED pending independent review and explicit owner approval
 - [ ] Real Telegram E2E for animated emoji eligibility, native button rendering, exact launcher cleanup, non-admin denial, copied-link denial, and abandoned-prompt expiry — PENDING after activation
+
+## Pre-start Mission Setup — staged for root review
+- [ ] Complete candidate-scoped setup, authenticated Auto-select, atomic reviewed-target start, and legacy command compatibility; SQL remains staged and unapplied
+- [ ] Root review/application, backend deployment, frontend publication, and real admin/non-admin Telegram acceptance — PENDING after source verification
