@@ -181,14 +181,15 @@ export async function lookupXPostMetrics(
     return { ok: false, reason: `The official X API returned ${response.status}.` };
   }
 
-  let payload: { data?: unknown } | null = null;
+  let payload: unknown = null;
   try {
-    payload = (await response.json()) as typeof payload;
+    payload = await response.json();
   } catch {
     return { ok: false, reason: "The official X API returned an unreadable response." };
   }
 
-  const rows = Array.isArray(payload?.data) ? (payload!.data as Record<string, unknown>[]) : [];
+  const data = payload && typeof payload === "object" ? (payload as Record<string, unknown>)["data"] : null;
+  const rows = Array.isArray(data) ? (data as Record<string, unknown>[]) : [];
   const posts = new Map<string, XPostMetrics>();
   for (const row of rows) {
     const id = row?.["id"];

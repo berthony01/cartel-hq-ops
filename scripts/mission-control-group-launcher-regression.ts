@@ -418,5 +418,15 @@ function launcher(o: Partial<LauncherDeps> & { rows?: unknown[]; status?: string
   check("6.16 invalid start_param refused in both gates", am.includes('fail("community_launch_invalid")') && al.includes('fail("community_launch_invalid")'));
 }
 
+const stagedSetupSql = readFileSync("docs/sql/PRE_START_MISSION_SETUP.sql", "utf8");
+check("7.1 setup target validator is false-safe and integer-bounded", stagedSetupSql.includes("jsonb_typeof(_targets) is distinct from 'object'") && stagedSetupSql.includes("public.social_mission_setup_targets_valid(_targets) is not true") && stagedSetupSql.includes("n > 2147483647"));
+check("7.2 setup RPCs bind exact candidate connection and verified chat", (stagedSetupSql.match(/group_connection_id is distinct from _group_connection_id/g) ?? []).length >= 3 && (stagedSetupSql.match(/telegram_chat_id is distinct from _verified_chat_id/g) ?? []).length >= 3);
+check("7.3 replay authorization precedes existing mission response", stagedSetupSql.indexOf("public.is_workspace_operator(v.workspace_id,v_uid) is not true") < stagedSetupSql.indexOf("if v.setup_mission_id is not null"));
+check("7.4 winner request and reviewed targets are stable across retry", stagedSetupSql.includes("v_winner_request:=_request_id") && stagedSetupSql.includes("'request_id',v_winner_request") && stagedSetupSql.includes("'reviewed_targets',v_winner_targets"));
+check("7.5 explicit mission candidate preserves automatic detector setting", stagedSetupSql.includes("create_social_mission_setup_candidate") && stagedSetupSql.includes("handle_not_official") && !stagedSetupSql.includes("update public.social_mission_settings"));
+const webhookSetup = readFileSync("backend-source/edge-functions/telegram-webhook/index.ts", "utf8");
+check("7.6 explicit close reaches preserved close lifecycle before X parsing", webhookSetup.indexOf('toLowerCase() === "close"') < webhookSetup.indexOf('const parsed = parseXStatusUrl(String(missionMatch[1]')));
+check("7.7 explicit link uses setup candidate while automatic finder remains gated", webhookSetup.includes('requireLinkFinderEnabled ? "create_social_mission_link_candidate" : "create_social_mission_setup_candidate"') && webhookSetup.includes('offerLinkFinderCandidate(parsed, Number(message?.message_id), Number(from.id), false)'));
+
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail > 0) process.exit(1);
