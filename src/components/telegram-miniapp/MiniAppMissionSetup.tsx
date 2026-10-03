@@ -69,8 +69,9 @@ export function MiniAppMissionSetup({ initData }: { initData: string }) {
     onSuccess: async (result) => {
       if (result.outcome === "ALREADY_ACTIVE") {
         setAlreadyActive(true);
-        if (result.targets && Object.keys(result.targets).length > 0) {
-          setDraft((current) => ({ ...current, ...Object.fromEntries(Object.entries(result.targets).map(([key, value]) => [key, String(value)])) }));
+        const winnerTargets = result.targets;
+        if (winnerTargets && Object.keys(winnerTargets).length > 0) {
+          setDraft((current) => ({ ...current, ...Object.fromEntries(Object.entries(winnerTargets).map(([key, value]) => [key, String(value)])) }));
         }
         setNotice({ tone: "warning", message: "A mission for this post is already active in this community. Its existing targets were kept; no second mission was created." });
         return;
