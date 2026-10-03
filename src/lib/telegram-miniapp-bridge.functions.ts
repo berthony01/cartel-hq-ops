@@ -74,6 +74,7 @@ export const MINIAPP_RPC = {
   saveSetup: "save_social_mission_candidate_setup",
   startSetup: "start_social_mission_candidate_setup",
   finalizeSetup: "finalize_social_mission_link_candidate_start",
+  suggestSetup: "social_mission_metric_targets",
 } as const;
 
 /** MINI-HQ-1C — the in-place final-state transport action (same as the bot). */
@@ -705,7 +706,9 @@ export type MiniAppMissionSetup = {
   expiresAt: string;
   cleanupAvailable: boolean;
   targets: { likes: number | null; replies: number | null; reposts: number | null; bookmarks: number | null };
-  suggestion: { available: false; basis: string };
+  state: "READY" | "STARTING" | "STARTED";
+  missionId: string | null;
+  suggestion: { available: boolean; basis: string; observedAt: string | null; targets: Record<string, number> };
 };
 
 /**
@@ -818,8 +821,17 @@ async function authorizeCandidateSetup(initData: unknown): Promise<
 
 function setupTarget(value: unknown): number | null | undefined {
   if (value === null || value === undefined || value === "") return null;
-  const n = Number(value);
-  return Number.isSafeInteger(n) && n > 0 && n <= 2_147_483_647 ? n : undefined;
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0 && value <= 2_147_483_647 ? value : undefined;
+}
+
+function setupTargets(data: Record<string, unknown>): Record<string, number> | null {
+  const out: Record<string, number> = {};
+  for (const key of ["likes", "replies", "reposts", "bookmarks"] as const) {
+    const parsed = setupTarget(data[key]);
+    if (parsed === undefined) return null;
+    if (parsed !== null) out[key] = parsed;
+  }
+  return Object.keys(out).length > 0 ? out : null;
 }
 
 export const miniAppReadMissionSetup = createServerFn({ method: "POST" })
@@ -833,7 +845,8 @@ export const miniAppReadMissionSetup = createServerFn({ method: "POST" })
       _verified_chat_id: Number(gate.chatId),
     });
     const r = (row ?? {}) as Record<string, unknown>;
-    if (error || String(r["outcome"] ?? "") !== "READY") return fail(String(r["reason"] ?? "mission_setup_unavailable"));
+    const state = String(r["outcome"] ?? "");
+    if (error || !["READY", "STARTING", "STARTED"].includes(state)) return fail(String(r["reason"] ?? "mission_setup_unavailable"));
     if (String(r["group_connection_id"] ?? "").toLowerCase() !== gate.route.connectionId || String(r["workspace_id"] ?? "").toLowerCase() !== gate.launch.workspaceId) return fail("mission_setup_unavailable");
     const goals = (r["reviewed_targets"] ?? {}) as Record<string, unknown>;
     return { ok: true, setup: {
@@ -845,38 +858,74 @@ export const miniAppReadMissionSetup = createServerFn({ method: "POST" })
       canonicalUrl: String(r["canonical_url"] ?? ""),
       authorHandle: String(r["author_handle"] ?? ""),
       expiresAt: String(r["expires_at"] ?? ""),
-      cleanupAvailable: Boolean(gate.route.closeToken),
+      cleanupAvailable: r["cleanup_confirmed"] === true,
       targets: { likes: positiveInt(goals["likes"]), replies: positiveInt(goals["replies"]), reposts: positiveInt(goals["reposts"]), bookmarks: positiveInt(goals["bookmarks"]) },
-      suggestion: { available: false, basis: "Auto-select needs an official X baseline. No pre-start engagement metrics are available, so choose targets manually." },
+      state: state as MiniAppMissionSetup["state"],
+      missionId: isUuid(r["mission_id"]) ? String(r["mission_id"]) : null,
+      suggestion: { available: false, basis: "Choose Auto-select to request one current official X snapshot. Missing metrics remain unset.", observedAt: null, targets: {} },
     } };
+  });
+
+export const miniAppSuggestMissionSetup = createServerFn({ method: "POST" })
+  .inputValidator((input: { initData: string }) => input)
+  .handler(async ({ data }): Promise<{ ok: true; suggestion: MiniAppMissionSetup["suggestion"] } | MiniAppFailure> => {
+    const gate = await authorizeCandidateSetup(data?.initData);
+    if (!gate.ok) return gate;
+    const actor = await miniAppCommercialActor(gate.admin, gate.telegramUserId, gate.launch.workspaceId);
+    if (!actor.ok) return actor;
+    const identity = await gate.admin.rpc("can_use_project_tools", { _workspace_id: gate.launch.workspaceId, _user_id: actor.actorUserId });
+    if (identity.error || identity.data !== true) return fail("project_identity_required");
+    const entitled = await miniAppFeatureAllowed(gate.admin, gate.launch.workspaceId, "x_missions", actor.actorUserId);
+    if (entitled !== true) return fail(entitled === false ? "missions_plan_required" : "unavailable");
+    const { data: candidate, error } = await gate.admin.rpc(MINIAPP_RPC.readSetup, {
+      _candidate_id: gate.route.candidateId, _group_connection_id: gate.route.connectionId,
+      _telegram_user_id: gate.telegramUserId, _verified_chat_id: Number(gate.chatId), _close_token: gate.route.closeToken,
+    });
+    const row = (candidate ?? {}) as Record<string, unknown>;
+    if (error || String(row["outcome"] ?? "") !== "READY") return fail("mission_setup_unavailable");
+    const externalPostId = String(row["external_post_id"] ?? "");
+    const bearer = process.env["X_API_BEARER_TOKEN"] ?? "";
+    const { readMissionSetupMetrics } = await import("./x-mission-autoselect.server");
+    const snapshot = await readMissionSetupMetrics(bearer, externalPostId);
+    if (!snapshot.ok) return { ok: true, suggestion: { available: false, basis: "Official X metrics are unavailable right now. No values were invented.", observedAt: null, targets: {} } };
+    const { data: suggested, error: suggestError } = await gate.admin.rpc(MINIAPP_RPC.suggestSetup, {
+      _views: snapshot.metrics.views, _likes: snapshot.metrics.likes, _comments: snapshot.metrics.comments,
+      _shares: snapshot.metrics.shares, _saves: snapshot.metrics.saves, _primary_type: "NONE", _primary_target: null,
+    });
+    const raw = (suggested ?? {}) as Record<string, unknown>;
+    const targets = Object.fromEntries(["likes", "replies", "reposts", "bookmarks"].flatMap((key) => {
+      const value = positiveInt(raw[key]); return value === null ? [] : [[key, value]];
+    }));
+    return { ok: true, suggestion: { available: Object.keys(targets).length > 0, basis: "Suggested from one current official X snapshot using the existing mission target policy.", observedAt: snapshot.observedAt, targets } };
   });
 
 export const miniAppSaveMissionSetup = createServerFn({ method: "POST" })
   .inputValidator((input: { initData: string; requestId: string; likes?: number | null; replies?: number | null; reposts?: number | null; bookmarks?: number | null }) => input)
   .handler(async ({ data }): Promise<{ ok: true; outcome: string } | MiniAppFailure> => {
     if (!isRequestId(data?.requestId)) return fail("invalid_request_id");
-    const targets = { likes: setupTarget(data.likes), replies: setupTarget(data.replies), reposts: setupTarget(data.reposts), bookmarks: setupTarget(data.bookmarks) };
-    if (Object.values(targets).some((value) => value === undefined) || Object.values(targets).every((value) => value === null)) return fail("invalid_target");
+    const targets = setupTargets(data);
+    if (!targets) return fail("invalid_target");
     const gate = await authorizeCandidateSetup(data.initData);
     if (!gate.ok) return gate;
     const { data: result, error } = await gate.admin.rpc(MINIAPP_RPC.saveSetup, {
-      _candidate_id: gate.route.candidateId, _telegram_user_id: gate.telegramUserId,
-      _verified_chat_id: Number(gate.chatId), _request_id: data.requestId, _targets: targets,
+      _candidate_id: gate.route.candidateId, _group_connection_id: gate.route.connectionId,
+      _telegram_user_id: gate.telegramUserId, _verified_chat_id: Number(gate.chatId), _request_id: data.requestId, _targets: targets,
     });
     if (error) return fail("unavailable");
     const outcome = String((result as Record<string, unknown> | null)?.["outcome"] ?? "DENIED");
     return outcome === "SAVED" || outcome === "REPLAYED" ? { ok: true, outcome } : fail("mission_setup_unavailable");
   });
 
-async function botMissionPermissions(token: string, chatId: string): Promise<boolean> {
+async function botMissionPermissions(token: string, chatId: string): Promise<{ resolved: boolean; isAdmin: boolean; canDelete: boolean; canPin: boolean }> {
   const botId = Number(token.split(":")[0]);
-  if (!Number.isSafeInteger(botId) || botId <= 0) return false;
+  if (!Number.isSafeInteger(botId) || botId <= 0) return { resolved: false, isAdmin: false, canDelete: false, canPin: false };
   try {
     const response = await fetch(`https://api.telegram.org/bot${token}/getChatMember`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chat_id: chatId, user_id: botId }), signal: AbortSignal.timeout(10_000) });
     const body = await response.json() as { ok?: boolean; result?: Record<string, unknown> };
     const member = body.result ?? {};
-    return response.ok && body.ok === true && ["administrator", "creator"].includes(String(member["status"] ?? "")) && member["can_delete_messages"] === true && member["can_pin_messages"] === true;
-  } catch { return false; }
+    const status = String(member["status"] ?? ""); const creator = status === "creator"; const isAdmin = creator || status === "administrator";
+    return { resolved: response.ok && body.ok === true, isAdmin, canDelete: creator || member["can_delete_messages"] === true, canPin: creator || member["can_pin_messages"] === true };
+  } catch { return { resolved: false, isAdmin: false, canDelete: false, canPin: false }; }
 }
 
 async function sendSetupMissionCard(args: {
@@ -922,8 +971,8 @@ export const miniAppStartMissionSetup = createServerFn({ method: "POST" })
   .inputValidator((input: { initData: string; requestId: string; likes?: number | null; replies?: number | null; reposts?: number | null; bookmarks?: number | null }) => input)
   .handler(async ({ data }): Promise<{ ok: true; outcome: string; missionId?: string } | MiniAppFailure> => {
     if (!isRequestId(data?.requestId)) return fail("invalid_request_id");
-    const targets = { likes: setupTarget(data.likes), replies: setupTarget(data.replies), reposts: setupTarget(data.reposts), bookmarks: setupTarget(data.bookmarks) };
-    if (Object.values(targets).some((value) => value === undefined) || Object.values(targets).every((value) => value === null)) return fail("invalid_target");
+    const targets = setupTargets(data);
+    if (!targets) return fail("invalid_target");
     const gate = await authorizeCandidateSetup(data.initData);
     if (!gate.ok) return gate;
     const actor = await miniAppCommercialActor(gate.admin, gate.telegramUserId, gate.launch.workspaceId);
@@ -932,10 +981,13 @@ export const miniAppStartMissionSetup = createServerFn({ method: "POST" })
     if (identity.error || identity.data !== true) return fail("project_identity_required");
     const entitled = await miniAppFeatureAllowed(gate.admin, gate.launch.workspaceId, "x_missions", actor.actorUserId);
     if (entitled !== true) return fail(entitled === false ? "missions_plan_required" : "unavailable");
-    if (!(await botMissionPermissions(gate.token, gate.chatId))) return fail("mission_permissions_required");
+    const { data: settings } = await gate.admin.from("social_mission_settings").select("auto_pin_mission").eq("workspace_id", gate.launch.workspaceId).maybeSingle();
+    const autoPin = (settings as Record<string, unknown> | null)?.["auto_pin_mission"] !== false;
+    const permissions = await botMissionPermissions(gate.token, gate.chatId);
+    if (!permissions.resolved || !permissions.isAdmin || !permissions.canDelete || (autoPin && !permissions.canPin)) return fail("mission_permissions_required");
     const { data: started, error } = await gate.admin.rpc(MINIAPP_RPC.startSetup, {
-      _candidate_id: gate.route.candidateId, _telegram_user_id: gate.telegramUserId,
-      _verified_chat_id: Number(gate.chatId), _request_id: data.requestId, _targets: targets,
+      _candidate_id: gate.route.candidateId, _group_connection_id: gate.route.connectionId,
+      _telegram_user_id: gate.telegramUserId, _verified_chat_id: Number(gate.chatId), _request_id: data.requestId, _targets: targets,
     });
     const start = (started ?? {}) as Record<string, unknown>;
     if (error) return fail("unavailable");
@@ -944,16 +996,18 @@ export const miniAppStartMissionSetup = createServerFn({ method: "POST" })
     const targetId = String(start["target_id"] ?? "");
     if (outcome === "FINALIZED") return { ok: true, outcome, missionId };
     if (!["CREATED", "EXISTING"].includes(outcome) || !isUuid(missionId) || !isUuid(targetId)) return fail(String(start["reason"] ?? "mission_setup_unavailable"));
+    const winnerRequestId = String(start["request_id"] ?? "");
+    if (!isRequestId(winnerRequestId)) return fail("mission_setup_unavailable");
     const delivery = String(start["delivery_state"] ?? "");
     if (delivery === "SENDING" || delivery === "AMBIGUOUS") return fail("delivery_ambiguous");
-    const sent = delivery === "SENT" ? "replayed" : await sendSetupMissionCard({ workspaceId: gate.launch.workspaceId, missionId, targetId, requestId: data.requestId, actorUserId: actor.actorUserId });
+    const sent = delivery === "SENT" ? "replayed" : await sendSetupMissionCard({ workspaceId: gate.launch.workspaceId, missionId, targetId, requestId: winnerRequestId, actorUserId: actor.actorUserId });
     if (sent !== "sent" && sent !== "replayed") return fail(sent === "ambiguous" ? "delivery_ambiguous" : "delivery_failed");
     const activated = await gate.admin.rpc("activate_social_mission_schedule", { _mission_id: missionId, _target_id: targetId });
     const activation = String((activated.data as Record<string, unknown> | null)?.["outcome"] ?? "");
     if (activated.error || !["ACTIVATED", "EXISTING"].includes(activation)) return fail("schedule_unavailable");
     const { data: target } = await gate.admin.from("social_mission_targets").select("telegram_message_id,pinned_by_hq").eq("id", targetId).maybeSingle();
     const targetRow = (target ?? {}) as Record<string, unknown>;
-    if (targetRow["pinned_by_hq"] !== true) {
+    if (autoPin && targetRow["pinned_by_hq"] !== true) {
       const messageId = Number(targetRow["telegram_message_id"]);
       if (!Number.isSafeInteger(messageId) || messageId <= 0) return fail("delivery_ambiguous");
       try {
