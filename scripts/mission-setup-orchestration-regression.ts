@@ -7,6 +7,7 @@ import {
   normalizeSetupDeliveryState,
   requestExactSetupCleanup,
   saveSetupDraft,
+  suggestSetupTargets,
   setupDeliveryMaySend,
   setupPermissionProofAllowsStart,
   setupRecoveryAction,
@@ -72,6 +73,12 @@ let transports = 0;
 let saves = 0;
 const saved = await saveSetupDraft({ save: async () => { saves += 1; return { data: { outcome: "SAVED" }, error: null }; } });
 check("production save orchestration invokes only its injected save RPC", saved.ok && saves === 1 && providers === 0 && transports === 0);
+const suggested = await suggestSetupTargets({
+  readCandidate: async () => ({ externalPostId: "123" }),
+  readMetrics: async () => { providers += 1; return { likes: null, replies: 8 }; },
+  suggest: async (snapshot) => ({ likes: snapshot.likes, replies: snapshot.replies }),
+});
+check("production suggest orchestration performs one provider read and preserves missing metrics", suggested.available && providers === 1 && suggested.suggestion.likes === null && suggested.suggestion.replies === 8 && transports === 0);
 
 console.log(`\n${pass}/${pass + fail} passed`);
 if (fail > 0) process.exit(1);

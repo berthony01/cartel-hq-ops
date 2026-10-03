@@ -50,7 +50,7 @@ import {
   type CommunityDeps,
   type CommunityMissionDeps,
 } from "./mission-control-community.server";
-import { continueSetupDelivery, normalizeSetupDeliveryState, requestExactSetupCleanup, saveSetupDraft, setupPermissionProofAllowsStart, type SetupDeliveryState } from "./mission-setup-orchestration";
+import { continueSetupDelivery, normalizeSetupDeliveryState, requestExactSetupCleanup, saveSetupDraft, setupPermissionProofAllowsStart, suggestSetupTargets, type SetupDeliveryState } from "./mission-setup-orchestration";
 
 /** Existing SE-15 service-only RPCs. This bridge reuses them; it defines none. */
 export const MINIAPP_RPC = {
@@ -893,24 +893,35 @@ export const miniAppSuggestMissionSetup = createServerFn({ method: "POST" })
     if (identity.error || identity.data !== true) return fail("project_identity_required");
     const entitled = await miniAppFeatureAllowed(gate.admin, gate.launch.workspaceId, "x_missions", actor.actorUserId);
     if (entitled !== true) return fail(entitled === false ? "missions_plan_required" : "unavailable");
-    const { data: candidate, error } = await gate.admin.rpc(MINIAPP_RPC.readSetup, {
-      _candidate_id: gate.route.candidateId, _group_connection_id: gate.route.connectionId,
-      _telegram_user_id: gate.telegramUserId, _verified_chat_id: Number(gate.chatId), _close_token: gate.route.closeToken,
-    });
-    const row = (candidate ?? {}) as Record<string, unknown>;
-    if (error || String(row["outcome"] ?? "") !== "READY") return fail("mission_setup_unavailable");
-    const externalPostId = String(row["external_post_id"] ?? "");
     const bearer = process.env["X_API_BEARER_TOKEN"] ?? "";
     const { readMissionSetupMetrics } = await import("./x-mission-autoselect.server");
-    const snapshot = await readMissionSetupMetrics(bearer, externalPostId);
-    if (!snapshot.ok) return { ok: true, suggestion: { available: false, basis: "Official X metrics are unavailable right now. No values were invented.", observedAt: null, targets: {} } };
-    const { data: suggested, error: suggestError } = await gate.admin.rpc(MINIAPP_RPC.suggestSetup, {
-      _views: snapshot.metrics.views, _likes: snapshot.metrics.likes, _comments: snapshot.metrics.comments,
-      _shares: snapshot.metrics.shares, _saves: snapshot.metrics.saves, _primary_type: "NONE", _primary_target: null,
+    const orchestration = await suggestSetupTargets({
+      readCandidate: async () => {
+        const { data: candidate, error } = await gate.admin.rpc(MINIAPP_RPC.readSetup, {
+          _candidate_id: gate.route.candidateId, _group_connection_id: gate.route.connectionId,
+          _telegram_user_id: gate.telegramUserId, _verified_chat_id: Number(gate.chatId), _close_token: gate.route.closeToken,
+        });
+        const row = (candidate ?? {}) as Record<string, unknown>;
+        return error || String(row["outcome"] ?? "") !== "READY" ? null : { externalPostId: String(row["external_post_id"] ?? "") };
+      },
+      readMetrics: async (externalPostId) => {
+        const snapshot = await readMissionSetupMetrics(bearer, externalPostId);
+        return snapshot.ok ? snapshot : null;
+      },
+      suggest: async (snapshot) => {
+        const { data: suggested, error } = await gate.admin.rpc(MINIAPP_RPC.suggestSetup, {
+          _views: snapshot.metrics.views, _likes: snapshot.metrics.likes, _comments: snapshot.metrics.comments,
+          _shares: snapshot.metrics.shares, _saves: snapshot.metrics.saves, _primary_type: "NONE", _primary_target: null,
+        });
+        return { suggested, error, observedAt: snapshot.observedAt };
+      },
     });
+    if (!orchestration.available) return { ok: true, suggestion: { available: false, basis: "Official X metrics are unavailable right now. No values were invented.", observedAt: null, targets: {} } };
+    const { suggested, error: suggestError, observedAt } = orchestration.suggestion;
+    if (suggestError) return fail("unavailable");
     const raw = (suggested ?? {}) as Record<string, unknown>;
     const targets = setupSuggestionTargets(raw);
-    return { ok: true, suggestion: { available: Object.keys(targets).length > 0, basis: "Suggested from one current official X snapshot using the existing mission target policy.", observedAt: snapshot.observedAt, targets } };
+    return { ok: true, suggestion: { available: Object.keys(targets).length > 0, basis: "Suggested from one current official X snapshot using the existing mission target policy.", observedAt, targets } };
   });
 
 export const miniAppSaveMissionSetup = createServerFn({ method: "POST" })
