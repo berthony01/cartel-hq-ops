@@ -19,6 +19,7 @@ import {
   miniAppOperatorHome,
   miniAppInboxSummary,
   miniAppCommercialStatus,
+  miniAppResolveCommunityLaunch,
 } from "@/lib/telegram-miniapp-bridge.functions";
 import { MiniAppInbox } from "@/components/telegram-miniapp/MiniAppInbox";
 import { MiniAppCustomMedia } from "@/components/telegram-miniapp/MiniAppCustomMedia";
