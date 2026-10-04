@@ -1,27 +1,26 @@
-# Pre-start Mission Setup
+# Launch Control Simplification — Phase 1
 
-## Scope
-- Reuse the existing `/tg` Mini App, Telegram webhook, link candidate, mission sender, authorization, commercial gates, and cleanup machinery.
-- Route official-link prompts and `/mission <link>` through candidate setup; preserve `/mission`, `/mission close`, `/mission manage`, and existing live mission controls.
-- Add a candidate-scoped setup screen with editable likes, replies, reposts, and bookmarks, plus honest auto suggestions and an explicit Start Mission action.
-- Stage, but do not apply, one SQL file that stores the reviewed candidate configuration and atomically claims/finalizes one winner before the existing single-send launch flow.
-- Include the already-authorized presentation mirror, UTF-16 regression, and truthful Close & clear error-state fixes only if absent from the current tree.
+## Confirmed baseline
+- Authoritative local HEAD matches `43742db3b4c3d08c03b87bcd979b9d4ec6eee271`; working tree is clean.
+- Canonical PCART already uses the existing five-stage readiness model and working signer/Safe flow.
+- A second hard-coded PCART progress strip currently duplicates that model in Deploy & Contract.
+- The global save bar currently renders across every selected-launch section, including canonical PCART Overview and Deploy & Contract.
+- Safe internals already remain collapsed under Technical details; no Safe or wallet implementation needs modification.
 
-## Security and behavior
-- Signed Telegram `initData` and candidate routing are hints only; every read, save, and start rechecks linked workspace operator status and current admin status for the candidate’s exact connected group.
-- Anonymous `sender_chat` may create a setup offer but cannot authorize setup changes or Start.
-- No mission, target, schedule, metric fetch, or quota use occurs before explicit Start.
-- Start preserves official-X, identity, commercial, permission, transport, ambiguity, pinning, source-cleanup, and finalization contracts.
-- Concurrent starts commit one reviewed configuration; losing/replayed attempts cannot overwrite it or emit a second card.
+## Implementation
+1. Refine `PcartLaunchSetupGuide` into a compact, mobile-safe “Launch setup” surface using the same Token → Auction → Treasury → Review → Launch readiness data and one clearly emphasized next action.
+2. Remove the duplicate hard-coded PCART progress strip from Deploy & Contract. Keep signer and Safe controls intact and ordered before collapsed technical material.
+3. Add one read-only canonical-PCART “Review & Launch” summary at the end of Deploy & Contract. Populate it only from the selected launch, frozen PCART intent, and readiness state: name, ticker, chain, fixed supply, treasury, rehearsal, auction, and mainnet lock. Its launch button remains disabled and has no handler.
+4. Hide the persistent “Save launch details” bar only on canonical PCART Overview and Deploy & Contract. Preserve it on Details and Schedule, and preserve all generic-launch behavior.
+5. Extend the existing focused regression to enforce the single stepper, authoritative summary fields, disabled/no-handler launch action, contextual save visibility, and unchanged protected surfaces.
 
 ## Allowed files
-- Existing Telegram webhook source and mirror.
-- Existing Mini App auth/bridge/client, `/tg` route, and small Mini App presentation components.
-- Existing mission launcher shared helper only if candidate URL construction belongs there.
-- One narrow staged SQL file under `docs/sql/`.
-- Focused regression scripts, `roadmap.md`, and `AGENTS.md` only for durable architecture/status records.
+- `src/routes/_authenticated/launch-control.tsx`
+- `src/components/cartel/PcartLaunchSetupGuide.tsx`
+- `src/components/cartel/PcartReviewLaunchSummary.tsx` (new, presentation-only)
+- `scripts/pcart-launch-simplification-regression.ts`
 
-## Verification
-- Mocked regressions for admin/member/anonymous, expired/foreign/cross-group, commercial/owner paths, duplicate/racing starts, no pre-start mission side effects, auto-suggestion unknown-vs-zero, cleanup binding, legacy routing, and one-send behavior.
-- Mirror byte comparisons, TypeScript check, and production build.
-- No SQL application, real mission mutation, Telegram test message, manual deployment, or publication.
+## Verification and stop point
+- Run the requested focused regression, TypeScript check, production build, and `git diff --check`.
+- Inspect the final diff and confirm no backend, security, wallet, Safe, artifact, contract, execution-control, package, SQL, deployment, or publication surface changed.
+- Stop after this local UI-only phase; do not create a Safe, rehearse/deploy PCART, implement auctions, transact, or publish.
