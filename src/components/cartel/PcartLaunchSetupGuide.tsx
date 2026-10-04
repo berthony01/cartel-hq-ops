@@ -1,6 +1,5 @@
 import { CheckCircle2, Circle, Clock, Lock } from "lucide-react";
 import {
-  PCART_AUCTION_DEFAULTS,
   type PcartReadiness,
   type PcartStepState,
 } from "@/lib/pcart-launch-readiness";
@@ -25,10 +24,13 @@ export function PcartLaunchSetupGuide({ readiness }: { readiness: PcartReadiness
   return (
     <section
       aria-label="PEPECARTEL launch setup"
-      className="min-w-0 rounded-lg border border-border bg-card/60 p-4"
+      className="min-w-0 overflow-hidden rounded-lg border border-gold/35 bg-card/60"
     >
-      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-        <p className="type-eyebrow text-gold">PEPECARTEL launch setup</p>
+      <div className="flex min-w-0 flex-wrap items-center justify-between gap-2 border-b border-border-subtle px-4 py-3">
+        <div className="min-w-0">
+          <p className="type-eyebrow text-gold">PEPECARTEL</p>
+          <h2 className="mt-1 text-base font-semibold text-foreground">Launch setup</h2>
+        </div>
         <span
           className={`rounded-sm border px-2 py-1 text-xs font-semibold uppercase tracking-wide ${
             ready ? "border-pepe/50 text-pepe" : "border-gold/50 text-gold"
@@ -38,36 +40,32 @@ export function PcartLaunchSetupGuide({ readiness }: { readiness: PcartReadiness
         </span>
       </div>
       {readiness.next ? (
-        <p className="mt-2 text-sm text-foreground">
-          <span className="font-semibold text-gold">Next: </span>
-          {readiness.next.action}
-        </p>
+        <div className="border-b border-gold/20 bg-gold/8 px-4 py-3">
+          <p className="type-eyebrow text-gold">Current next action</p>
+          <p className="mt-1 text-sm font-semibold leading-snug text-foreground">
+            {readiness.next.action}
+          </p>
+        </div>
       ) : null}
-      <ol className="mt-3 flex min-w-0 flex-col gap-2">
+      <ol className="grid min-w-0 gap-px bg-border-subtle sm:grid-cols-5">
         {readiness.steps.map((step, i) => {
           const Icon = STATE_ICON[step.state];
           return (
-            <li key={step.id} className="min-w-0 rounded-md border border-border-subtle p-3">
-              <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
-                <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
+            <li key={step.id} className="min-w-0 bg-card px-3 py-3">
+              <div className="flex min-w-0 items-start gap-2">
+                <span className="mt-0.5 flex shrink-0 items-center text-foreground">
                   <Icon className={`size-4 shrink-0 ${STATE_TONE[step.state]}`} aria-hidden="true" />
-                  {i + 1}. {step.label}
                 </span>
-                <span className={`text-xs ${STATE_TONE[step.state]}`}>{step.status}</span>
+                <div className="min-w-0">
+                  <p className="text-sm font-semibold text-foreground">{i + 1}. {step.label}</p>
+                  <p className={`mt-0.5 text-xs leading-snug ${STATE_TONE[step.state]}`}>{step.status}</p>
+                </div>
               </div>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">{step.detail}</p>
-              {step.id === "auction" && step.state !== "ready" ? (
-                <ul className="mt-2 list-disc space-y-0.5 pl-5 text-xs text-muted-foreground">
-                  {PCART_AUCTION_DEFAULTS.map((d) => (
-                    <li key={d}>{d}</li>
-                  ))}
-                </ul>
-              ) : null}
             </li>
           );
         })}
       </ol>
-      <p className="mt-3 flex items-start gap-2 text-xs leading-relaxed text-muted-foreground">
+      <p className="flex items-start gap-2 px-4 py-3 text-xs leading-relaxed text-muted-foreground">
         <Lock className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
         Mainnet stays safely locked until launch day. This lock is a safety setting, not an error.
       </p>

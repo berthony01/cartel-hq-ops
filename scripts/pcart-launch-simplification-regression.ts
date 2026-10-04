@@ -74,6 +74,8 @@ check("S13", !/supabase|\.rpc\(|fetch\(/.test(LIB), "readiness model has no back
 check("S14", !LIB.includes(PCART), "model does not hard-code the frozen artifact id (L1C-10 consumer set)");
 const GUIDE = readFileSync("src/components/cartel/PcartLaunchSetupGuide.tsx", "utf8");
 check("S15", !/<input|<Input|<Button|onClick|onSubmit/.test(GUIDE), "guide is read-only");
+check("S15a", /Launch setup/.test(GUIDE) && /Current next action/.test(GUIDE),
+  "guide is compact and emphasizes one current next action");
 const CP = readFileSync("src/components/cartel/PcartProductionBlockedCheckpoint.tsx", "utf8");
 check("S16", /Technical details/.test(CP) && !/<Button|onClick|<Input/.test(CP), "checkpoint plain-first, technical collapsed, read-only");
 
@@ -96,8 +98,8 @@ check("S16c", /pcartSafeReady \? \([\s\S]{0,200}Next step: Test PCART before lau
 check("S16d", /\{!selectedIsCanonicalPcart \? \(\s*<>\s*<dl/.test(LAUNCH_CONTROL) &&
   LAUNCH_CONTROL.indexOf("<OfficialContractCorrectionPanel") < LAUNCH_CONTROL.indexOf("</>\n                ) : null}"),
   "registration summary/official/notify/broadcast/correction hidden for PCART");
-check("S16e", /compact=\{selectedIsCanonicalPcart\}/.test(LAUNCH_CONTROL) && /PCART setup progress/.test(LAUNCH_CONTROL),
-  "PCART progress card + compact signer summary");
+check("S16e", /compact=\{selectedIsCanonicalPcart\}/.test(LAUNCH_CONTROL) && !/PCART setup progress/.test(LAUNCH_CONTROL),
+  "compact signer summary remains and duplicate PCART progress strip is removed");
 const SAFE_UI = readFileSync("src/components/cartel/TreasurySafeCreatePanel.tsx", "utf8");
 const technicalDetailsIndex = SAFE_UI.indexOf('<summary className="cursor-pointer">Technical details</summary>');
 check("S16f", SAFE_UI.includes("Treasury Safe address") && SAFE_UI.includes("Connected signer wallet") &&
@@ -107,6 +109,19 @@ check("S16f", SAFE_UI.includes("Treasury Safe address") && SAFE_UI.includes("Con
   "pre-creation owner and predicted addresses live only under Technical details");
 check("S16g", /isWorkspaceOwner && !selectedIsCanonicalPcart && internalTestLaunches\.length > 0/.test(LAUNCH_CONTROL),
   "internal test launches stay hidden while canonical PCART is selected");
+const REVIEW = readFileSync("src/components/cartel/PcartReviewLaunchSummary.tsx", "utf8");
+check("S16h", /Review &amp; Launch/.test(REVIEW) && /Fixed supply/.test(REVIEW) &&
+  /Treasury/.test(REVIEW) && /Test rehearsal/.test(REVIEW) && /Auction/.test(REVIEW) && /Mainnet/.test(REVIEW),
+  "canonical review summary contains only authoritative setup facts");
+check("S16i", /Launch unavailable until setup is complete/.test(REVIEW) && /disabled/.test(REVIEW) &&
+  !/onClick|onSubmit|wallet|transaction|deploy|register/i.test(REVIEW),
+  "review launch action is disabled and has no execution wiring");
+check("S16j", /<PcartReviewLaunchSummary/.test(LAUNCH_CONTROL) &&
+  /PCART_FIXED_INTENT\.totalSupplyWhole/.test(LAUNCH_CONTROL),
+  "route supplies canonical review from the frozen PCART intent");
+check("S16k", /showPersistentSaveAction[\s\S]*activeSection !== "lc-overview"[\s\S]*activeSection !== "lc-contract"/.test(LAUNCH_CONTROL) &&
+  /showPersistentSaveAction && saveButton/.test(LAUNCH_CONTROL),
+  "canonical Overview and Deploy & Contract do not show the persistent save bar");
 
 const FORBIDDEN = [
   "contracts/", "artifacts/", "src/lib/launch-artifact-registry.ts", "src/lib/chain-mainnet-registry.ts",

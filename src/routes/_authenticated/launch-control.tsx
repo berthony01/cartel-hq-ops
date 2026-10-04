@@ -109,7 +109,8 @@ import { VerifiedDeploymentEvidencePanel } from "@/components/cartel/VerifiedDep
 import { VerifiedContractRegistrationPanel } from "@/components/cartel/VerifiedContractRegistrationPanel";
 import { ProductionDeploymentRequestPanel } from "@/components/cartel/ProductionDeploymentRequestPanel";
 import { PcartProductionBlockedCheckpoint } from "@/components/cartel/PcartProductionBlockedCheckpoint";
-import { isCanonicalPcartLaunch } from "@/lib/launch-artifact-registry";
+import { PcartReviewLaunchSummary } from "@/components/cartel/PcartReviewLaunchSummary";
+import { PCART_FIXED_INTENT, isCanonicalPcartLaunch } from "@/lib/launch-artifact-registry";
 import { TreasurySignerSetupPanel } from "@/components/cartel/TreasurySignerSetupPanel";
 import { PcartLaunchSetupGuide } from "@/components/cartel/PcartLaunchSetupGuide";
 import { derivePcartReadiness, isPcartTreasurySafeReady } from "@/lib/pcart-launch-readiness";
@@ -1362,6 +1363,9 @@ function LaunchControlPage() {
         Save launch details
       </Button>
     ) : null;
+  const showPersistentSaveAction =
+    !selectedIsCanonicalPcart ||
+    (activeSection !== "lc-overview" && activeSection !== "lc-contract");
 
   return (
     <div className="space-y-6 pb-24 sm:space-y-8 lg:pb-0">
@@ -2854,39 +2858,9 @@ function LaunchControlPage() {
                 </Section>
                 ) : null}
 
-                {/* Deployment path — plain-English ordering for this working
-                    view. Guidance only: it changes no eligibility or state. */}
-                {selected && selectedIsCanonicalPcart ? (
-                  <div className="min-w-0 space-y-2 rounded-lg border border-border-subtle bg-surface-raised/30 p-4">
-                    <p className="text-sm font-semibold leading-snug text-foreground">PCART setup progress</p>
-                    <ol className="grid min-w-0 gap-1.5 text-xs sm:grid-cols-5">
-                      {[
-                        ["Token", "Ready"],
-                        ["Signers", pcartSignerQuery.data ? "Ready" : "Current step"],
-                        [
-                          "Treasury Safe",
-                          pcartSafeReady ? "Ready" : pcartSignerQuery.data ? "Current step" : "Later",
-                        ],
-                        ["Test launch", pcartSafeReady ? "Current step" : "Later"],
-                        ["Mainnet", "Locked"],
-                      ].map(([label, state]) => (
-                        <li
-                          key={label}
-                          className={`min-w-0 rounded-md border px-2.5 py-1.5 ${
-                            state === "Current step"
-                              ? "border-gold/50 bg-gold/10 text-foreground"
-                              : state === "Ready"
-                                ? "border-pepe/35 text-foreground"
-                                : "border-border-subtle text-muted-foreground"
-                          }`}
-                        >
-                          <span className="font-semibold">{label}</span>
-                          <span className="block text-[11px]">{state}</span>
-                        </li>
-                      ))}
-                    </ol>
-                  </div>
-                ) : selected && selectedIsProjectLaunch ? (
+                {/* Generic deployment guidance remains unchanged. Canonical
+                    PCART uses the single authoritative setup guide above. */}
+                {selected && selectedIsProjectLaunch && !selectedIsCanonicalPcart ? (
                   <div className="min-w-0 space-y-2 rounded-lg border border-border-subtle bg-surface-raised/30 p-4">
                     <p className="text-sm font-semibold leading-snug text-foreground">
                       Deployment path — before deployment
@@ -2981,6 +2955,16 @@ function LaunchControlPage() {
                     }
                     onSubmit={(input) => submitProductionRequestMutation.mutate(input)}
                     onWithdraw={(id) => withdrawProductionRequestMutation.mutate(id)}
+                  />
+                ) : null}
+
+                {selected && selectedIsCanonicalPcart && pcartReadiness ? (
+                  <PcartReviewLaunchSummary
+                    tokenName={selected.token_name}
+                    ticker={selected.ticker}
+                    chain={selected.chain}
+                    fixedSupply={`${PCART_FIXED_INTENT.totalSupplyWhole.toLocaleString("en-US")} ${PCART_FIXED_INTENT.symbol}`}
+                    readiness={pcartReadiness}
                   />
                 ) : null}
 
@@ -3158,7 +3142,7 @@ function LaunchControlPage() {
       )}
 
 
-      {selected && !selectedIsInternalTest && saveButton ? (
+      {selected && !selectedIsInternalTest && showPersistentSaveAction && saveButton ? (
         <StickyActionBar desktop="hidden" end={saveButton} />
       ) : null}
 
