@@ -400,3 +400,62 @@ export function isDecimalSalt(value: string): boolean {
   return /^(0|[1-9][0-9]{0,77})$/.test(value) && BigInt(value) < 2n ** 256n;
 }
 
+
+/* ------------------------------------------------------------------ */
+/* Creation receipt provenance (direct OR relayed / smart-wallet)        */
+/* ------------------------------------------------------------------ */
+
+/** keccak256("ProxyCreation(address,address)") — SafeProxyFactory v1.4.1. */
+export const SAFE_PROXY_CREATION_EVENT_TOPIC =
+  "0x4f51faf6c4561ff95f067657e43439f0f856d97c04d9ec9070a6199ad418e235" as const;
+
+export type SafeReceiptProvenance =
+  | { ok: true; path: "DIRECT_FACTORY" | "FACTORY_EVENT" }
+  | { ok: false; reason: "RECEIPT_REVERTED" | "CREATION_PROOF_MISSING" };
+
+export type SafeReceiptPins = { factory: string; singleton: string; topic: string };
+
+export const CANONICAL_SAFE_RECEIPT_PINS: SafeReceiptPins = {
+  factory: SAFE_PROXY_FACTORY,
+  singleton: SAFE_CREATE_SINGLETON,
+  topic: SAFE_PROXY_CREATION_EVENT_TOPIC,
+};
+
+const lc = (v: unknown) => (typeof v === "string" ? v.toLowerCase() : "");
+const topicAddress = (t: unknown) => {
+  const s = lc(t);
+  return /^0x0{24}[0-9a-f]{40}$/.test(s) ? `0x${s.slice(26)}` : null;
+};
+
+/**
+ * Pure provenance check. Success requires status 0x1 AND either the receipt
+ * targets the pinned factory directly, or the receipt carries the pinned
+ * factory's ProxyCreation log for exactly the predicted Safe with the pinned
+ * singleton. tx.to, relay identity, signer type or code presence alone never
+ * count. The fresh canonical Safe verifier must still run afterwards.
+ */
+export function evaluateSafeCreationReceipt(
+  receipt: unknown,
+  predictedSafe: string,
+  pins: SafeReceiptPins = CANONICAL_SAFE_RECEIPT_PINS,
+): SafeReceiptProvenance {
+  const r = (receipt ?? {}) as { status?: unknown; to?: unknown; logs?: unknown };
+  if (r.status !== "0x1") return { ok: false, reason: "RECEIPT_REVERTED" };
+  const factory = lc(pins.factory);
+  const predicted = lc(predictedSafe);
+  const logs = Array.isArray(r.logs) ? r.logs : [];
+  const eventProof = logs.some((raw) => {
+    const l = (raw ?? {}) as { address?: unknown; topics?: unknown; data?: unknown; removed?: unknown };
+    if (l.removed === true || lc(l.address) !== factory) return false;
+    const topics = Array.isArray(l.topics) ? l.topics : [];
+    if (topics.length !== 2 || lc(topics[0]) !== lc(pins.topic)) return false;
+    if (topicAddress(topics[1]) !== predicted) return false;
+    const data = lc(l.data);
+    return data.length === 66 && topicAddress(data) === lc(pins.singleton);
+  });
+  if (lc(r.to) === factory) {
+    // Direct path: preserved behaviour (status + exact factory target).
+    return { ok: true, path: "DIRECT_FACTORY" };
+  }
+  return eventProof ? { ok: true, path: "FACTORY_EVENT" } : { ok: false, reason: "CREATION_PROOF_MISSING" };
+}
