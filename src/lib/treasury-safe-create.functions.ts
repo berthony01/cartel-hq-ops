@@ -8,6 +8,7 @@ import {
 import {
   buildSafeCreationPlan,
   decodeAbiBytes,
+  evaluateSafeCreationReceipt,
   evaluateSafePreflight,
   FACTORY_GET_CHAIN_ID_CALL,
   FACTORY_PROXY_CREATION_CODE_CALL,
@@ -218,8 +219,13 @@ export const verifyAndRecordTreasurySafe = createServerFn({ method: "POST" })
       if (r === null) {
         return { status: "PENDING_RECEIPT", predictedAddress: predicted, verification: null, message: "The transaction is not confirmed yet. Check again shortly; nothing will be resent." };
       }
-      if (r.status !== "0x1" || String(r.to ?? "").toLowerCase() !== SAFE_PROXY_FACTORY.toLowerCase()) {
-        return { status: "RECEIPT_FAILED", predictedAddress: predicted, verification: null, message: "The transaction did not succeed against the official Safe factory." };
+      const provenance = evaluateSafeCreationReceipt(r, predicted);
+      if (!provenance.ok) {
+        const message =
+          provenance.reason === "RECEIPT_REVERTED"
+            ? "The transaction failed on chain, so no Safe was created by it. Nothing will be resent."
+            : "The transaction went through, but it did not show the official Safe factory creating this Safe. Nothing was saved and nothing will be resent.";
+        return { status: "RECEIPT_FAILED", predictedAddress: predicted, verification: null, message };
       }
       if (typeof r.blockNumber !== "string" || BigInt(r.blockNumber) > BigInt(blockHex)) {
         return { status: "PENDING_RECEIPT", predictedAddress: predicted, verification: null, message: "Waiting for the chain to catch up. Check again shortly." };
