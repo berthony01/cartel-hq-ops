@@ -2891,16 +2891,6 @@ function LaunchControlPage() {
                   </div>
                 ) : null}
 
-                {selected && selectedIsCanonicalPcart && pcartReadiness ? (
-                  <PcartReviewLaunchSummary
-                    tokenName={selected.token_name}
-                    ticker={selected.ticker}
-                    chain={selected.chain}
-                    fixedSupply={`${PCART_FIXED_INTENT.totalSupplyWhole.toLocaleString("en-US")} ${PCART_FIXED_INTENT.symbol}`}
-                    readiness={pcartReadiness}
-                  />
-                ) : null}
-
                 {/* PCART Treasury Signer Setup — records the three intended
                     public signer wallets only. It creates no Safe, signs
                     nothing, moves nothing and does not gate the request below. */}
@@ -2965,6 +2955,16 @@ function LaunchControlPage() {
                     }
                     onSubmit={(input) => submitProductionRequestMutation.mutate(input)}
                     onWithdraw={(id) => withdrawProductionRequestMutation.mutate(id)}
+                  />
+                ) : null}
+
+                {selected && selectedIsCanonicalPcart && pcartReadiness ? (
+                  <PcartReviewLaunchSummary
+                    tokenName={selected.token_name}
+                    ticker={selected.ticker}
+                    chain={selected.chain}
+                    fixedSupply={`${PCART_FIXED_INTENT.totalSupplyWhole.toLocaleString("en-US")} ${PCART_FIXED_INTENT.symbol}`}
+                    readiness={pcartReadiness}
                   />
                 ) : null}
 
