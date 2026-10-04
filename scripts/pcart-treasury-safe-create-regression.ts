@@ -26,6 +26,8 @@ import {
   SAFE_PROXY_FACTORY,
   SAFE_PROXY_FACTORY_CODEHASH,
   type SafePreflightReads,
+  evaluateSafeCreationReceipt,
+  SAFE_PROXY_CREATION_EVENT_TOPIC,
 } from "../src/lib/treasury-safe-create";
 import { evaluateSafeSendGate } from "../src/lib/treasury-safe-wallet";
 import { derivePcartReadiness, isPcartTreasurySafeReady } from "../src/lib/pcart-launch-readiness";
@@ -388,6 +390,41 @@ check(
 {
   const p = readFileSync("src/components/cartel/TreasurySafeCreatePanel.tsx", "utf8");
   check("WR-7b", /REOWN_WALLETCONNECT_UNAVAILABLE: "WalletConnect could not start on this device\. Reload the page and try again\. If it still fails, open CARTEL HQ in your wallet's browser or Chrome\."/.test(p) && !/CHOOSER_UNAVAILABLE[^\]]*REOWN_WALLETCONNECT_UNAVAILABLE/.test(p) && /Connection code: \{connectNotice\}/.test(p), "persistent copy, no injected fallback, sanitized code only");
+}
+
+{
+  // Receipt provenance (direct + relayed). Synthetic addresses only.
+  const SAFE = "0x1111111111111111111111111111111111111111";
+  const OTHER = "0x2222222222222222222222222222222222222222";
+  const RELAY = "0x3333333333333333333333333333333333333333";
+  const word = (a: string) => `0x${"0".repeat(24)}${a.slice(2).toLowerCase()}`;
+  const creationLog = (o: { address?: string; proxy?: string; singleton?: string; topic?: string } = {}) => ({
+    address: o.address ?? SAFE_PROXY_FACTORY,
+    topics: [o.topic ?? SAFE_PROXY_CREATION_EVENT_TOPIC, word(o.proxy ?? SAFE)],
+    data: word(o.singleton ?? SAFE_CREATE_SINGLETON),
+  });
+  const relayed = (logs: unknown[], status = "0x1") => ({ status, to: RELAY, logs });
+  check("RP-0", SAFE_PROXY_CREATION_EVENT_TOPIC === keccak256(new TextEncoder().encode("ProxyCreation(address,address)")), "pinned event topic = keccak(ProxyCreation(address,address))");
+  const d = evaluateSafeCreationReceipt({ status: "0x1", to: SAFE_PROXY_FACTORY, logs: [] }, SAFE);
+  check("RP-1", d.ok && d.path === "DIRECT_FACTORY", "direct successful factory receipt passes");
+  const rl = evaluateSafeCreationReceipt(relayed([{ address: RELAY, topics: ["0xabc"], data: "0x" }, creationLog()]), SAFE);
+  check("RP-2", rl.ok && rl.path === "FACTORY_EVENT", "relayed receipt with exact canonical ProxyCreation passes");
+  const bad = (x: ReturnType<typeof evaluateSafeCreationReceipt>) => !x.ok && x.reason === "CREATION_PROOF_MISSING";
+  check("RP-3", bad(evaluateSafeCreationReceipt(relayed([creationLog({ address: OTHER })]), SAFE)), "wrong factory log fails");
+  check("RP-4", bad(evaluateSafeCreationReceipt(relayed([creationLog({ proxy: OTHER })]), SAFE)), "wrong proxy fails");
+  check("RP-5", bad(evaluateSafeCreationReceipt(relayed([creationLog({ singleton: OTHER })]), SAFE)), "wrong singleton fails");
+  check("RP-5b", bad(evaluateSafeCreationReceipt(relayed([creationLog({ topic: `0x${"ab".repeat(32)}` })]), SAFE)), "wrong event signature fails");
+  check("RP-6", bad(evaluateSafeCreationReceipt(relayed([{ address: RELAY, topics: [], data: "0x" }]), SAFE)), "successful unrelated receipt fails");
+  const rv1 = evaluateSafeCreationReceipt({ status: "0x0", to: SAFE_PROXY_FACTORY, logs: [] }, SAFE);
+  const rv2 = evaluateSafeCreationReceipt(relayed([creationLog()], "0x0"), SAFE);
+  check("RP-7", !rv1.ok && rv1.reason === "RECEIPT_REVERTED" && !rv2.ok && rv2.reason === "RECEIPT_REVERTED", "reverted receipts fail (direct and relayed)");
+  check("RP-7b", bad(evaluateSafeCreationReceipt({ ...relayed([creationLog()]), logs: [{ ...creationLog(), removed: true }] }, SAFE)), "removed log fails");
+  const f = readFileSync("src/lib/treasury-safe-create.functions.ts", "utf8");
+  const v = f.slice(f.indexOf("export const verifyAndRecordTreasurySafe"), f.indexOf("export type TreasurySafeStatus"));
+  check("RP-8", /if \(data\.txHash\) \{/.test(v) && /evaluateSafeCreationReceipt\(r, predicted\)/.test(v) && /const verification = await readCanonicalSafeState\(endpoint, predicted, chainId, blockHex, plan\.owners\)/.test(v) && v.indexOf("readCanonicalSafeState") > v.indexOf("evaluateSafeCreationReceipt") && /_safe_creation_tx_hash: data\.txHash/.test(v), "txHash=null still verifies Safe; verifier always runs before save; tx hash persisted");
+  check("RP-8b", !/did not succeed against the official Safe factory/.test(f) && /failed on chain/.test(f) && /did not show the official Safe factory creating this Safe/.test(f), "copy distinguishes revert vs missing proof");
+  const src = f + readFileSync("src/lib/treasury-safe-create.ts", "utf8");
+  check("RP-9", !/d4376d0e|e0d055b3|a068b94e|0x5ff137d4/i.test(src), "no hard-coded tx/Safe/signer/relay special case");
 }
 if (failures > 0) {
   console.error(`\n${failures} CHECK(S) FAILED`);
