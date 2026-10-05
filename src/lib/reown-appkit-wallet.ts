@@ -110,6 +110,16 @@ let appKitInitPromise: Promise<{ appKit: AppKitHandle | null; notice: AppKitNoti
  * readiness checks. Module-private; never exported.
  */
 let wagmiAdapterHandle: InstanceType<AppKitBridge["WagmiAdapter"]> | null = null;
+/**
+ * Browser-lifecycle UniversalProvider handle, retained ONLY so an explicit
+ * reset can use its official `disconnect()` / `cleanupPendingPairings()` when a
+ * rehydrated WalletConnect session survives AppKit's own disconnect. Module-private.
+ */
+let universalProviderHandle: {
+  session?: unknown;
+  disconnect: () => Promise<void>;
+  cleanupPendingPairings: () => Promise<void>;
+} | null = null;
 
 export function getReownProjectId(): string | null {
   const raw = (import.meta.env as Record<string, string | undefined>)[
@@ -375,6 +385,7 @@ async function runCreateAppKit(
       return { appKit: null, notice: "REOWN_WALLETCONNECT_UNAVAILABLE" };
     }
     wagmiAdapterHandle = wagmiAdapter;
+    universalProviderHandle = universalProvider;
     return { appKit: instance, notice: null };
   } catch (error) {
     wagmiAdapterHandle = null;
@@ -558,20 +569,98 @@ export type AppKitConnectOutcome =
  * chooser, never signs and never sends.
  */
 export async function resetAppKitConnection(): Promise<boolean> {
-  const appKit = appKitHandle;
-  // Never initialized in this browser lifecycle => there is nothing to inherit.
-  if (!appKit) return true;
+  /*
+   * COLD-START SAFE. An empty module handle is NOT proof that nothing persisted:
+   * after a mobile reload the WalletConnect session/pairing lives in the
+   * CARTEL HQ storage namespace and is rehydrated by initialization. So this
+   * explicit reset initializes AppKit FIRST, then tears down and proves.
+   */
+  return await performFreshReset({
+    ensure: async () => (await ensureAppKit()).appKit !== null,
+    disconnectAppKit: async () => {
+      const appKit = appKitHandle;
+      if (!appKit) throw new Error("no appkit");
+      await appKit.disconnect("eip155");
+    },
+    hasWalletConnectSession: () => universalProviderHandle?.session != null,
+    disconnectWalletConnect: async () => {
+      const up = universalProviderHandle;
+      if (up?.session) await up.disconnect();
+    },
+    cleanupPendingPairings: async () => {
+      await universalProviderHandle?.cleanupPendingPairings();
+    },
+    closeModal: async () => {
+      await appKitHandle?.close();
+    },
+    isFresh: () => {
+      const appKit = appKitHandle;
+      if (!appKit) return false;
+      return (
+        appKit.getIsConnectedState() === false &&
+        getAppKitAddress() === null &&
+        getAppKitWalletProvider() === null &&
+        universalProviderHandle?.session == null
+      );
+    },
+    settle: () => new Promise<void>((r) => setTimeout(r, RESET_SETTLE_STEP_MS)),
+  });
+}
+
+export const RESET_SETTLE_STEP_MS = 150;
+export const RESET_SETTLE_MAX_CHECKS = 6;
+
+export type FreshResetDeps = {
+  ensure: () => Promise<boolean>;
+  disconnectAppKit: () => Promise<void>;
+  hasWalletConnectSession: () => boolean;
+  disconnectWalletConnect: () => Promise<void>;
+  cleanupPendingPairings: () => Promise<void>;
+  closeModal: () => Promise<void>;
+  isFresh: () => boolean;
+  settle: () => Promise<void>;
+};
+
+/**
+ * Pure, dependency-injected teardown core (deterministically testable).
+ * Order: initialize -> close stale view -> official AppKit disconnect ->
+ * official UniversalProvider disconnect if a session survives -> pending
+ * pairing cleanup -> bounded settle proving freshness. Never touches storage
+ * keys, never opens the chooser. Unprovable => false (caller fails closed).
+ */
+export async function performFreshReset(d: FreshResetDeps): Promise<boolean> {
   try {
-    await appKit.disconnect("eip155");
+    if (!(await d.ensure())) return false;
   } catch {
-    // Teardown is PROVEN below, never assumed from the absence of an error.
+    return false;
+  }
+  const bestEffort = async (fn: () => Promise<void>) => {
+    try {
+      await fn();
+    } catch {
+      // Teardown is PROVEN below, never assumed from the absence of an error.
+    }
+  };
+  await bestEffort(d.closeModal);
+  await bestEffort(d.disconnectAppKit);
+  let wcSession = true;
+  try {
+    wcSession = d.hasWalletConnectSession();
+  } catch {
+    wcSession = true;
+  }
+  if (wcSession) await bestEffort(d.disconnectWalletConnect);
+  await bestEffort(d.cleanupPendingPairings);
+  for (let i = 0; i < RESET_SETTLE_MAX_CHECKS; i++) {
+    try {
+      if (d.isFresh()) return true;
+    } catch {
+      return false;
+    }
+    await d.settle();
   }
   try {
-    return (
-      appKit.getIsConnectedState() === false &&
-      getAppKitAddress() === null &&
-      getAppKitWalletProvider() === null
-    );
+    return d.isFresh();
   } catch {
     return false;
   }

@@ -1126,12 +1126,13 @@ const resetBody =
 check(
   "W1",
   resetBody.length > 0 &&
+    /return await performFreshReset\(\{\s*\n\s*ensure: async \(\) => \(await ensureAppKit\(\)\)\.appKit !== null,/.test(resetBody) &&
     /await appKit\.disconnect\("eip155"\);/.test(resetBody) &&
     /appKit\.getIsConnectedState\(\) === false &&\s*\n\s*getAppKitAddress\(\) === null &&\s*\n\s*getAppKitWalletProvider\(\) === null/.test(
       resetBody,
     ) &&
-    /catch \{\s*\n\s*return false;/.test(resetBody),
-  "teardown is PROVEN from AppKit state, and an unprovable teardown returns false",
+    !/if \(!appKit\) return true;/.test(resetBody),
+  "teardown initializes first, is PROVEN from AppKit state, and an empty handle is never proof of freshness",
 );
 check(
   "W2",
