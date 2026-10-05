@@ -164,7 +164,12 @@ check("F4", /"LAUNCH_CHAIN_MISMATCH"/.test(attemptFn) && /RECIPIENT_MUST_MATCH_D
 const MIG_FILE = "20260927141715_pcart_l3_rehearsal_and_mainnet_isolation.sql";
 const MIG = readdirSync("supabase/migrations").includes(MIG_FILE) ? read(`supabase/migrations/${MIG_FILE}`) : "";
 const MIG_PCART = readdirSync("supabase/migrations").filter((f) => /pepecartel-token-v1/.test(read(`supabase/migrations/${f}`)));
-check("D0", MIG.length > 0 && MIG_PCART.length === 1 && MIG_PCART[0] === MIG_FILE &&
+// The only other authorized PCART migration is the draft-recovery v2 RPC, which
+// adds a NEW function and never redefines the protected original.
+const RECOVERY_MIG = "20261005021534_a03a1d58-ef0d-45a5-a3d3-ea0a9bc0390e.sql";
+const MIG_PCART_PROTECTED = MIG_PCART.filter((f) => f !== RECOVERY_MIG ||
+  /FUNCTION public\.create_launch_chain_pcart_rehearsal_attempt\(|is_canonical_pcart_launch\(\)? *RETURNS|enforce_canonical_pcart_no_production_deployment\(\) *RETURNS/.test(read(`supabase/migrations/${f}`)));
+check("D0", MIG.length > 0 && MIG_PCART_PROTECTED.length === 1 && MIG_PCART_PROTECTED[0] === MIG_FILE &&
   MIG.includes("FUNCTION public.create_launch_chain_pcart_rehearsal_attempt(") &&
   MIG.includes("FUNCTION private.is_canonical_pcart_launch(") &&
   MIG.includes("FUNCTION public.enforce_canonical_pcart_no_production_deployment()") &&
