@@ -2252,6 +2252,70 @@ export type Database = {
         }
         Relationships: []
       }
+      pcart_production_readiness_approvals: {
+        Row: {
+          approved_at: string
+          approved_by: string
+          artifact_id: string
+          id: string
+          launch_id: string
+          readiness_fingerprint: string
+          rehearsal_deployment_id: string
+          rehearsal_tx_hash: string
+          safe_address: string
+          safe_verified_at: string
+          signer_config_id: string
+        }
+        Insert: {
+          approved_at?: string
+          approved_by: string
+          artifact_id?: string
+          id?: string
+          launch_id: string
+          readiness_fingerprint: string
+          rehearsal_deployment_id: string
+          rehearsal_tx_hash: string
+          safe_address: string
+          safe_verified_at: string
+          signer_config_id: string
+        }
+        Update: {
+          approved_at?: string
+          approved_by?: string
+          artifact_id?: string
+          id?: string
+          launch_id?: string
+          readiness_fingerprint?: string
+          rehearsal_deployment_id?: string
+          rehearsal_tx_hash?: string
+          safe_address?: string
+          safe_verified_at?: string
+          signer_config_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pcart_production_readiness_approva_rehearsal_deployment_id_fkey"
+            columns: ["rehearsal_deployment_id"]
+            isOneToOne: false
+            referencedRelation: "launch_chain_deployments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pcart_production_readiness_approvals_launch_id_fkey"
+            columns: ["launch_id"]
+            isOneToOne: true
+            referencedRelation: "launches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pcart_production_readiness_approvals_signer_config_id_fkey"
+            columns: ["signer_config_id"]
+            isOneToOne: false
+            referencedRelation: "launch_treasury_signer_configs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       platform_message_templates: {
         Row: {
           created_at: string
@@ -5476,6 +5540,28 @@ export type Database = {
         }
         Returns: Json
       }
+      approve_canonical_pcart_production_readiness: {
+        Args: { _launch_id: string }
+        Returns: {
+          approved_at: string
+          approved_by: string
+          artifact_id: string
+          id: string
+          launch_id: string
+          readiness_fingerprint: string
+          rehearsal_deployment_id: string
+          rehearsal_tx_hash: string
+          safe_address: string
+          safe_verified_at: string
+          signer_config_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "pcart_production_readiness_approvals"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       archive_sticker_pack: { Args: { _pack_id: string }; Returns: Json }
       arm_launch_chain_production_canary_execution: {
         Args: {
@@ -6390,6 +6476,10 @@ export type Database = {
       format_launch_schedule_snapshot: {
         Args: { _at: string; _tz: string; _we: string; _ws: string }
         Returns: string
+      }
+      get_canonical_pcart_production_readiness: {
+        Args: { _launch_id: string }
+        Returns: Json
       }
       get_cartel_network_launch: {
         Args: { _slug: string }

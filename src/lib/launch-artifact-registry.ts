@@ -7,10 +7,12 @@
  *
  * ENVIRONMENT ALLOWLIST (mirrors the staged database constraint):
  *   - cartel-fixed-erc20-v1 : TESTNET + PRODUCTION (unchanged).
- *   - pepecartel-token-v1   : TESTNET rehearsal evidence ONLY. It is NOT
- *     production-allowlisted. Production allowlisting requires a separately
- *     reviewed migration after rehearsal, the real 2-of-3 signer configuration
- *     and canonical Safe verification.
+ *   - pepecartel-token-v1   : TESTNET + PRODUCTION. Production is allowlisted
+ *     only after the owner's durable final production readiness approval
+ *     (pcart_production_readiness_approvals); the database guard refuses any
+ *     canonical production row without it. Mainnet execution remains
+ *     independently locked by the ROBINHOOD_MAINNET_DEPLOYMENT control, and no
+ *     dedicated PCART production attempt/send path exists yet.
  *
  * Nothing here signs, broadcasts, writes state or touches a network.
  */
@@ -35,7 +37,7 @@ export type LaunchNetworkEnvironment = "TESTNET" | "PRODUCTION";
 
 export const ARTIFACT_ENVIRONMENT_ALLOWLIST = {
   [CARTEL_FIXED_ERC20_ARTIFACT_ID]: ["TESTNET", "PRODUCTION"],
-  [PEPECARTEL_TOKEN_ARTIFACT_ID]: ["TESTNET"],
+  [PEPECARTEL_TOKEN_ARTIFACT_ID]: ["TESTNET", "PRODUCTION"],
 } as const satisfies Record<string, readonly LaunchNetworkEnvironment[]>;
 
 export type RegisteredArtifactId = keyof typeof ARTIFACT_ENVIRONMENT_ALLOWLIST;
