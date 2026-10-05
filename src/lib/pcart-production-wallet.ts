@@ -199,7 +199,7 @@ export async function readPcartWalletEvidence(): Promise<PcartWalletEvidence | n
   const p = b.provider;
   const safe = async (method: string, params?: unknown[]) => {
     try {
-      return await p.request({ method, params });
+      return await p.request(params ? { method, params } : { method });
     } catch {
       return null;
     }
