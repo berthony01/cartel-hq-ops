@@ -31,7 +31,7 @@ type Ctx = { supabase: any; userId: string };
 type Client = ReturnType<typeof createPublicClient>;
 
 export type PcartVerifyResult =
-  | { ok: true; outcome: string; status: string; finalityState: string | null; reason?: string; failureCode?: string }
+  | { ok: true; outcome: string; status: string; finalityState: string | null; reason?: string | undefined; failureCode?: string | undefined }
   | { ok: false; reason: string };
 
 async function loadIntent(ctx: Ctx, deploymentId: string) {
@@ -163,8 +163,8 @@ export const verifyPcartProductionDeployment = createServerFn({ method: "POST" }
     }
     const args: Record<string, unknown> = { _deployment_id: d.id, _outcome: out.kind, _observed_tx_hash: intent.txHash };
     if (out.kind === "FAILED") {
-      args._failure_code = out.code;
-      args._failure_detail = `PCART P6 managed verification: ${out.code}`;
+      args["_failure_code"] = out.code;
+      args["_failure_detail"] = `PCART P6 managed verification: ${out.code}`;
     } else if (out.kind === "CONFIRMED") {
       Object.assign(args, {
         _contract_address: out.contractAddress, _block_number: Number(out.blockNumber), _block_hash: out.blockHash,
