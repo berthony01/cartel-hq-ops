@@ -184,6 +184,15 @@ const ENV_IDX_MIG = "20261005101321_54225f07-be67-4257-aea1-f36aa287405a.sql";
 const ENV_IDX_SQL = read(`supabase/migrations/${ENV_IDX_MIG}`);
 const P3_MIG = "20261005102647_27d1aa5f-67b1-4889-b7ba-352214edcc76.sql";
 const P3_SQL = read(`supabase/migrations/${P3_MIG}`);
+// Authorized getter lifecycle fix: replaces ONLY the readiness getter so it uses
+// evidence(false); approval/evidence functions untouched.
+const GETTER_FIX_MIG = "20261005105208_3b6b2722-c91d-4d33-8de3-4369747b419b.sql";
+const GETTER_FIX_SQL = read(`supabase/migrations/${GETTER_FIX_MIG}`);
+check("D0l", /CREATE OR REPLACE FUNCTION public\.get_canonical_pcart_production_readiness/.test(GETTER_FIX_SQL) &&
+  /pcart_production_readiness_evidence\(_launch_id, false\)/.test(GETTER_FIX_SQL) &&
+  !/pcart_production_readiness_evidence\(_launch_id, true\)/.test(GETTER_FIX_SQL) &&
+  !/FUNCTION public\.approve_canonical_pcart_production_readiness|FUNCTION private\.pcart_production_readiness_evidence|CREATE TABLE|ALTER TABLE|CREATE POLICY|INSERT |UPDATE |DELETE /.test(GETTER_FIX_SQL),
+  "getter fix migration only replaces the readiness getter with evidence(false)");
 check("D0h", /CREATE OR REPLACE FUNCTION public\.enforce_canonical_pcart_no_production_deployment/.test(HARDEN_SQL) &&
   /ELSIF NEW\.artifact_id = 'pepecartel-token-v1' THEN/.test(HARDEN_SQL) &&
   /reserved for the canonical PEPECARTEL launch/.test(HARDEN_SQL) &&
@@ -201,7 +210,7 @@ check("D0i", /CREATE OR REPLACE FUNCTION public\.create_canonical_pcart_producti
   !/CREATE TABLE|ALTER TABLE|CREATE POLICY/.test(P2_FIX_SQL) &&
   !/token_total_supply_text,/.test(P2_FIX_SQL),
   "P2 fix migration only replaces the draft RPC; the generated column is never inserted");
-const MIG_PCART_PROTECTED = MIG_PCART.filter((f) => f !== READINESS_MIG && f !== HARDEN_MIG && f !== P2_MIG && f !== P2_FIX_MIG && f !== ENV_IDX_MIG && f !== P3_MIG).filter((f) => f !== RECOVERY_MIG ||
+const MIG_PCART_PROTECTED = MIG_PCART.filter((f) => f !== READINESS_MIG && f !== HARDEN_MIG && f !== P2_MIG && f !== P2_FIX_MIG && f !== ENV_IDX_MIG && f !== P3_MIG && f !== GETTER_FIX_MIG).filter((f) => f !== RECOVERY_MIG ||
   /FUNCTION public\.create_launch_chain_pcart_rehearsal_attempt\(|is_canonical_pcart_launch\(\)? *RETURNS|enforce_canonical_pcart_no_production_deployment\(\) *RETURNS/.test(read(`supabase/migrations/${f}`)));
 check("D0", MIG.length > 0 && MIG_PCART_PROTECTED.length === 1 && MIG_PCART_PROTECTED[0] === MIG_FILE &&
   MIG.includes("FUNCTION public.create_launch_chain_pcart_rehearsal_attempt(") &&

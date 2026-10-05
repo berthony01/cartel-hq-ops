@@ -22,9 +22,14 @@ const GUARD_SQL = HARDEN_FILES.length
   ? read(`supabase/migrations/${HARDEN_FILES[HARDEN_FILES.length - 1]}`)
   : SQL;
 const fn = (name: string) => SQL.split(`FUNCTION ${name}(`)[1]?.split("$$;")[0] ?? "";
+// Getter lifecycle fix: the newest migration defining the getter wins (P3 fix switches it to evidence(false)).
+const GETTER_FILES = readdirSync("supabase/migrations").filter(
+  (f) => f > MIG_FILE && read(`supabase/migrations/${f}`).includes("FUNCTION public.get_canonical_pcart_production_readiness"),
+);
+const GETTER_SQL = GETTER_FILES.length ? read(`supabase/migrations/${GETTER_FILES[GETTER_FILES.length - 1]}`) : SQL;
 const EV = fn("private.pcart_production_readiness_evidence");
 const APPROVE = fn("public.approve_canonical_pcart_production_readiness");
-const GET = fn("public.get_canonical_pcart_production_readiness");
+const GET = GETTER_SQL.split("FUNCTION public.get_canonical_pcart_production_readiness(")[1]?.split("$$;")[0] ?? "";
 const GUARD = ((s) => s.split("FUNCTION public.enforce_canonical_pcart_no_production_deployment(")[1]?.split("$$;")[0] ?? "")(GUARD_SQL);
 
 // 1 non-owner
@@ -95,6 +100,16 @@ check("14b", canOfferApproval(base) && !canOfferApproval({ ...base, is_platform_
   !canOfferApproval({ ...base, approval: { id: "x", artifact_id: "pepecartel-token-v1", rehearsal_tx_hash: "", safe_address: "", approved_at: "", evidence_still_matches: true } }) &&
   !canOfferApproval(undefined), "approval action offered only when owner + all evidence proven");
 check("15", /is_platform_owner\(uid\)/.test(GET) && /workspace_members/.test(GET), "read RPC limited to owner or workspace members");
+// 19 getter lifecycle semantics: getter uses evidence(false) so the expected production DRAFT
+// does not stale an existing approval; initial approval still requires evidence(true).
+check("19a", /pcart_production_readiness_evidence\(_launch_id, false\)/.test(GET) && !/pcart_production_readiness_evidence\(_launch_id, true\)/.test(GET),
+  "getter calls evidence(false) — expected production DRAFT does not stale the approval");
+check("19b", /pcart_production_readiness_evidence\(_launch_id, true\)/.test(APPROVE) && !/pcart_production_readiness_evidence\(_launch_id, false\)/.test(APPROVE),
+  "initial approval still calls evidence(true) — zero production rows required to approve");
+check("19c", /readiness_fingerprint = ev->>'fingerprint'/.test(GET) && /evidence_still_matches/.test(GET),
+  "getter still compares approval fingerprint to fresh evidence — rehearsal/Safe/fingerprint changes still stale it");
+check("19d", /execution_enabled = false AND c\.emergency_stop_engaged = true/.test(GET),
+  "getter still reports execution lock state");
 
 console.log(`pcart-production-readiness: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
