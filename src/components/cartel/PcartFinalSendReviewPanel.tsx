@@ -67,7 +67,7 @@ export function PcartFinalSendReviewPanel({ attempt }: { attempt: DeploymentRow 
       const ev = await readPcartWalletEvidence();
       const b = evaluatePcartWalletBinding(ev, { deployer, nonce });
       if (!b.ok || !ev) throw new Error("Bind the exact deployer wallet on Robinhood Chain with the saved nonce first.");
-      if (!prepQuery.data || !prepActive) throw new Error(TEXT.PREPARATION_NOT_ACTIVE);
+      if (!prepQuery.data || !prepActive) throw new Error(TEXT["PREPARATION_NOT_ACTIVE"]);
       const r = await runReview({ data: { deploymentId: attempt.id, preparationAuthorizationId: prepQuery.data.id, wallet: ev.account } });
       if (!r.ok) throw new Error(TEXT[r.reason] ?? "Final send review failed. Nothing was saved or sent.");
       return r;
@@ -79,7 +79,7 @@ export function PcartFinalSendReviewPanel({ attempt }: { attempt: DeploymentRow 
   const prepareMutation = useMutation({
     mutationFn: async () => {
       if (!review || Date.now() >= review.expiresAt) throw new Error("Review expired. Run it again.");
-      if (!ack || !isPcartAddressConfirmation(typed, review.predictedAddress)) throw new Error(TEXT.ADDRESS_CONFIRMATION_MISMATCH);
+      if (!ack || !isPcartAddressConfirmation(typed, review.predictedAddress)) throw new Error(TEXT["ADDRESS_CONFIRMATION_MISMATCH"]);
       const ev = await readPcartWalletEvidence();
       if (!evaluatePcartWalletBinding(ev, { deployer, nonce }).ok || !ev) throw new Error("Wallet evidence changed. Run the review again.");
       const r = await runPrepare({ data: { deploymentId: attempt.id, preparationAuthorizationId: review.preparationAuthorizationId, wallet: ev.account, reviewedUnsignedTxFingerprint: review.unsignedTxFingerprint, typedPredictedAddress: typed } });
