@@ -16,9 +16,9 @@ const mainnet = strip(readFileSync("src/lib/wallet-connector.ts", "utf8"));
 const route = strip(readFileSync("src/routes/_authenticated/chain-launcher.tsx", "utf8"));
 
 /** Simulated AppKit + UniversalProvider. `persisted` = session in WC storage before init. */
-function sim(o: { persisted?: boolean; cachedLive?: boolean; appKitDisconnectWorks?: boolean; wcDisconnectWorks?: boolean; lagChecks?: number; ensureOk?: boolean }) {
+function sim(o: { persisted?: boolean; cachedLive?: boolean; appKitDisconnectWorks?: boolean; wcDisconnectWorks?: boolean; lagChecks?: number; ensureOk?: boolean; ctrlWc?: boolean; ctrlClearWorks?: boolean; ctrlClearThrows?: boolean; ctrlUnreadable?: boolean; externalDirtyAfterFirst?: boolean }) {
   const log: string[] = [];
-  const st = { initialized: !!o.cachedLive, appConnected: !!o.cachedLive, wcSession: !!o.cachedLive, lag: o.lagChecks ?? 0, opened: false };
+  const st = { initialized: !!o.cachedLive, appConnected: !!o.cachedLive, wcSession: !!o.cachedLive, lag: o.lagChecks ?? 0, opened: false, ctrlWc: !!o.ctrlWc, clears: 0, freshCalls: 0 };
   const deps: FreshResetDeps = {
     ensure: async () => { log.push("ensure"); if (o.ensureOk === false) return false; if (!st.initialized) { st.initialized = true; if (o.persisted) { st.appConnected = true; st.wcSession = true; } } return true; },
     closeModal: async () => { log.push("close"); },
@@ -26,7 +26,9 @@ function sim(o: { persisted?: boolean; cachedLive?: boolean; appKitDisconnectWor
     hasWalletConnectSession: () => st.wcSession,
     disconnectWalletConnect: async () => { log.push("wc.disconnect"); if (o.wcDisconnectWorks !== false) st.wcSession = false; },
     cleanupPendingPairings: async () => { log.push("wc.cleanupPairings"); },
-    isFresh: () => { log.push("isFresh"); if (st.lag > 0) { st.lag--; return false; } return st.initialized && !st.appConnected && !st.wcSession; },
+    isFresh: () => { log.push("isFresh"); st.freshCalls++; if (o.externalDirtyAfterFirst && st.freshCalls > 1) return false; if (st.lag > 0) { st.lag--; return false; } return st.initialized && !st.appConnected && !st.wcSession; },
+    hasControllerWalletConnect: () => { log.push("ctrl.has"); if (o.ctrlUnreadable) throw new Error("x"); return st.ctrlWc; },
+    clearControllerConnections: () => { log.push("ctrl.clear"); st.clears++; if (o.ctrlClearThrows) throw new Error("x"); if (o.ctrlClearWorks !== false) st.ctrlWc = false; },
     settle: async () => { log.push("settle"); },
   };
   // Mirrors the connector contract: chooser opens only if reset returned true.
@@ -52,6 +54,37 @@ function sim(o: { persisted?: boolean; cachedLive?: boolean; appKitDisconnectWor
   check("E2", ok && settles === 2 && !r2 && s2.log.filter((x) => x === "settle").length <= 6, "async settle is bounded (max 6 checks) and never unbounded"); }
 { const s = sim({ persisted: true }); await s.connect();
   check("E3", s.log.indexOf("close") > 0 && s.log.indexOf("close") < s.log.indexOf("open"), "stale modal is closed before a new Connect view"); }
+
+// ---- Controller (chooser-disabling) state ----
+{ const s = sim({ persisted: true, ctrlWc: true }); const ok = await s.connect();
+  const iC = s.log.indexOf("ctrl.clear"), iO = s.log.indexOf("open");
+  const lastFreshBeforeClear = s.log.slice(0, iC).lastIndexOf("isFresh");
+  check("K", ok && s.st.clears === 1 && !s.st.ctrlWc && iC > s.log.indexOf("wc.cleanupPairings") && iC < iO && lastFreshBeforeClear > s.log.indexOf("ctrl.has"), "cold-start stale controller WalletConnect entry with clean external evidence is cleared (after re-proof), then chooser may open"); }
+{ const s1 = sim({ persisted: true, ctrlWc: true, wcDisconnectWorks: false }); const r1 = await s1.connect();
+  const s2 = sim({ persisted: true, ctrlWc: true, appKitDisconnectWorks: false }); const r2 = await s2.connect();
+  const s3 = sim({ persisted: true, ctrlWc: true, externalDirtyAfterFirst: true }); const r3 = await s3.connect();
+  check("L", !r1 && !r2 && !r3 && s1.st.clears + s2.st.clears + s3.st.clears === 0 && !s1.st.opened && !s2.st.opened && !s3.st.opened, "external evidence not clean => controller is NEVER cleared; fail closed"); }
+{ const s1 = sim({ persisted: true, ctrlWc: true, ctrlClearWorks: false }); const r1 = await s1.connect();
+  const s2 = sim({ persisted: true, ctrlWc: true, ctrlClearThrows: true }); const r2 = await s2.connect();
+  const s3 = sim({ persisted: true, ctrlUnreadable: true }); const r3 = await s3.connect();
+  check("M", !r1 && !r2 && !r3 && !s1.st.opened && !s2.st.opened && !s3.st.opened && s1.log.filter((x) => x === "settle").length <= 6 && s3.st.clears === 0, "uncleared / throwing / unreadable controller state fails closed (bounded)"); }
+{ const s = sim({ persisted: true }); const ok = await s.connect();
+  check("N", ok && s.st.clears === 0 && s.log.includes("ctrl.has"), "normal fresh state: controller inspected, never mutated"); }
+
+// ---- Exact installed AppKit 1.8.24 source condition ----
+const NM = "node_modules/@reown";
+const ver = (pkg: string) => JSON.parse(readFileSync(`${NM}/${pkg}/package.json`, "utf8")).version;
+const list = readFileSync(`${NM}/appkit-scaffold-ui/dist/esm/src/partials/w3m-connector-list/index.js`, "utf8");
+const widget = readFileSync(`${NM}/appkit-scaffold-ui/dist/esm/src/partials/w3m-all-wallets-widget/index.js`, "utf8");
+const wuiStyles = readFileSync(`${NM}/appkit-ui/dist/esm/src/composites/wui-list-wallet/styles.js`, "utf8");
+const commonConst = readFileSync(`${NM}/appkit-common/dist/esm/src/utils/ConstantsUtil.js`, "utf8");
+check("S1", ["appkit", "appkit-controllers", "appkit-scaffold-ui", "appkit-ui", "appkit-common"].every((p) => ver(p) === "1.8.24") && JSON.parse(readFileSync("package.json", "utf8")).dependencies["@reown/appkit-controllers"] === "1.8.24", "installed AppKit packages are 1.8.24; controllers pinned exactly");
+check("S2", /const hasWcConnection = ConnectionController\.hasAnyConnection\(CommonConstantsUtil\.CONNECTOR_ID\.WALLET_CONNECT\);\s*const disabled = hasWcConnection;/.test(list) && /item\.subtype === 'walletConnect' \|\| item\.subtype === 'external' \? hasWcConnection : false/.test(list) && /\?disabled=\$\{disabled\}/.test(list), "wallet tiles are disabled exactly when hasAnyConnection(WALLET_CONNECT) is true");
+check("S3", /hasAnyConnection\(CommonConstantsUtil\.CONNECTOR_ID\.WALLET_CONNECT\)/.test(widget) && /\?disabled=\$\{hasWcConnection\}/.test(widget) && /button:disabled \{[^}]*opacity: 0\.5/.test(wuiStyles), "Search Wallet uses the same flag; disabled button renders at 0.5 opacity");
+check("S4", /WALLET_CONNECT: 'walletConnect'/.test(commonConst) && /APPKIT_WALLET_CONNECT_CONNECTOR_ID = "walletConnect"/.test(appkit), "connector id constant matches installed appkit-common");
+const bridge = strip(readFileSync("src/lib/reown-appkit-browser.ts", "utf8"));
+check("S5", /export \{ ConnectionController \} from "@reown\/appkit-controllers";/.test(bridge) && /hasAnyConnection\(APPKIT_WALLET_CONNECT_CONNECTOR_ID\)/.test(resetBodyFull()) && /setConnections\(\[\], "eip155"\)/.test(resetBodyFull()) && !/from "@reown\/appkit-controllers"/.test(appkit) && !/export (let|const) connectionControllerHandle/.test(appkit), "controller comes only from the lazy browser bridge, module-private, exact public APIs");
+function resetBodyFull() { return /export async function resetAppKitConnection\([\s\S]*?\n\}\n/.exec(appkit)?.[0] ?? ""; }
 
 const resetBody = /export async function resetAppKitConnection\([\s\S]*?\n\}\n/.exec(appkit)?.[0] ?? "";
 check("A2", !/if \(!appKit\) return true;/.test(resetBody) && /ensureAppKit\(\)/.test(resetBody), "production reset initializes AppKit; empty handle is not freshness proof");
