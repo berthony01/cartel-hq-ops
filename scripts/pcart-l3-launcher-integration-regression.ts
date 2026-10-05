@@ -82,7 +82,7 @@ check("A8", runtimeHashForArtifact("pepecartel-token-v1") === PCART_FIXED_INTENT
 
 // B. environment allowlist — not production-allowlisted
 check("B1", isArtifactAllowedIn("pepecartel-token-v1", "TESTNET") &&
-  !isArtifactAllowedIn("pepecartel-token-v1", "PRODUCTION"), "PCART is TESTNET-only");
+  isArtifactAllowedIn("pepecartel-token-v1", "PRODUCTION"), "PCART allowlisted TESTNET + PRODUCTION (production gated by readiness approval in DB)");
 check("B2", isArtifactAllowedIn("cartel-fixed-erc20-v1", "PRODUCTION") &&
   isArtifactAllowedIn("cartel-fixed-erc20-v1", "TESTNET"), "generic artifact allowlist unchanged");
 check("B3", Object.keys(ARTIFACT_ENVIRONMENT_ALLOWLIST).length === 2, "registry has exactly two artifacts");
@@ -105,10 +105,11 @@ check("C1", isCanonicalPcartLaunch(CANON) &&
   !isCanonicalPcartLaunch(null), "exact semantic identity: all four fields required, never slug/id alone");
 check("C1b", CANONICAL_PCART_IDENTITY.ticker === "$PCART" && !/CANONICAL_PCART_LAUNCH_ID/.test(REGISTRY),
   "no pinned launch id export");
-check("C2", /isCanonicalPcartLaunch\(selected\)\s*\?\s*\(\s*pcartSafeReady\s*\?\s*\(\s*<div[^>]*>[\s\S]*?<PcartProductionBlockedCheckpoint \/>\s*<\/div>\s*\)\s*:\s*null\s*\)\s*:\s*selected && selectedIsProjectLaunch \? \(\s*<ProductionDeploymentRequestPanel/.test(LC),
+check("C2", /isCanonicalPcartLaunch\(selected\)\s*\?\s*\(\s*pcartSafeReady\s*\?\s*\(\s*<div[^>]*>[\s\S]*?<PcartProductionBlockedCheckpoint launchId=\{selected\.id\} \/>\s*<\/div>\s*\)\s*:\s*null\s*\)\s*:\s*selected && selectedIsProjectLaunch \? \(\s*<ProductionDeploymentRequestPanel/.test(LC),
   "Launch Control renders the blocked checkpoint instead of the generic request form for the canonical launch");
-check("C3", !/<input|<Input|<Button|onClick|onSubmit/.test(CHECKPOINT), "checkpoint is read-only (no inputs/actions)");
-for (const b of ["rehearsal", "2-of-3", "Safe verification", "production-allowlist migration"]) {
+check("C3", !/<input|<Input|onSubmit|wallet|provider|eth_|sendTransaction|appkit/i.test(CHECKPOINT) && /AlertDialog/.test(CHECKPOINT),
+  "checkpoint has no inputs/wallet; its only action is a confirmed DB approval");
+for (const b of ["rehearsal", "2-of-3", "Safe verification", "readiness approval", "artifact allowlist"]) {
   check(`C4:${b}`, CHECKPOINT.includes(b), `checkpoint lists blocker: ${b}`);
 }
 check("C5", /launchId && isCanonical \? \(\s*<PcartRehearsalPanel[\s\S]*?\) : \(\s*<>\s*<Section/.test(CL),
@@ -167,7 +168,8 @@ const MIG_PCART = readdirSync("supabase/migrations").filter((f) => /pepecartel-t
 // The only other authorized PCART migration is the draft-recovery v2 RPC, which
 // adds a NEW function and never redefines the protected original.
 const RECOVERY_MIG = "20261005021534_a03a1d58-ef0d-45a5-a3d3-ea0a9bc0390e.sql";
-const MIG_PCART_PROTECTED = MIG_PCART.filter((f) => f !== RECOVERY_MIG ||
+const READINESS_MIG = "20261005030008_98ee5be2-ad18-4084-b97a-1c2172544c20.sql";
+const MIG_PCART_PROTECTED = MIG_PCART.filter((f) => f !== READINESS_MIG).filter((f) => f !== RECOVERY_MIG ||
   /FUNCTION public\.create_launch_chain_pcart_rehearsal_attempt\(|is_canonical_pcart_launch\(\)? *RETURNS|enforce_canonical_pcart_no_production_deployment\(\) *RETURNS/.test(read(`supabase/migrations/${f}`)));
 check("D0", MIG.length > 0 && MIG_PCART_PROTECTED.length === 1 && MIG_PCART_PROTECTED[0] === MIG_FILE &&
   MIG.includes("FUNCTION public.create_launch_chain_pcart_rehearsal_attempt(") &&
