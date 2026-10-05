@@ -2252,6 +2252,109 @@ export type Database = {
         }
         Relationships: []
       }
+      pcart_production_execution_permits: {
+        Row: {
+          artifact_id: string
+          cancelled_at: string | null
+          cancelled_by: string | null
+          chain_id: number
+          consumed_at: string | null
+          created_at: string
+          deployer_nonce: number
+          deployment_id: string
+          expires_at: string
+          gas_limit: number
+          id: string
+          init_code_hash: string
+          issued_at: string
+          issued_by: string
+          launch_id: string
+          max_fee_per_gas: number
+          max_priority_fee_per_gas: number
+          predicted_contract_address: string
+          preparation_authorization_id: string
+          readiness_fingerprint: string
+          review_fingerprint: string
+          safe_recipient: string
+          unsigned_tx_fingerprint: string
+          wallet_account: string
+        }
+        Insert: {
+          artifact_id?: string
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          chain_id?: number
+          consumed_at?: string | null
+          created_at?: string
+          deployer_nonce: number
+          deployment_id: string
+          expires_at: string
+          gas_limit: number
+          id?: string
+          init_code_hash: string
+          issued_at?: string
+          issued_by: string
+          launch_id: string
+          max_fee_per_gas: number
+          max_priority_fee_per_gas: number
+          predicted_contract_address: string
+          preparation_authorization_id: string
+          readiness_fingerprint: string
+          review_fingerprint: string
+          safe_recipient: string
+          unsigned_tx_fingerprint: string
+          wallet_account: string
+        }
+        Update: {
+          artifact_id?: string
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          chain_id?: number
+          consumed_at?: string | null
+          created_at?: string
+          deployer_nonce?: number
+          deployment_id?: string
+          expires_at?: string
+          gas_limit?: number
+          id?: string
+          init_code_hash?: string
+          issued_at?: string
+          issued_by?: string
+          launch_id?: string
+          max_fee_per_gas?: number
+          max_priority_fee_per_gas?: number
+          predicted_contract_address?: string
+          preparation_authorization_id?: string
+          readiness_fingerprint?: string
+          review_fingerprint?: string
+          safe_recipient?: string
+          unsigned_tx_fingerprint?: string
+          wallet_account?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pcart_production_execution_pe_preparation_authorization_id_fkey"
+            columns: ["preparation_authorization_id"]
+            isOneToOne: false
+            referencedRelation: "pcart_production_preparation_authorizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pcart_production_execution_permits_deployment_id_fkey"
+            columns: ["deployment_id"]
+            isOneToOne: false
+            referencedRelation: "launch_chain_deployments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pcart_production_execution_permits_launch_id_fkey"
+            columns: ["launch_id"]
+            isOneToOne: false
+            referencedRelation: "launches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pcart_production_preparation_authorizations: {
         Row: {
           artifact_id: string
@@ -5898,6 +6001,41 @@ export type Database = {
         Args: { _user_id?: string; _workspace_id: string }
         Returns: boolean
       }
+      cancel_canonical_pcart_execution_permit: {
+        Args: { _permit_id: string }
+        Returns: {
+          artifact_id: string
+          cancelled_at: string | null
+          cancelled_by: string | null
+          chain_id: number
+          consumed_at: string | null
+          created_at: string
+          deployer_nonce: number
+          deployment_id: string
+          expires_at: string
+          gas_limit: number
+          id: string
+          init_code_hash: string
+          issued_at: string
+          issued_by: string
+          launch_id: string
+          max_fee_per_gas: number
+          max_priority_fee_per_gas: number
+          predicted_contract_address: string
+          preparation_authorization_id: string
+          readiness_fingerprint: string
+          review_fingerprint: string
+          safe_recipient: string
+          unsigned_tx_fingerprint: string
+          wallet_account: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "pcart_production_execution_permits"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       cancel_canonical_pcart_production_presign_authorization: {
         Args: { _authorization_id: string }
         Returns: {
@@ -7281,6 +7419,48 @@ export type Database = {
       is_workspace_owner: {
         Args: { _user_id: string; _workspace_id: string }
         Returns: boolean
+      }
+      issue_canonical_pcart_execution_permit: {
+        Args: {
+          _deployment_id: string
+          _gas_limit: number
+          _max_fee_per_gas: number
+          _max_priority_fee_per_gas: number
+          _preparation_authorization_id: string
+          _unsigned_tx_fingerprint: string
+        }
+        Returns: {
+          artifact_id: string
+          cancelled_at: string | null
+          cancelled_by: string | null
+          chain_id: number
+          consumed_at: string | null
+          created_at: string
+          deployer_nonce: number
+          deployment_id: string
+          expires_at: string
+          gas_limit: number
+          id: string
+          init_code_hash: string
+          issued_at: string
+          issued_by: string
+          launch_id: string
+          max_fee_per_gas: number
+          max_priority_fee_per_gas: number
+          predicted_contract_address: string
+          preparation_authorization_id: string
+          readiness_fingerprint: string
+          review_fingerprint: string
+          safe_recipient: string
+          unsigned_tx_fingerprint: string
+          wallet_account: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "pcart_production_execution_permits"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       issue_canonical_pcart_production_presign_authorization: {
         Args: {

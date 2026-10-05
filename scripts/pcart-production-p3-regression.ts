@@ -146,7 +146,7 @@ check("19b", /CREATE OR REPLACE FUNCTION public\.approve_canonical_pcart_product
 check("19c", !/FUNCTION private\.pcart_production_readiness_evidence/.test(GETTER_MIG), "fix migration does not redefine the evidence function");
 // 18 summary
 check("18a", pcartMainnetSummary({ approved: true, executionLocked: true, draftSaved: true }) === "Reviewed draft saved — wallet preparation next" &&
-  pcartMainnetSummary({ approved: true, executionLocked: true, draftSaved: true, walletReady: true }) === "Wallet ready — mainnet send locked" &&
+  pcartMainnetSummary({ approved: true, executionLocked: true, draftSaved: true, walletReady: true }) === "Wallet ready — final send review next" &&
   pcartMainnetSummary({ approved: true, executionLocked: false, draftSaved: true, walletReady: true }) === "Execution control not locked — review required",
   "Mainnet summary reflects draft / wallet-ready / unlocked state");
 check("18b", /walletReady: isPcartPreparationActive\(pcartPreparationQuery\.data, Date\.now\(\)\)/.test(LC) && /<PcartWalletPreparationPanel attempt=\{pcartUnsentDraft\} \/>/.test(LC), "Launch Control wires panel + summary to authoritative state");
