@@ -180,17 +180,22 @@ const P2_MIG = "20261005094833_33607368-857a-4487-b5cb-4b62419a4980.sql";
 const P2_FIX_MIG = "20261005100833_46ee6d47-1dcf-47d3-aa02-5e08af696cf0.sql";
 const HARDEN_SQL = read(`supabase/migrations/${HARDEN_MIG}`);
 const P2_FIX_SQL = read(`supabase/migrations/${P2_FIX_MIG}`);
+const ENV_IDX_MIG = "20261005101321_54225f07-be67-4257-aea1-f36aa287405a.sql";
+const ENV_IDX_SQL = read(`supabase/migrations/${ENV_IDX_MIG}`);
 check("D0h", /CREATE OR REPLACE FUNCTION public\.enforce_canonical_pcart_no_production_deployment/.test(HARDEN_SQL) &&
   /ELSIF NEW\.artifact_id = 'pepecartel-token-v1' THEN/.test(HARDEN_SQL) &&
   /reserved for the canonical PEPECARTEL launch/.test(HARDEN_SQL) &&
   !/CREATE TABLE|ALTER TABLE|ADD CONSTRAINT|CREATE POLICY|GRANT |INSERT |UPDATE |DELETE /.test(HARDEN_SQL),
   "hardening migration only replaces the guard function (canonical-only PCART artifact on production)");
+check("D0j", /network_environment = 'TESTNET'\s+AND chain_id = 46630/.test(ENV_IDX_SQL) && /launch_chain_deployments_one_active_pcart_production/.test(ENV_IDX_SQL) &&
+  !/INSERT |UPDATE |DELETE |CREATE OR REPLACE FUNCTION|ALTER TABLE|CREATE POLICY/.test(ENV_IDX_SQL),
+  "environment-index migration only rescopes PCART uniqueness per environment");
 check("D0i", /CREATE OR REPLACE FUNCTION public\.create_canonical_pcart_production_draft/.test(P2_FIX_SQL) &&
   !/abandon_canonical_pcart_production_draft/.test(P2_FIX_SQL) &&
   !/CREATE TABLE|ALTER TABLE|CREATE POLICY/.test(P2_FIX_SQL) &&
   !/token_total_supply_text,/.test(P2_FIX_SQL),
   "P2 fix migration only replaces the draft RPC; the generated column is never inserted");
-const MIG_PCART_PROTECTED = MIG_PCART.filter((f) => f !== READINESS_MIG && f !== HARDEN_MIG && f !== P2_MIG && f !== P2_FIX_MIG).filter((f) => f !== RECOVERY_MIG ||
+const MIG_PCART_PROTECTED = MIG_PCART.filter((f) => f !== READINESS_MIG && f !== HARDEN_MIG && f !== P2_MIG && f !== P2_FIX_MIG && f !== ENV_IDX_MIG).filter((f) => f !== RECOVERY_MIG ||
   /FUNCTION public\.create_launch_chain_pcart_rehearsal_attempt\(|is_canonical_pcart_launch\(\)? *RETURNS|enforce_canonical_pcart_no_production_deployment\(\) *RETURNS/.test(read(`supabase/migrations/${f}`)));
 check("D0", MIG.length > 0 && MIG_PCART_PROTECTED.length === 1 && MIG_PCART_PROTECTED[0] === MIG_FILE &&
   MIG.includes("FUNCTION public.create_launch_chain_pcart_rehearsal_attempt(") &&

@@ -38,7 +38,7 @@ export async function savePcartProductionDraft(review: PcartProductionReview, cl
     _init_code_hash: review.initCodeHash,
     _review_fingerprint: review.reviewFingerprint,
   });
-  if (error || !data) throw new Error(error?.message ?? "The draft was refused.");
+  if (error || !data) throw new Error(mapPcartProductionDraftError(error));
   return data as unknown as DeploymentRow;
 }
 
@@ -50,4 +50,16 @@ export async function abandonPcartProductionDraft(deploymentId: string, reason: 
     _reason: trimmed,
   });
   if (error) throw new Error(error.message);
+}
+
+export const PCART_PRODUCTION_DUPLICATE_MESSAGE = "A PCART production draft or deployment already exists.";
+
+/** Never surface raw database constraint/index names to the UI. */
+export function mapPcartProductionDraftError(error: { code?: string; message?: string } | null | undefined): string {
+  if (!error) return "The draft was refused.";
+  const msg = error.message ?? "";
+  if (error.code === "23505" || /duplicate key|unique constraint|already exists/i.test(msg)) {
+    return PCART_PRODUCTION_DUPLICATE_MESSAGE;
+  }
+  return msg || "The draft was refused.";
 }
