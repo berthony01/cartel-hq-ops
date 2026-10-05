@@ -54,7 +54,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 type Ctx = { supabase: any; userId: string };
 
-async function revalidate(ctx: Ctx, deploymentId: string, wallet: string): Promise<PcartPreparationCheckResult> {
+/** Shared read-only revalidation (also reused by the P4 final send review). */
+export async function revalidate(ctx: Ctx, deploymentId: string, wallet: string): Promise<PcartPreparationCheckResult> {
   const fail = (reason: string) => ({ ok: false as const, reason });
   const { data: isOwner } = await ctx.supabase.rpc("is_platform_owner", { _user_id: ctx.userId });
   if (isOwner !== true) return fail("NOT_PLATFORM_OWNER");
