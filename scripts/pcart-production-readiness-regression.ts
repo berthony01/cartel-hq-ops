@@ -14,11 +14,18 @@ function check(id: string, ok: boolean, msg: string) {
 const read = (p: string) => readFileSync(p, "utf8");
 const MIG_FILE = "20261005030008_98ee5be2-ad18-4084-b97a-1c2172544c20.sql";
 const SQL = read(`supabase/migrations/${MIG_FILE}`);
+// Hardening migration: guard function is replaced by the newest migration that defines it.
+const HARDEN_FILES = readdirSync("supabase/migrations").filter(
+  (f) => f > MIG_FILE && read(`supabase/migrations/${f}`).includes("enforce_canonical_pcart_no_production_deployment"),
+);
+const GUARD_SQL = HARDEN_FILES.length
+  ? read(`supabase/migrations/${HARDEN_FILES[HARDEN_FILES.length - 1]}`)
+  : SQL;
 const fn = (name: string) => SQL.split(`FUNCTION ${name}(`)[1]?.split("$$;")[0] ?? "";
 const EV = fn("private.pcart_production_readiness_evidence");
 const APPROVE = fn("public.approve_canonical_pcart_production_readiness");
 const GET = fn("public.get_canonical_pcart_production_readiness");
-const GUARD = fn("public.enforce_canonical_pcart_no_production_deployment");
+const GUARD = ((s) => s.split("FUNCTION public.enforce_canonical_pcart_no_production_deployment(")[1]?.split("$$;")[0] ?? "")(GUARD_SQL);
 
 // 1 non-owner
 check("1", /uid IS NULL OR NOT public\.is_platform_owner\(uid\)/.test(APPROVE) && /42501/.test(APPROVE), "approval refuses non-owner");
@@ -59,6 +66,16 @@ check("10", /chain_id = 4663 AND network_environment = 'PRODUCTION'/.test(chk) &
 check("11", /NEW\.artifact_id IS DISTINCT FROM 'pepecartel-token-v1'/.test(GUARD) && /require a production readiness approval/.test(GUARD) &&
   /evidence\(NEW\.launch_id, false\)/.test(GUARD) && /readiness_fingerprint IS DISTINCT FROM ev->>'fingerprint'/.test(GUARD),
   "guard rejects non-PCART and PCART without matching approval/locked control");
+// 11b hardened boundary: PCART artifact rejected on noncanonical production launch;
+// canonical launch rejects any other artifact; canonical+exact artifact still requires approval/evidence
+check("11b", /IF NEW\.network_environment = 'PRODUCTION' OR NEW\.chain_id = 4663 THEN/.test(GUARD) &&
+  /IF private\.is_canonical_pcart_launch\(NEW\.launch_id\) THEN/.test(GUARD) &&
+  /ELSIF NEW\.artifact_id = 'pepecartel-token-v1' THEN/.test(GUARD) &&
+  /reserved for the canonical PEPECARTEL launch/.test(GUARD) &&
+  /only permits pepecartel-token-v1 in production/.test(GUARD) &&
+  /require a production readiness approval/.test(GUARD) &&
+  /evidence\(NEW\.launch_id, false\)/.test(GUARD),
+  "guard fails closed: PCART artifact canonical-only on production; canonical launch PCART-artifact-only; approval still required");
 // 12 generic canary still protected
 const CANARY = read("src/lib/chain-mainnet-canary.functions.ts");
 check("12", /attemptFail\("CANONICAL_PCART_PROTECTED"\)/.test(CANARY) && !/pepecartel-token-v1/.test(CANARY), "generic canary still CANONICAL_PCART_PROTECTED");
