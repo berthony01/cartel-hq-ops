@@ -1,6 +1,17 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
-import { FlaskConical, Loader2, RefreshCw } from "lucide-react";
+import { FlaskConical, Loader2, RefreshCw, ShieldCheck } from "lucide-react";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Section } from "@/components/cartel/Section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +34,12 @@ import {
   createPcartRehearsalAttempt,
   isPcartRehearsalRow,
 } from "@/lib/pcart-rehearsal";
+import {
+  RECOVERY_ABANDON_REASON,
+  checkDraftRecovery,
+  isResolvableDraft,
+  readPreAttemptGate,
+} from "@/lib/pcart-draft-recovery";
 
 const TERMINAL = new Set(["CONFIRMED", "FAILED", "ABANDONED"]);
 
@@ -55,6 +72,17 @@ export function PcartRehearsalPanel(props: {
   // Synchronous in-flight lock: React state is not synchronous, so a same-tick
   // second invocation must be refused before any attempt row or broadcast.
   const inFlight = useRef(false);
+  const [checking, setChecking] = useState(false);
+  const [notProvable, setNotProvable] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [walletClear, setWalletClear] = useState(false);
+  const [abandoning, setAbandoning] = useState(false);
+
+  // Prefill the rehearsal recipient with the connected account, never
+  // overwriting anything the operator typed.
+  useEffect(() => {
+    if (props.account) setRecipient((r) => (r.trim() ? r : props.account!));
+  }, [props.account]);
   const pcartAttempts = props.attempts.filter(isPcartRehearsalRow);
 
   let recipientError: string | null = null;
@@ -76,6 +104,43 @@ export function PcartRehearsalPanel(props: {
     : activePcartAttempt.status === "CONFIRMED"
       ? "A confirmed exact-artifact rehearsal already exists and must not be repeated."
       : `Attempt #${activePcartAttempt.attempt_number} is ${activePcartAttempt.status}. Resolve it before starting another rehearsal.`;
+  const resolvableDraft =
+    activePcartAttempt && isResolvableDraft(activePcartAttempt) ? activePcartAttempt : null;
+
+  async function resolveDraft() {
+    if (!resolvableDraft || checking) return;
+    setChecking(true);
+    setNotProvable(false);
+    try {
+      const result = await checkDraftRecovery(resolvableDraft);
+      if (result.kind === "PROVEN_UNBROADCAST") {
+        setWalletClear(false);
+        setConfirmOpen(true);
+      } else {
+        setNotProvable(true);
+      }
+    } catch {
+      setNotProvable(true);
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  async function confirmAbandon() {
+    if (!resolvableDraft || !walletClear || abandoning) return;
+    setAbandoning(true);
+    try {
+      await abandonDeploymentAttempt(resolvableDraft.id, RECOVERY_ABANDON_REASON);
+      setConfirmOpen(false);
+      await props.onChanged();
+      toast.success("Unsent draft closed. You can run the test launch again.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not close the draft.");
+    } finally {
+      setAbandoning(false);
+    }
+  }
+
   const canRun =
     !busy &&
     !unavailable &&
@@ -101,12 +166,26 @@ export function PcartRehearsalPanel(props: {
     let attemptId: string | null = null;
     let txHash: string | null = null;
     try {
+      // Live pre-create gate on the SAME bound connector: re-read account,
+      // chain and nonces. No draft is created if anything is in flight.
+      const gate = await readPreAttemptGate(props.account);
+      if (!gate.ok) {
+        toast.error(
+          gate.reason === "IN_FLIGHT"
+            ? "Your wallet has a transaction still in flight. Wait for it to finish, then try again."
+            : gate.reason === "READ_FAILED"
+              ? "Could not read your wallet's status. Try again."
+              : "Wallet account or network changed. Reconnect on Robinhood Chain Testnet.",
+        );
+        return;
+      }
       const initCode = buildPcartInitCode(recipient);
       const attempt = await createPcartRehearsalAttempt({
         launchId: props.launchId,
         clientRequestId: newClientRequestId(),
         deployerAddress: props.account,
         rehearsalRecipient: recipient,
+        deployerNonceBefore: gate.nonce,
       });
       attemptId = attempt.id;
       await props.onChanged();
@@ -175,8 +254,71 @@ export function PcartRehearsalPanel(props: {
       {blockedReason ? (
         <p role="status" className="mb-3 rounded-md border border-border bg-muted/40 p-3 text-xs leading-relaxed text-foreground">
           {blockedReason} Only failed or abandoned attempts may be retried.
+          {resolvableDraft ? (
+            <span className="mt-2 flex flex-col gap-2">
+              <span className="text-muted-foreground">
+                This draft has no transaction yet. Check whether it was really never sent before closing it.
+              </span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="min-h-11 self-start"
+                onClick={() => void resolveDraft()}
+                disabled={checking || abandoning || !props.account}
+              >
+                {checking ? (
+                  <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                ) : (
+                  <ShieldCheck className="size-4" aria-hidden="true" />
+                )}
+                {checking ? "Checking…" : "Resolve draft"}
+              </Button>
+              {!props.account ? (
+                <span className="text-muted-foreground">Connect the wallet that started this draft first.</span>
+              ) : null}
+            </span>
+          ) : null}
         </p>
       ) : null}
+      {notProvable ? (
+        <p role="alert" className="mb-3 rounded-md border border-destructive/50 bg-destructive/10 p-3 text-xs leading-relaxed text-destructive">
+          We could not prove this draft was never sent. Do not retry: it may have been sent without being
+          recorded. Make sure the connected wallet is the one that started it and is on Robinhood Chain
+          Testnet, or recover it with the transaction hash instead.
+        </p>
+      ) : null}
+      <AlertDialog open={confirmOpen} onOpenChange={(o) => !abandoning && setConfirmOpen(o)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Close the unsent draft?</AlertDialogTitle>
+            <AlertDialogDescription>
+              The check confirmed this draft was never sent. Closing it only marks the draft as cancelled so
+              you can start again. Nothing is sent, and the record stays in the history.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <label className="flex items-start gap-2 text-sm text-foreground">
+            <Checkbox
+              checked={walletClear}
+              onCheckedChange={(v) => setWalletClear(v === true)}
+              aria-label="No pending request in wallet"
+            />
+            <span>I checked my wallet app and there is no pending request or approval still open.</span>
+          </label>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={abandoning}>Keep draft</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={!walletClear || abandoning}
+              onClick={(e) => {
+                e.preventDefault();
+                void confirmAbandon();
+              }}
+            >
+              {abandoning ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
+              Close draft
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
       <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-xs leading-relaxed">
         <p className="font-semibold uppercase tracking-wide text-destructive">
           Testnet rehearsal — not the official PEPECARTEL token
