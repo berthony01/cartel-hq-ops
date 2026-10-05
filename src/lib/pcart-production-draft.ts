@@ -38,7 +38,7 @@ export async function savePcartProductionDraft(review: PcartProductionReview, cl
     _init_code_hash: review.initCodeHash,
     _review_fingerprint: review.reviewFingerprint,
   });
-  if (error || !data) throw new Error(error?.message ?? "The draft was refused.");
+  if (error || !data) throw new Error(mapPcartProductionDraftError(error));
   return data as unknown as DeploymentRow;
 }
 
