@@ -143,16 +143,16 @@ export function PcartMainnetSendPanel({
   const deployMutation = useMutation({
     mutationFn: async () => {
       setNote(null);
-      if (windowState !== "OPEN") throw new Error(REASON.OUTSIDE_WINDOW);
+      if (windowState !== "OPEN") throw new Error(REASON["OUTSIDE_WINDOW"]);
       if (!isPcartSendConfirmed(ack, typed)) throw new Error("Tick the confirmation and type DEPLOY PCART exactly.");
-      if (blocked) throw new Error(REASON.ALREADY_CLAIMED);
-      if (!permit || !permitClaimable) throw new Error(REASON.PERMIT_NOT_ACTIVE);
+      if (blocked) throw new Error(REASON["ALREADY_CLAIMED"]);
+      if (!permit || !permitClaimable) throw new Error(REASON["PERMIT_NOT_ACTIVE"]);
       const deployer = String(attempt.deployer_address ?? "");
       const nonce = BigInt(attempt.deployer_nonce_before ?? -1);
       const env = buildVerifiedPcartSendEnvelope(permit, { deployer, nonce, initCodeHash: String(attempt.init_code_hash ?? "") });
       if (!env.ok) throw new Error("The reviewed transaction does not match the draft. Nothing was sent.");
       const b = getPcartBoundWallet();
-      if (!b) throw new Error(REASON.WRONG_ACCOUNT);
+      if (!b) throw new Error(REASON["WRONG_ACCOUNT"]);
 
       // 1. Server claim (window/lifecycle/permit/controls re-checked; permit consumed atomically).
       const c = await runClaim({ data: { deploymentId: attempt.id, permitId: permit.id, wallet: b.account } });
