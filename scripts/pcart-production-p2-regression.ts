@@ -121,7 +121,7 @@ check("11d", pcartProductionFingerprintPreimage(fpIn).startsWith("pcart-producti
   /'pcart-production-review-v1', lower\(_launch_id::text\), 'pepecartel-token-v1', '4663', 'PRODUCTION'/.test(CREATE) &&
   /Review fingerprint does not match the canonical review inputs/.test(CREATE), "DB recomputes the same fingerprint preimage");
 check("11e", predictPcartProductionAddress(SIGNERS[0]!, 0n) !== predictPcartProductionAddress(SIGNERS[0]!, 1n), "CREATE prediction depends on nonce");
-check("11f", !/cartel-fixed-erc20/.test(INTENT) && !/provider|request\(|send/i.test(noComments(INTENT).replace(/sha256|stringToBytes/g, "")),
+check("11f", !/cartel-fixed-erc20/.test(INTENT) && !/eth_|\.request\(|createPublicClient|createWalletClient|http\(|fetch\(/.test(noComments(INTENT)),
   "intent helper is pure and does not use generic token identity");
 
 // 12. 90s freshness
