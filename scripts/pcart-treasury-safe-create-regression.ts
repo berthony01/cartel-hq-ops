@@ -315,7 +315,7 @@ check(
 {
   let changed = "";
   try {
-    changed = execSync("git diff --name-only 517a5797", { encoding: "utf8" });
+    changed = execSync("git diff --name-only a0cf6269", { encoding: "utf8" });
   } catch {
     changed = "";
   }
