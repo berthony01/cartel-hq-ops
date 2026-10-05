@@ -37,23 +37,23 @@ import {
   buildTokenInitCode,
   broadcastTokenDeployment,
   chainDeploymentsQueryKey,
-  connectWallet,
   createDeploymentAttempt,
   createTokenDeploymentAttempt,
   formatEth,
   formatWholeSupply,
   tokenSupplyText,
-  getInjectedProvider,
   isTerminal,
   isUserRejection,
   isValidTxHash,
   listChainDeployments,
   newClientRequestId,
   readAccount,
+  getLauncherProvider,
+  requestTestnetSwitch,
+  requestTestnetAdd,
   readBalanceWei,
   readChainId,
   submitDeploymentTx,
-  ensureTestnet,
   type DeploymentRow,
 } from "@/lib/chain-launcher";
 import { verifyChainDeployment } from "@/lib/chain-verify.functions";
@@ -95,6 +95,16 @@ import {
   isLiquidityPlanFresh,
   type LiquidityPlan,
 } from "@/lib/liquidity-plan";
+import {
+  chooseAnotherTestnetWallet,
+  connectTestnetChooser,
+  connectTestnetInjected,
+  disconnectTestnetWallet,
+  getTestnetConnectorKind,
+  isChooserConfigured,
+  isInjectedAvailable,
+  subscribeTestnetWallet,
+} from "@/lib/testnet-wallet-connector";
 import { PcartRehearsalPanel } from "@/components/chain/PcartRehearsalPanel";
 import { isCanonicalPcartLaunch } from "@/lib/launch-artifact-registry";
 
@@ -158,7 +168,15 @@ function ChainLauncherPage() {
   const [liqDeadline, setLiqDeadline] = useState("20");
   const [liqPlan, setLiqPlan] = useState<LiquidityPlan | null>(null);
 
-  const hasProvider = typeof window !== "undefined" && getInjectedProvider() !== null;
+  // Wallet state comes ONLY from the explicitly connected connector.
+  const [walletEpoch, setWalletEpoch] = useState(0);
+  const [needsAddNetwork, setNeedsAddNetwork] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  useEffect(() => setHydrated(true), []);
+  useEffect(() => subscribeTestnetWallet(() => setWalletEpoch((n) => n + 1)), []);
+  const hasProvider = walletEpoch >= 0 && getLauncherProvider() !== null;
+  const chooserAvailable = hydrated && isChooserConfigured();
+  const injectedAvailable = hydrated && isInjectedAvailable();
   const onTestnet = chainId === ROBINHOOD_TESTNET_CHAIN_ID;
 
   // Owner internal tooling: scoped to the active project profile and may
@@ -205,9 +223,14 @@ function ChainLauncherPage() {
   }, []);
 
   useEffect(() => {
-    if (!hasProvider) return;
+    if (!hasProvider) {
+      if (account) setAccount(null);
+      setChainId(null);
+      setBalance(null);
+      return;
+    }
     void refreshWallet(account);
-    const provider = getInjectedProvider();
+    const provider = getLauncherProvider();
     const onChanged = () => void refreshWallet(account);
     provider?.on?.("chainChanged", onChanged);
     provider?.on?.("accountsChanged", onChanged);
@@ -215,7 +238,7 @@ function ChainLauncherPage() {
       provider?.removeListener?.("chainChanged", onChanged);
       provider?.removeListener?.("accountsChanged", onChanged);
     };
-  }, [hasProvider, account, refreshWallet]);
+  }, [hasProvider, account, refreshWallet, walletEpoch]);
 
   // Any change to the reviewed intent, the account or the chain invalidates the
   // simulation immediately. Deployment stays locked until a fresh run passes.
@@ -393,27 +416,45 @@ function ChainLauncherPage() {
     onError: (e: unknown) => toast.error(e instanceof Error ? e.message : "Verification failed."),
   });
 
-  async function handleConnect() {
-    try {
-      const address = await connectWallet();
-      setAccount(address);
-      await refreshWallet(address);
-    } catch (e) {
-      toast.error(
-        isUserRejection(e) ? "Wallet connection cancelled." : "Could not connect wallet.",
-      );
+  async function afterConnect(r: Awaited<ReturnType<typeof connectTestnetChooser>>) {
+    setNeedsAddNetwork(false);
+    if (!r.ok) {
+      setAccount(null);
+      toast.error(r.reason);
+      return;
     }
+    setAccount(r.account);
+    await refreshWallet(r.account);
+  }
+  async function handleConnect() {
+    await afterConnect(await connectTestnetChooser());
+  }
+  async function handleChooseAnother() {
+    setAccount(null);
+    await afterConnect(await chooseAnotherTestnetWallet());
+  }
+  async function handleConnectInjected() {
+    await afterConnect(await connectTestnetInjected());
+  }
+  async function handleDisconnect() {
+    await disconnectTestnetWallet();
+    setAccount(null);
+    setNeedsAddNetwork(false);
   }
 
   async function handleSwitch() {
-    try {
-      await ensureTestnet();
-      await refreshWallet(account);
-    } catch (e) {
-      toast.error(
-        isUserRejection(e) ? "Network switch cancelled." : "Could not switch to the testnet.",
-      );
-    }
+    const r = await requestTestnetSwitch();
+    if (r === "UNKNOWN_NETWORK") setNeedsAddNetwork(true);
+    else if (r === "REJECTED") toast.error("Network switch cancelled.");
+    else if (r !== "SWITCHED") toast.error("Could not switch to the testnet.");
+    await refreshWallet(account);
+  }
+
+  async function handleAddNetwork() {
+    const r = await requestTestnetAdd();
+    if (r === "SWITCHED") setNeedsAddNetwork(false);
+    else toast.error(r === "REJECTED" ? "Adding the testnet was cancelled." : "Could not add the testnet.");
+    await refreshWallet(account);
   }
 
   async function handleDeploy() {
@@ -828,18 +869,12 @@ function ChainLauncherPage() {
         title="Wallet"
         description="Your browser wallet is the only signer. CARTEL HQ never holds keys."
       >
-        {!hasProvider ? (
-          <EmptyState
-            icon={Wallet}
-            title="No browser wallet detected"
-            description="Install an injected EIP-1193 wallet extension to use the launcher."
-            compact
-          />
-        ) : (
-          <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3">
+          {hasProvider && account ? (
             <div className="grid gap-2 text-xs text-muted-foreground sm:grid-cols-3">
-              <p>
-                Address: <span className="text-foreground">{account ?? "Not connected"}</span>
+              <p className="min-w-0 [overflow-wrap:anywhere]">
+                Address: <span className="font-mono text-foreground">{account}</span>
+                {getTestnetConnectorKind() === "injected" ? " (browser extension)" : ""}
               </p>
               <p>
                 Network:{" "}
@@ -847,7 +882,7 @@ function ChainLauncherPage() {
                   {chainId === null
                     ? "Unknown"
                     : onTestnet
-                      ? "Robinhood Chain Testnet"
+                      ? `Robinhood Chain Testnet (${chainId})`
                       : `Chain ${chainId}`}
                 </span>
               </p>
@@ -855,24 +890,59 @@ function ChainLauncherPage() {
                 Balance: <span className="text-foreground">{formatEth(balance)}</span>
               </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <Button size="sm" variant="outline" onClick={() => void handleConnect()}>
-                <Wallet className="size-4" aria-hidden="true" />
-                {account ? "Reconnect" : "Connect wallet"}
-              </Button>
-              {account && !onTestnet ? (
-                <Button size="sm" variant="outline" onClick={() => void handleSwitch()}>
-                  Switch to testnet {ROBINHOOD_TESTNET_CHAIN_ID}
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              No wallet connected. Choose a wallet — on a phone, pick MetaMask (or another app) and
+              approve in the wallet, then return here.
+            </p>
+          )}
+          <div className="flex flex-wrap gap-2">
+            {!account ? (
+              <>
+                {chooserAvailable ? (
+                  <Button size="sm" className="min-h-11" onClick={() => void handleConnect()}>
+                    <Wallet className="size-4" aria-hidden="true" />
+                    Connect wallet
+                  </Button>
+                ) : null}
+                {injectedAvailable ? (
+                  <Button size="sm" variant="outline" className="min-h-11" onClick={() => void handleConnectInjected()}>
+                    Use browser extension
+                  </Button>
+                ) : null}
+                {hydrated && !chooserAvailable && !injectedAvailable ? (
+                  <p className="text-xs text-destructive">No wallet option is available in this browser.</p>
+                ) : null}
+              </>
+            ) : (
+              <>
+                {chooserAvailable ? (
+                  <Button size="sm" variant="outline" className="min-h-11" onClick={() => void handleChooseAnother()}>
+                    Choose another wallet
+                  </Button>
+                ) : null}
+                <Button size="sm" variant="outline" className="min-h-11" onClick={() => void handleDisconnect()}>
+                  Disconnect
                 </Button>
-              ) : null}
-            </div>
-            {account && !onTestnet ? (
-              <p className="text-xs text-destructive">
-                Deployment is disabled until the wallet is on chain {ROBINHOOD_TESTNET_CHAIN_ID}.
-              </p>
-            ) : null}
+                {!onTestnet ? (
+                  <Button size="sm" className="min-h-11" onClick={() => void handleSwitch()}>
+                    Switch to Robinhood Chain Testnet
+                  </Button>
+                ) : null}
+                {!onTestnet && needsAddNetwork ? (
+                  <Button size="sm" variant="outline" className="min-h-11" onClick={() => void handleAddNetwork()}>
+                    Add Robinhood Chain Testnet to wallet
+                  </Button>
+                ) : null}
+              </>
+            )}
           </div>
-        )}
+          {account && !onTestnet ? (
+            <p className="text-xs text-destructive">
+              Deployment is disabled until the wallet is on chain {ROBINHOOD_TESTNET_CHAIN_ID}.
+            </p>
+          ) : null}
+        </div>
       </Section>
 
       {/* PCART-L3: the canonical PEPECARTEL launch sees ONLY the exact-artifact

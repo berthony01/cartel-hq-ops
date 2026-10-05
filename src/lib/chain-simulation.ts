@@ -8,7 +8,9 @@ import { NETWORK_ENVIRONMENT, ROBINHOOD_TESTNET_CHAIN_ID } from "./chain-registr
 import {
   ZERO_ADDRESS,
   buildTokenInitCode,
-  getInjectedProvider,
+  getLauncherProvider,
+  readAccount,
+  readChainId,
   normalizeTokenIntent,
   type TokenIntent,
   type TokenIntentInput,
@@ -265,7 +267,7 @@ async function readFeeWeiPerGas(provider: {
  */
 export async function runPreflight(intent: SimulationIntent): Promise<PreflightResult> {
   const errors: string[] = [];
-  const provider = getInjectedProvider();
+  const provider = getLauncherProvider();
 
   const result: PreflightResult = {
     observedChainId: null,
@@ -292,12 +294,8 @@ export async function runPreflight(intent: SimulationIntent): Promise<PreflightR
   }
 
   // Chain
-  try {
-    const chainId = parseHexQuantity(await provider.request({ method: "eth_chainId" }));
-    result.observedChainId = chainId === null ? null : Number(chainId);
-  } catch {
-    result.observedChainId = null;
-  }
+  // Same bound-connector readers the Testnet Lab displays (hex or numeric chain id).
+  result.observedChainId = await readChainId();
   result.chainOk = result.observedChainId === ROBINHOOD_TESTNET_CHAIN_ID;
   if (!result.chainOk) {
     errors.push(
@@ -306,13 +304,7 @@ export async function runPreflight(intent: SimulationIntent): Promise<PreflightR
   }
 
   // Account
-  try {
-    const accounts = (await provider.request({ method: "eth_accounts" })) as unknown;
-    const first = Array.isArray(accounts) && typeof accounts[0] === "string" ? accounts[0] : null;
-    result.observedAccount = first ? first.toLowerCase() : null;
-  } catch {
-    result.observedAccount = null;
-  }
+  result.observedAccount = await readAccount();
   result.accountOk = result.observedAccount === intent.deployer;
   if (!result.accountOk) {
     errors.push("The connected wallet account no longer matches the simulated deployer.");
