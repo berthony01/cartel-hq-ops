@@ -87,7 +87,7 @@ check(
   "B1",
   /caipNetworkId: `eip155:\$\{ROBINHOOD_MAINNET_CHAIN_ID\}`/.test(appkitCode) &&
     /id: ROBINHOOD_MAINNET_CHAIN_ID as number/.test(appkitCode) &&
-    /networks: \[ROBINHOOD_APPKIT_NETWORK\]/.test(appkitCode),
+    /networks: \[ROBINHOOD_APPKIT_NETWORK, ROBINHOOD_TESTNET_APPKIT_NETWORK\]/.test(appkitCode),
   "AppKit declares exactly one custom network, built from the mainnet chain constant",
 );
 check(
@@ -589,7 +589,7 @@ check(
 check(
   "R2",
   /open\(\{ view: "Connect" \}\)/.test(appkitCode) &&
-    /networks: \[ROBINHOOD_APPKIT_NETWORK\]/.test(appkitCode) &&
+    /networks: \[ROBINHOOD_APPKIT_NETWORK, ROBINHOOD_TESTNET_APPKIT_NETWORK\]/.test(appkitCode) &&
     /"@reown\/appkit": "1\.8\.24"/.test(pkgSrc) &&
     /"@reown\/appkit-adapter-wagmi": "1\.8\.24"/.test(pkgSrc),
   "the chooser opens Connect with eip155 as the only configured namespace, pinned AppKit + WagmiAdapter 1.8.24",
@@ -955,7 +955,7 @@ check(
   "T5",
   !/as never/.test(appkitCode.replace(/adapters: \[wagmiAdapter as never\]/, "")) &&
     /ROBINHOOD_APPKIT_NETWORK: import\("@reown\/appkit-common"\)\.CaipNetwork/.test(appkitCode) &&
-    /networks: \[ROBINHOOD_APPKIT_NETWORK\]/.test(appkitCode),
+    /networks: \[ROBINHOOD_APPKIT_NETWORK, ROBINHOOD_TESTNET_APPKIT_NETWORK\]/.test(appkitCode),
   "the custom network is typed against the installed CaipNetwork contract with no unsafe cast hiding a required property",
 );
 check(
@@ -1457,7 +1457,7 @@ check(
   check("FW-4", /enableMobileFullScreen: true/.test(appkitCode), "mobile full screen");
   check("FW-5", /defaultAccountTypes: \{ eip155: "eoa" \}/.test(appkitCode) && /coinbasePreference: "eoaOnly"/.test(appkitCode), "EOA account preference");
   check("FW-6", /\.open\(\{ view: "Connect" \}\)/.test(appkitCode) && !/namespace: "eip155" \}\)/.test(appkitCode), "Connect view opens with no namespace filter");
-  check("FW-7", !/includeWalletIds/.test(appkitCode) && (appkitCode.match(/networks: \[ROBINHOOD_APPKIT_NETWORK\]/g) ?? []).length === 2, "no include restriction; Robinhood is the only network");
+  check("FW-7", !/includeWalletIds/.test(appkitCode) && (appkitCode.match(/networks: \[ROBINHOOD_APPKIT_NETWORK, ROBINHOOD_TESTNET_APPKIT_NETWORK\]/g) ?? []).length === 2, "no include restriction; Robinhood is the only network");
   check("FW-8", /enableReconnect: false/.test(appkitCode) && /enableNetworkSwitch: false/.test(appkitCode) && /allowUnsupportedChain: true/.test(appkitCode) && ["enableWalletConnect","enableInjected","enableEIP6963","enableCoinbase"].every((k) => new RegExp(k + ": true").test(appkitCode)) && /graceMs = 5_000/.test(appkitCode) && !/wallet_addEthereumChain/.test(appkitCode), "connector flags, 5s grace, no add-chain unchanged");
 }
 

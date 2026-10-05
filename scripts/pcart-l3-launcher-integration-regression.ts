@@ -105,7 +105,7 @@ check("C1", isCanonicalPcartLaunch(CANON) &&
   !isCanonicalPcartLaunch(null), "exact semantic identity: all four fields required, never slug/id alone");
 check("C1b", CANONICAL_PCART_IDENTITY.ticker === "$PCART" && !/CANONICAL_PCART_LAUNCH_ID/.test(REGISTRY),
   "no pinned launch id export");
-check("C2", /isCanonicalPcartLaunch\(selected\)\s*\?\s*\(\s*<PcartProductionBlockedCheckpoint \/>/.test(LC),
+check("C2", /isCanonicalPcartLaunch\(selected\)\s*\?\s*\(\s*pcartSafeReady\s*\?\s*\(\s*<div[^>]*>[\s\S]*?<PcartProductionBlockedCheckpoint \/>\s*<\/div>\s*\)\s*:\s*null\s*\)\s*:\s*selected && selectedIsProjectLaunch \? \(\s*<ProductionDeploymentRequestPanel/.test(LC),
   "Launch Control renders the blocked checkpoint instead of the generic request form for the canonical launch");
 check("C3", !/<input|<Input|<Button|onClick|onSubmit/.test(CHECKPOINT), "checkpoint is read-only (no inputs/actions)");
 for (const b of ["rehearsal", "2-of-3", "Safe verification", "production-allowlist migration"]) {
