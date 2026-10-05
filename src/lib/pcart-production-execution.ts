@@ -109,3 +109,69 @@ export function isPcartExecutionPermitActive(p: PcartExecutionPermitLike | null 
   if (expires <= issued || expires - issued > PCART_EXECUTION_PERMIT_MAX_TTL_MS) return false;
   return nowMs < expires;
 }
+
+export const PCART_FINAL_REVIEW_INTENT_DOMAIN = "pcart-final-review-intent-v1" as const;
+
+/** Immutable / security-critical fields only. Volatile gas and fee values are deliberately excluded. */
+export type PcartFinalReviewIntentInput = {
+  deploymentId: string;
+  launchId: string;
+  from: string;
+  nonce: bigint;
+  initCodeHash: string;
+  safe: string;
+  predicted: string;
+  reviewFingerprint: string;
+  readinessFingerprint: string;
+};
+
+export function pcartFinalReviewIntentPreimage(i: PcartFinalReviewIntentInput): string {
+  return [
+    PCART_FINAL_REVIEW_INTENT_DOMAIN,
+    i.deploymentId.toLowerCase(),
+    i.launchId.toLowerCase(),
+    PEPECARTEL_TOKEN_ARTIFACT_ID,
+    String(PCART_PRODUCTION_CHAIN_ID),
+    i.from.toLowerCase(),
+    i.nonce.toString(),
+    i.initCodeHash.toLowerCase(),
+    i.safe.toLowerCase(),
+    i.predicted.toLowerCase(),
+    i.reviewFingerprint.toLowerCase(),
+    i.readinessFingerprint.toLowerCase(),
+  ].join("|");
+}
+
+/** Stable deployment-intent fingerprint: unchanged by normal fee/gas drift. */
+export function pcartFinalReviewIntentFingerprint(i: PcartFinalReviewIntentInput): `0x${string}` {
+  return sha256(stringToBytes(pcartFinalReviewIntentPreimage(i)));
+}
+
+export type PcartFreshReviewForPermit = {
+  intentFingerprint: string;
+  predictedAddress: string;
+  unsignedTxFingerprint: string;
+  gasLimit: string;
+  maxFeePerGasWei: string;
+  maxPriorityFeePerGasWei: string;
+};
+
+export type PcartPermitDecision =
+  | { ok: true; unsignedTxFingerprint: string; gasLimit: string; maxFeePerGasWei: string; maxPriorityFeePerGasWei: string }
+  | { ok: false; reason: "ADDRESS_CONFIRMATION_MISMATCH" | "REVIEW_CHANGED" };
+
+/**
+ * Compare the FRESH server review against the reviewed STABLE intent. Fee/gas drift is allowed;
+ * the permit is always bound to the FRESH fee-bound unsigned fingerprint and gas/fee values.
+ */
+export function decidePcartPermitFromFreshReview(fresh: PcartFreshReviewForPermit, reviewedIntentFingerprint: string, typedPredictedAddress: string): PcartPermitDecision {
+  if (!isPcartAddressConfirmation(typedPredictedAddress, fresh.predictedAddress)) return { ok: false, reason: "ADDRESS_CONFIRMATION_MISMATCH" };
+  if (fresh.intentFingerprint.toLowerCase() !== reviewedIntentFingerprint.toLowerCase()) return { ok: false, reason: "REVIEW_CHANGED" };
+  return {
+    ok: true,
+    unsignedTxFingerprint: fresh.unsignedTxFingerprint,
+    gasLimit: fresh.gasLimit,
+    maxFeePerGasWei: fresh.maxFeePerGasWei,
+    maxPriorityFeePerGasWei: fresh.maxPriorityFeePerGasWei,
+  };
+}

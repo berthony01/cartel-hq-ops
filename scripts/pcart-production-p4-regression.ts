@@ -6,6 +6,10 @@ import { keccak256 } from "viem";
 
 import {
   buildPcartUnsignedEnvelope,
+  decidePcartPermitFromFreshReview,
+  pcartFinalReviewIntentFingerprint,
+  pcartFinalReviewIntentPreimage,
+  PCART_FINAL_REVIEW_TTL_MS,
   isPcartAddressConfirmation,
   isPcartExecutionPermitActive,
   pcartGasLimitFromEstimate,
@@ -80,16 +84,35 @@ check("15", Object.keys(env).sort().join(",") === "data,from,gas,value" && env.v
 const fpIn = { deploymentId: "B3B44748-d2ad-4456-8d56-5cebba10e774", launchId: "b3b44748-d2ad-4456-8d56-5cebba10e774", from: "0xA068b94e6f11a7e2daef086c5190dc265a523f67", nonce: 1n, initCodeHash: "0xab", gasLimit: 720000n, maxFeePerGas: 100000000n, maxPriorityFeePerGas: 1000n, safe: SAFE, predicted: "0x1111111111111111111111111111111111111111", reviewFingerprint: "0xcd", readinessFingerprint: "0xef" };
 check("16a", pcartUnsignedTxFingerprint(fpIn) === "0x5d7757b2a76fa925a05f82c7cdeceb0cf79531438d778a788a96dfe68a321f99", "TS fingerprint byte-identical to the live DB recomputation");
 check("16b", pcartUnsignedTxFingerprint({ ...fpIn, gasLimit: 720001n }) !== pcartUnsignedTxFingerprint(fpIn) && pcartUnsignedTxFingerprintPreimage(fpIn).includes("|CREATE|0|"), "fingerprint binds gas/fees/no-to/value 0");
-check("16c", /v_fp IS DISTINCT FROM v_expected_fp/.test(ISSUE) && /r\.unsignedTxFingerprint !== data\.reviewedUnsignedTxFingerprint/.test(FNS), "fingerprint recomputed server-side and in DB");
+check("16c", /v_fp IS DISTINCT FROM v_expected_fp/.test(ISSUE) && /_unsigned_tx_fingerprint: decision\.unsignedTxFingerprint/.test(FNS), "fingerprint recomputed server-side and in DB");
 // 17
 check("17", /readPcartWalletEvidence/.test(PANEL) && !/eth_requestAccounts|getInjectedProvider|appKit/i.test(strip(PANEL)), "P4 reuses the P3 bound provider; no new connector");
 // 18
 check("18a", isPcartAddressConfirmation(PRED.toUpperCase().replace("0X", "0x"), PRED) && !isPcartAddressConfirmation(DEP, PRED) && !isPcartAddressConfirmation("", PRED), "typed predicted-address confirmation");
-check("18b", !/onPaste/.test(PANEL) && !/preventDefault/.test(PANEL) && /ADDRESS_CONFIRMATION_MISMATCH/.test(FNS) && /isPcartAddressConfirmation\(data\.typedPredictedAddress/.test(FNS), "paste allowed; server still re-checks exact confirmation");
+check("18b", !/onPaste/.test(PANEL) && !/preventDefault/.test(PANEL) && /ADDRESS_CONFIRMATION_MISMATCH/.test(PURE) && /decidePcartPermitFromFreshReview\(r, data\.reviewedIntentFingerprint, data\.typedPredictedAddress\)/.test(FNS) && /if \(!isPcartAddressConfirmation\(typedPredictedAddress, fresh\.predictedAddress\)\) return \{ ok: false, reason: "ADDRESS_CONFIRMATION_MISMATCH" \}/.test(PURE), "paste allowed; server still re-checks exact confirmation");
 check("18c", /navigator\.clipboard\.writeText\(review\.predictedAddress\)/.test(PANEL) && (PANEL.match(/clipboard\.writeText\(/g) ?? []).length === 1 && /onClick=\{\(\) => void copyPredicted\(\)\}>Copy predicted address</.test(PANEL), "copy button copies only reviewed predicted address on click");
 check("18d", /disabled=\{!reviewFresh \|\| !ack \|\| !isPcartAddressConfirmation\(typed, review\.predictedAddress\)/.test(PANEL) && /Review expired\. Run final send review again\./.test(PANEL) && /Prepare is disabled because the review expired/.test(PANEL), "checkbox + exact match + freshness required; expiry reason shown");
 check("18e", /PCART_FINAL_REVIEW_TTL_MS = 60_000/.test(PURE) && PCART_EXECUTION_PERMIT_MAX_TTL_MS === 30_000, "final-review TTL 60s; permit TTL stays 30s");
 check("18f", /review\.predictedAddress\.toLowerCase\(\) !== r\.predictedAddress\.toLowerCase\(\)\) \{ setTyped\(""\)/.test(PANEL) && !/onMutate: \(\) => \{[^}]*setTyped/.test(PANEL) && /subscribePcartWallet\(\(\) => \{[^}]*setTyped\(""\)/.test(PANEL), "rerun keeps typed address if unchanged; wallet change clears");
+// 24 — stable intent fingerprint vs volatile fees/gas
+const intentIn = { deploymentId: fpIn.deploymentId, launchId: fpIn.launchId, from: fpIn.from, nonce: 1n, initCodeHash: "0xab", safe: SAFE, predicted: PRED, reviewFingerprint: "0xcd", readinessFingerprint: "0xef" };
+const IFP = pcartFinalReviewIntentFingerprint(intentIn);
+const pre = pcartFinalReviewIntentPreimage(intentIn);
+check("24a", !/gas|fee|priority/i.test(PURE.slice(PURE.indexOf("export type PcartFinalReviewIntentInput"), PURE.indexOf("export function pcartFinalReviewIntentPreimage"))) && pre.split("|").length === 12 && !pre.includes("720000") && !pre.includes("100000000"), "stable intent fingerprint excludes gasLimit/maxFee/maxPriority");
+const mutations: [string, Partial<typeof intentIn>][] = [["deploymentId", { deploymentId: "c3b44748-d2ad-4456-8d56-5cebba10e774" }], ["launchId", { launchId: "c3b44748-d2ad-4456-8d56-5cebba10e774" }], ["deployer", { from: "0x1111111111111111111111111111111111111111" }], ["nonce", { nonce: 2n }], ["initCodeHash", { initCodeHash: "0xac" }], ["safe", { safe: "0x2222222222222222222222222222222222222222" }], ["predicted", { predicted: "0x3333333333333333333333333333333333333333" }], ["review", { reviewFingerprint: "0xce" }], ["readiness", { readinessFingerprint: "0xf0" }]];
+check("24b", mutations.every(([, m]) => pcartFinalReviewIntentFingerprint({ ...intentIn, ...m }) !== IFP) && pre.includes("|pepecartel-token-v1|4663|") && pcartFinalReviewIntentFingerprint({ ...intentIn, from: intentIn.from.toUpperCase().replace("0X", "0x") }) === IFP, "stable fingerprint binds deployment/launch/artifact/chain/deployer/nonce/init/Safe/predicted/review/readiness");
+const prepareBody = FNS.slice(FNS.indexOf("export const preparePcartFinalSend"));
+check("24c", /const r = await finalReview\(context as Ctx, data\.deploymentId, data\.preparationAuthorizationId, data\.wallet\)/.test(prepareBody) && !/reviewedUnsignedTxFingerprint/.test(FNS + PANEL) && /reviewedIntentFingerprint: review\.intentFingerprint/.test(PANEL), "prepare reruns finalReview fresh and compares stable intent, not old unsigned fingerprint");
+check("24d", /_unsigned_tx_fingerprint: decision\.unsignedTxFingerprint/.test(prepareBody) && /_gas_limit: Number\(decision\.gasLimit\)/.test(prepareBody) && /_max_fee_per_gas: decision\.maxFeePerGasWei/.test(prepareBody) && /_max_priority_fee_per_gas: decision\.maxPriorityFeePerGasWei/.test(prepareBody) && /intentFingerprint = pcartFinalReviewIntentFingerprint\(/.test(FNS), "permit RPC receives fresh unsigned fingerprint + fresh gas/fees");
+const fresh = { intentFingerprint: IFP, predictedAddress: PRED, unsignedTxFingerprint: "0x" + "a".repeat(64), gasLimit: "721077", maxFeePerGasWei: "200", maxPriorityFeePerGasWei: "2" };
+const feeOnly = decidePcartPermitFromFreshReview({ ...fresh, maxFeePerGasWei: "999", maxPriorityFeePerGasWei: "9", unsignedTxFingerprint: "0x" + "b".repeat(64) }, IFP, PRED);
+check("24e", feeOnly.ok && feeOnly.maxFeePerGasWei === "999" && feeOnly.maxPriorityFeePerGasWei === "9" && feeOnly.unsignedTxFingerprint === "0x" + "b".repeat(64), "fee-only change succeeds with fresh fee-bound values");
+const gasOnly = decidePcartPermitFromFreshReview({ ...fresh, gasLimit: "800000", unsignedTxFingerprint: "0x" + "c".repeat(64) }, IFP, PRED);
+check("24f", gasOnly.ok && gasOnly.gasLimit === "800000" && gasOnly.unsignedTxFingerprint === "0x" + "c".repeat(64), "gas-only change succeeds when intent unchanged");
+check("24g", mutations.every(([, m]) => { const r = decidePcartPermitFromFreshReview({ ...fresh, intentFingerprint: pcartFinalReviewIntentFingerprint({ ...intentIn, ...m }) }, IFP, PRED); return !r.ok && r.reason === "REVIEW_CHANGED"; }), "nonce/deployer/Safe/predicted/init/review/readiness change fails closed REVIEW_CHANGED");
+const badAddr = decidePcartPermitFromFreshReview(fresh, IFP, DEP);
+check("24h", !badAddr.ok && badAddr.reason === "ADDRESS_CONFIRMATION_MISMATCH" && /disabled=\{!reviewFresh \|\| !ack \|\|/.test(PANEL), "typed predicted address + checkbox still required");
+check("24i", PCART_FINAL_REVIEW_TTL_MS === 60_000 && PCART_EXECUTION_PERMIT_MAX_TTL_MS === 30_000 && /REVIEW_CHANGED: "The deployment details changed\. Run the final send review again\."/.test(PANEL) && !/Gas or fees changed/.test(PANEL), "TTLs 60s/30s; stable mismatch message updated");
 // 19/20
 check("19", !/>\s*(Send|Deploy|Launch)( token| now| PCART| transaction)?\s*</.test(PANEL), "no Send/Deploy/Launch button");
 const FORBIDDEN = /eth_sendTransaction|wallet_sendTransaction|sendTransaction|writeContract|signTransaction|signTypedData|personal_sign|eth_sign\b|sendRawTransaction|authorize_launch_chain_production_send_window_issuance|authorizeMainnetSendWindow|issue_launch_chain_production_presign|presignMainnetTokenDeployment|armCanary|arm_launch|persistMainnetDeploymentTxHash|submit_launch_chain_production_deployment_tx|register_verified_launch_contract|notify|telegram|claimMainnetDeploymentHandoff|sendClaimedMainnetDeployment|execution_enabled\s*[:=]\s*true|emergency_stop_engaged\s*[:=]\s*false/i;
