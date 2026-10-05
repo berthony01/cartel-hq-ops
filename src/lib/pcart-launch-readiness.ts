@@ -28,6 +28,34 @@ export const PCART_STEP_LABELS: Record<PcartStepId, string> = {
   launch: "Launch",
 };
 
+export const PCART_AUCTION_AFTER_DEPLOYMENT = "Auction — after token deployment" as const;
+
+export type PcartMainnetSummaryInput = {
+  approved: boolean;
+  executionLocked: boolean;
+  draftSaved: boolean;
+};
+
+/** Mainnet row text, driven only by authoritative readiness/control/draft state. */
+export function pcartMainnetSummary(i: PcartMainnetSummaryInput): string {
+  if (!i.executionLocked) return "Execution control not locked — review required";
+  if (!i.approved) return "Locked — not ready";
+  if (i.draftSaved) return "Reviewed draft saved — send still locked";
+  return "Approved — deployment review next";
+}
+
+/** True when the saved schedule is in the past. Display-only: never mutates. */
+export function isPcartLaunchScheduleExpired(
+  launchAt: string | null | undefined,
+  windowEnd: string | null | undefined,
+  nowMs: number,
+): boolean {
+  const anchor = launchAt ?? windowEnd ?? null;
+  if (!anchor) return false;
+  const t = Date.parse(anchor);
+  return Number.isFinite(t) && t < nowMs;
+}
+
 export type PcartRehearsalRowLike = {
   artifact_id: string | null;
   status: string;
@@ -124,11 +152,12 @@ export function derivePcartReadiness(input: PcartReadinessInput): PcartReadiness
       id: "auction",
       label: PCART_STEP_LABELS.auction,
       state: auctionReady ? "ready" : "pending_build",
-      status: auctionReady ? "Ready" : "Auction setup pending",
+      status: auctionReady ? "Ready" : PCART_AUCTION_AFTER_DEPLOYMENT,
       detail: auctionReady
         ? "Auction setup is in place."
-        : "The auction is not built yet. Planned defaults are shown below.",
-      nextAction: auctionReady ? null : "Auction setup is being built",
+        : "Not required for deployment review. The auction is set up after the token is deployed.",
+      // Never the operator's current blocker: distribution follows deployment.
+      nextAction: null,
     },
     {
       id: "treasury",
@@ -166,7 +195,10 @@ export function derivePcartReadiness(input: PcartReadinessInput): PcartReadiness
     },
   ];
 
-  const buildReady = auctionReady && treasuryReady && reviewReady;
+  // Auction/liquidity is a post-deployment distribution phase (safety contract
+  // §8/§10/§16) and never counts against production-deployment readiness.
+  void auctionReady;
+  const buildReady = treasuryReady && reviewReady;
   // "Next" must be an action the operator can actually take: prefer the first
   // step needing setup. Only when no actionable setup remains may Next name a
   // pending build dependency.
