@@ -66,6 +66,16 @@ check("10", /chain_id = 4663 AND network_environment = 'PRODUCTION'/.test(chk) &
 check("11", /NEW\.artifact_id IS DISTINCT FROM 'pepecartel-token-v1'/.test(GUARD) && /require a production readiness approval/.test(GUARD) &&
   /evidence\(NEW\.launch_id, false\)/.test(GUARD) && /readiness_fingerprint IS DISTINCT FROM ev->>'fingerprint'/.test(GUARD),
   "guard rejects non-PCART and PCART without matching approval/locked control");
+// 11b hardened boundary: PCART artifact rejected on noncanonical production launch;
+// canonical launch rejects any other artifact; canonical+exact artifact still requires approval/evidence
+check("11b", /IF NEW\.network_environment = 'PRODUCTION' OR NEW\.chain_id = 4663 THEN/.test(GUARD) &&
+  /IF private\.is_canonical_pcart_launch\(NEW\.launch_id\) THEN/.test(GUARD) &&
+  /ELSIF NEW\.artifact_id = 'pepecartel-token-v1' THEN/.test(GUARD) &&
+  /reserved for the canonical PEPECARTEL launch/.test(GUARD) &&
+  /only permits pepecartel-token-v1 in production/.test(GUARD) &&
+  /require a production readiness approval/.test(GUARD) &&
+  /evidence\(NEW\.launch_id, false\)/.test(GUARD),
+  "guard fails closed: PCART artifact canonical-only on production; canonical launch PCART-artifact-only; approval still required");
 // 12 generic canary still protected
 const CANARY = read("src/lib/chain-mainnet-canary.functions.ts");
 check("12", /attemptFail\("CANONICAL_PCART_PROTECTED"\)/.test(CANARY) && !/pepecartel-token-v1/.test(CANARY), "generic canary still CANONICAL_PCART_PROTECTED");
