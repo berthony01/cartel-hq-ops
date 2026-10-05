@@ -459,6 +459,14 @@ function ChainLauncherPage() {
 
   async function handleDeploy() {
     if (!launchId || !account || !onTestnet || isCanonical) return;
+    // Live pre-attempt gate on the SAME bound connector: fail closed before
+    // any attempt row is created or any wallet request is made.
+    const preChain = await readChainId();
+    const preAccount = await readAccount();
+    if (preChain !== 46630 || !preAccount || preAccount !== account.toLowerCase()) {
+      toast.error("Wallet account or network changed. Reconnect on Robinhood Chain Testnet.");
+      return;
+    }
     setBusy(true);
     let attemptId: string | null = null;
     let txHash: string | null = null;
