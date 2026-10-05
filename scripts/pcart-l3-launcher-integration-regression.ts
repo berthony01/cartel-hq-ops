@@ -175,13 +175,17 @@ const HARDEN_MIG = "20261005031358_a37422a1-1ef9-47c0-875d-036f20a4b225.sql";
 // Authorized PCART P2 migration: adds NEW owner-only production DRAFT/abandon
 // RPCs only; never redefines the protected original SQL.
 const P2_MIG = "20261005094833_33607368-857a-4487-b5cb-4b62419a4980.sql";
+// Authorized PCART P2 fix migration: replaces ONLY the draft RPC so the
+// GENERATED ALWAYS column token_total_supply_text is never inserted.
+const P2_FIX_MIG = "20261005100833_46ee6d47-1dcf-47d3-aa02-5e08af696cf0.sql";
 const HARDEN_SQL = read(`supabase/migrations/${HARDEN_MIG}`);
+const P2_FIX_SQL = read(`supabase/migrations/${P2_FIX_MIG}`);
 check("D0h", /CREATE OR REPLACE FUNCTION public\.enforce_canonical_pcart_no_production_deployment/.test(HARDEN_SQL) &&
   /ELSIF NEW\.artifact_id = 'pepecartel-token-v1' THEN/.test(HARDEN_SQL) &&
   /reserved for the canonical PEPECARTEL launch/.test(HARDEN_SQL) &&
   !/CREATE TABLE|ALTER TABLE|ADD CONSTRAINT|CREATE POLICY|GRANT |INSERT |UPDATE |DELETE /.test(HARDEN_SQL),
   "hardening migration only replaces the guard function (canonical-only PCART artifact on production)");
-const MIG_PCART_PROTECTED = MIG_PCART.filter((f) => f !== READINESS_MIG && f !== HARDEN_MIG && f !== P2_MIG).filter((f) => f !== RECOVERY_MIG ||
+const MIG_PCART_PROTECTED = MIG_PCART.filter((f) => f !== READINESS_MIG && f !== HARDEN_MIG && f !== P2_MIG && f !== P2_FIX_MIG).filter((f) => f !== RECOVERY_MIG ||
   /FUNCTION public\.create_launch_chain_pcart_rehearsal_attempt\(|is_canonical_pcart_launch\(\)? *RETURNS|enforce_canonical_pcart_no_production_deployment\(\) *RETURNS/.test(read(`supabase/migrations/${f}`)));
 check("D0", MIG.length > 0 && MIG_PCART_PROTECTED.length === 1 && MIG_PCART_PROTECTED[0] === MIG_FILE &&
   MIG.includes("FUNCTION public.create_launch_chain_pcart_rehearsal_attempt(") &&
