@@ -68,6 +68,10 @@ function emit() {
 export function getPcartBoundWallet(): { account: string; kind: PcartWalletKind } | null {
   return bound ? { account: bound.account, kind: bound.kind } : null;
 }
+/** P5 only: the SAME bound provider used for evidence reads. Never auto-connects. */
+export function getPcartBoundProviderForSend(): { provider: Eip1193Provider; account: string } | null {
+  return bound ? { provider: bound.provider, account: bound.account } : null;
+}
 export function isPcartChooserConfigured(): boolean {
   const raw = (import.meta.env as Record<string, string | undefined>)["VITE_WALLETCONNECT_PROJECT_ID"];
   return typeof raw === "string" && raw.trim().length > 0;
