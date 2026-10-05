@@ -17,7 +17,8 @@ import { normalizeAddress } from "@/lib/pcart-production-intent";
 import { revalidate } from "@/lib/pcart-production-preparation.functions";
 import {
   buildPcartUnsignedEnvelope,
-  isPcartAddressConfirmation,
+  decidePcartPermitFromFreshReview,
+  pcartFinalReviewIntentFingerprint,
   pcartGasLimitFromEstimate,
   pcartMaxCostWei,
   pcartUnsignedTxFingerprint,
@@ -44,6 +45,7 @@ export type PcartFinalSendReview = {
   estimatedMaxCostWei: string;
   balanceWei: string;
   unsignedTxFingerprint: string;
+  intentFingerprint: string;
   reviewFingerprint: string;
   readinessFingerprint: string;
   reviewedAt: number;
@@ -133,6 +135,17 @@ async function finalReview(ctx: Ctx, deploymentId: string, authorizationId: stri
       reviewFingerprint: base.reviewFingerprint,
       readinessFingerprint,
     });
+    const intentFingerprint = pcartFinalReviewIntentFingerprint({
+      deploymentId: d.id,
+      launchId: String(d.launch_id),
+      from: envelope.from,
+      nonce: BigInt(base.nonce),
+      initCodeHash: base.initCodeHash,
+      safe: base.safeRecipient,
+      predicted: base.predictedAddress,
+      reviewFingerprint: base.reviewFingerprint,
+      readinessFingerprint,
+    });
     return {
       ok: true,
       deploymentId: d.id,
@@ -153,6 +166,7 @@ async function finalReview(ctx: Ctx, deploymentId: string, authorizationId: stri
       estimatedMaxCostWei: maxCost.toString(),
       balanceWei: balance.toString(),
       unsignedTxFingerprint,
+      intentFingerprint,
       reviewFingerprint: base.reviewFingerprint,
       readinessFingerprint,
       reviewedAt: now,
@@ -179,25 +193,27 @@ export const reviewPcartFinalSend = createServerFn({ method: "POST" })
 
 export const preparePcartFinalSend = createServerFn({ method: "POST" })
   .middleware([requireSupabaseAuth])
-  .inputValidator((input: { deploymentId: string; preparationAuthorizationId: string; wallet: string; reviewedUnsignedTxFingerprint: string; typedPredictedAddress: string }) => {
+  .inputValidator((input: { deploymentId: string; preparationAuthorizationId: string; wallet: string; reviewedIntentFingerprint: string; typedPredictedAddress: string }) => {
     const base = validate(input);
-    const fp = String(input.reviewedUnsignedTxFingerprint ?? "").toLowerCase();
+    const fp = String(input.reviewedIntentFingerprint ?? "").toLowerCase();
     if (!/^0x[0-9a-f]{64}$/.test(fp)) throw new Error("Invalid review");
-    return { ...base, reviewedUnsignedTxFingerprint: fp, typedPredictedAddress: String(input.typedPredictedAddress ?? "") };
+    return { ...base, reviewedIntentFingerprint: fp, typedPredictedAddress: String(input.typedPredictedAddress ?? "") };
   })
   .handler(async ({ data, context }): Promise<PcartPrepareResult> => {
     // Fresh server-side review immediately before issuing the permit.
     const r = await finalReview(context as Ctx, data.deploymentId, data.preparationAuthorizationId, data.wallet);
     if (!r.ok) return r;
-    if (!isPcartAddressConfirmation(data.typedPredictedAddress, r.predictedAddress)) return { ok: false, reason: "ADDRESS_CONFIRMATION_MISMATCH" };
-    if (r.unsignedTxFingerprint !== data.reviewedUnsignedTxFingerprint) return { ok: false, reason: "REVIEW_CHANGED" };
+    // Stable deployment intent must be unchanged; normal fee/gas drift is allowed and the
+    // permit is bound to the FRESH fee-bound unsigned fingerprint (DB recomputes it exactly).
+    const decision = decidePcartPermitFromFreshReview(r, data.reviewedIntentFingerprint, data.typedPredictedAddress);
+    if (!decision.ok) return decision;
     const { data: row, error } = await (context as Ctx).supabase.rpc("issue_canonical_pcart_execution_permit", {
       _deployment_id: r.deploymentId,
       _preparation_authorization_id: r.preparationAuthorizationId,
-      _unsigned_tx_fingerprint: r.unsignedTxFingerprint,
-      _gas_limit: Number(r.gasLimit),
-      _max_fee_per_gas: r.maxFeePerGasWei,
-      _max_priority_fee_per_gas: r.maxPriorityFeePerGasWei,
+      _unsigned_tx_fingerprint: decision.unsignedTxFingerprint,
+      _gas_limit: Number(decision.gasLimit),
+      _max_fee_per_gas: decision.maxFeePerGasWei,
+      _max_priority_fee_per_gas: decision.maxPriorityFeePerGasWei,
     });
     if (error || !row) {
       const msg = String(error?.message ?? "");

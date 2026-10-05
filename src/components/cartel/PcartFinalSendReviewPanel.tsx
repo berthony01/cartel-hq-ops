@@ -19,7 +19,7 @@ const TEXT: Record<string, string> = {
   PREPARATION_NOT_ACTIVE: "Wallet preparation expired. Re-authorize wallet preparation above.",
   INSUFFICIENT_BALANCE: "Deployer balance does not cover the maximum gas cost.",
   ADDRESS_CONFIRMATION_MISMATCH: "Typed address does not match the predicted contract.",
-  REVIEW_CHANGED: "Gas or fees changed since review. Run the final send review again.",
+  REVIEW_CHANGED: "The deployment details changed. Run the final send review again.",
   ALREADY_ACTIVE: "A final send permit is already active.",
   APPROVAL_MISSING_OR_STALE: "Production readiness approval no longer matches.",
   DRAFT_CHANGED: "The saved draft no longer matches. Abandon it and review again.",
@@ -99,7 +99,7 @@ export function PcartFinalSendReviewPanel({ attempt }: { attempt: DeploymentRow 
       if (!ack || !isPcartAddressConfirmation(typed, review.predictedAddress)) throw new Error(TEXT["ADDRESS_CONFIRMATION_MISMATCH"]);
       const ev = await readPcartWalletEvidence();
       if (!evaluatePcartWalletBinding(ev, { deployer, nonce }).ok || !ev) throw new Error("Wallet evidence changed. Run the review again.");
-      const r = await runPrepare({ data: { deploymentId: attempt.id, preparationAuthorizationId: review.preparationAuthorizationId, wallet: ev.account, reviewedUnsignedTxFingerprint: review.unsignedTxFingerprint, typedPredictedAddress: typed } });
+      const r = await runPrepare({ data: { deploymentId: attempt.id, preparationAuthorizationId: review.preparationAuthorizationId, wallet: ev.account, reviewedIntentFingerprint: review.intentFingerprint, typedPredictedAddress: typed } });
       if (!r.ok) throw new Error(TEXT[r.reason] ?? "Permit refused. Nothing was sent.");
       return r.permit;
     },
