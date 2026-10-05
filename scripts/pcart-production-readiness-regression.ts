@@ -69,8 +69,8 @@ check("13", !/create_launch_chain_pcart_production|presign|send_window|canary_pe
 const UI = read("src/components/cartel/PcartProductionBlockedCheckpoint.tsx");
 const LIB = read("src/lib/pcart-production-readiness.ts");
 check("14", /AlertDialog/.test(UI) && /Confirm approval/.test(UI) && /canOfferApproval\(s\)/.test(UI) &&
-  !/wallet|provider|appkit|wagmi|eth_|sendTransaction|switchChain/i.test(UI.replace(/does not use a wallet/g, "")) &&
-  !/wallet|provider|appkit|wagmi|eth_/i.test(LIB.replace(/touches a wallet, provider/g, "")), "explicit confirmation, no wallet references");
+  !/wallet|provider|appkit|wagmi|eth_|sendTransaction|switchChain/i.test(UI.replace(/\/\*[\s\S]*?\*\//g, "").replace(/does not use a wallet/g, "")) &&
+  !/wallet|provider|appkit|wagmi|eth_/i.test(LIB.replace(/\/\*[\s\S]*?\*\//g, "")), "explicit confirmation, no wallet references");
 const base: PcartReadinessState = { canonical: true, is_platform_owner: true, rehearsal_complete: true, safe_configured: true,
   safe_verified: true, evidence_ok: true, execution_locked: true, approval: null };
 check("14b", canOfferApproval(base) && !canOfferApproval({ ...base, is_platform_owner: false }) &&

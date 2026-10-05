@@ -77,7 +77,7 @@ check("S15", !/<input|<Input|<Button|onClick|onSubmit/.test(GUIDE), "guide is re
 check("S15a", /Launch setup/.test(GUIDE) && /Current next action/.test(GUIDE),
   "guide is compact and emphasizes one current next action");
 const CP = readFileSync("src/components/cartel/PcartProductionBlockedCheckpoint.tsx", "utf8");
-check("S16", /AlertDialog/.test(CP) && !/<Input|wallet|provider|sendTransaction/i.test(CP), "checkpoint: only a confirmed DB approval action, no wallet/inputs");
+check("S16", /AlertDialog/.test(CP) && !/<Input|wallet|provider|sendTransaction/i.test(CP.replace(/\/\*[\s\S]*?\*\//g, "").replace(/does not use a wallet/g, "")), "checkpoint: only a confirmed DB approval action, no wallet/inputs");
 
 const LAUNCH_CONTROL = readFileSync("src/routes/_authenticated/launch-control.tsx", "utf8");
 const safePanelIndex = LAUNCH_CONTROL.indexOf("<TreasurySafeCreatePanel");

@@ -107,7 +107,7 @@ check("C1b", CANONICAL_PCART_IDENTITY.ticker === "$PCART" && !/CANONICAL_PCART_L
   "no pinned launch id export");
 check("C2", /isCanonicalPcartLaunch\(selected\)\s*\?\s*\(\s*pcartSafeReady\s*\?\s*\(\s*<div[^>]*>[\s\S]*?<PcartProductionBlockedCheckpoint launchId=\{selected\.id\} \/>\s*<\/div>\s*\)\s*:\s*null\s*\)\s*:\s*selected && selectedIsProjectLaunch \? \(\s*<ProductionDeploymentRequestPanel/.test(LC),
   "Launch Control renders the blocked checkpoint instead of the generic request form for the canonical launch");
-check("C3", !/<input|<Input|onSubmit|wallet|provider|eth_|sendTransaction|appkit/i.test(CHECKPOINT) && /AlertDialog/.test(CHECKPOINT),
+check("C3", !/<input|<Input|onSubmit|wallet|provider|eth_|sendTransaction|appkit/i.test(CHECKPOINT.replace(/\/\*[\s\S]*?\*\//g, "").replace(/does not use a wallet/g, "")) && /AlertDialog/.test(CHECKPOINT),
   "checkpoint has no inputs/wallet; its only action is a confirmed DB approval");
 for (const b of ["rehearsal", "2-of-3", "Safe verification", "readiness approval", "artifact allowlist"]) {
   check(`C4:${b}`, CHECKPOINT.includes(b), `checkpoint lists blocker: ${b}`);
