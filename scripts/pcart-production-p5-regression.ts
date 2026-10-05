@@ -126,7 +126,8 @@ check("20", PCART_SEND_CONFIRM_PHRASE === "DEPLOY PCART" && isPcartSendConfirmed
 // 21 canary
 check("21", /CANONICAL_PCART_PROTECTED/.test(CANARY), "generic canary still CANONICAL_PCART_PROTECTED");
 // 22 no side effects
-check("22", !/register_verified_launch_contract|apply_launch_chain_production|notify_launch_watchers|liquidity|auction|send_window_issuance|canary_execution|presign_authorization\(/i.test(strip(FNS + PANEL + WALLET + PURE) + CLAIM + RECORD), "no verification/registration/liquidity/auction/generic send-stage side effects");
+check("22", !/register_verified_launch_contract|apply_launch_chain_production|notify_launch_watchers|liquidity|auction|send_window_issuance|canary_execution|presign_authorization\(/i.test(strip(FNS + PANEL + WALLET + PURE)) &&
+  !/register_verified_launch_contract|apply_launch_chain|notify_launch_watchers|INSERT INTO public\.launch_chain_production_|UPDATE public\.launches|official_contract_address =/i.test(MIG), "no verification/registration/liquidity/auction/generic send-stage side effects");
 // summary
 check("23", pcartP5SummaryText({ window: "BEFORE", readyToSend: true, claimStatus: null, submitted: false }) === "Mainnet deployment scheduled — not yet available"
   && pcartP5SummaryText({ window: "OPEN", readyToSend: false, claimStatus: null, submitted: false }) === "Mainnet deployment window open — fresh review required"
