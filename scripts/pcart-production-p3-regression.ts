@@ -134,6 +134,16 @@ for (const [k, v] of Object.entries(P3_FILES)) {
 check("15b", !/>\s*(Send|Deploy|Launch)( token| now| PCART)?\s*</.test(PANEL), "no Send/Deploy/Launch button in P3 panel");
 // 16 generic canary
 check("16", /return attemptFail\("CANONICAL_PCART_PROTECTED"\)/.test(CANARY), "generic canary still CANONICAL_PCART_PROTECTED");
+// 19 readiness getter lifecycle fix: the P3 revalidation reads the public getter, which must
+// use evidence(false) so the expected production DRAFT #11 does not stale the approval.
+const GETTER_MIG_FILE = readdirSync("supabase/migrations").filter((f) => read(`supabase/migrations/${f}`).includes("FUNCTION public.get_canonical_pcart_production_readiness")).sort().at(-1)!;
+const GETTER_MIG = read(`supabase/migrations/${GETTER_MIG_FILE}`);
+const GETTER = GETTER_MIG.split("FUNCTION public.get_canonical_pcart_production_readiness(")[1]?.split("$$;")[0] ?? "";
+check("19a", /pcart_production_readiness_evidence\(_launch_id, false\)/.test(GETTER) && !/pcart_production_readiness_evidence\(_launch_id, true\)/.test(GETTER),
+  "readiness getter uses evidence(false) — P3 check no longer fails because its own DRAFT exists");
+check("19b", /CREATE OR REPLACE FUNCTION public\.approve_canonical_pcart_production_readiness|CREATE FUNCTION public\.approve_canonical_pcart_production_readiness/.test(GETTER_MIG) === false,
+  "fix migration does not redefine the approval function");
+check("19c", !/FUNCTION private\.pcart_production_readiness_evidence/.test(GETTER_MIG), "fix migration does not redefine the evidence function");
 // 18 summary
 check("18a", pcartMainnetSummary({ approved: true, executionLocked: true, draftSaved: true }) === "Reviewed draft saved — wallet preparation next" &&
   pcartMainnetSummary({ approved: true, executionLocked: true, draftSaved: true, walletReady: true }) === "Wallet ready — mainnet send locked" &&
