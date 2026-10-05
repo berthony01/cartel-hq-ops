@@ -197,6 +197,12 @@ check("D0m", /CREATE TABLE public\.pcart_production_execution_permits/.test(P4_S
   !/CREATE OR REPLACE FUNCTION public\.(create_launch_chain_pcart_rehearsal_attempt|enforce_canonical_pcart_no_production_deployment|create_canonical_pcart_production_draft|issue_canonical_pcart_production_presign_authorization)/.test(P4_SQL) &&
   !/INSERT INTO public\.launch_chain|UPDATE public\.(launch_chain_deployments|launches|launch_chain_production_execution_controls)/.test(P4_SQL),
   "P4 migration adds only the execution permit; no rehearsal/guard/draft/P3/send-stage/control changes");
+const P6_MIG = "20261005153100_51f1d64a-29f1-418f-a954-af4ebf1df09b.sql";
+const P6_SQL = read(`supabase/migrations/${P6_MIG}`);
+check("D0p", /FUNCTION public\.apply_canonical_pcart_production_verification/.test(P6_SQL) &&
+  !/CREATE OR REPLACE FUNCTION public\.(create_launch_chain_pcart_rehearsal_attempt|enforce_canonical_pcart_no_production_deployment|create_canonical_pcart_production_draft|issue_canonical_pcart_production_presign_authorization|register_verified_launch_contract)/.test(P6_SQL) &&
+  !/CREATE TABLE|INSERT INTO|UPDATE public\.(launches|launch_chain_production_execution_controls)/.test(P6_SQL),
+  "P6 migration adds only PCART verification/finality evidence RPCs; no rehearsal/guard/draft/registration/control changes");
 check("D0n", /CREATE TABLE public\.pcart_production_send_claims/.test(P5_SQL) &&
   !/CREATE OR REPLACE FUNCTION public\.(create_launch_chain_pcart_rehearsal_attempt|enforce_canonical_pcart_no_production_deployment|create_canonical_pcart_production_draft|issue_canonical_pcart_production_presign_authorization)/.test(P5_SQL) &&
   !/INSERT INTO public\.launch_chain|UPDATE public\.(launches|launch_chain_production_execution_controls)/.test(P5_SQL),
@@ -223,7 +229,7 @@ check("D0i", /CREATE OR REPLACE FUNCTION public\.create_canonical_pcart_producti
   !/CREATE TABLE|ALTER TABLE|CREATE POLICY/.test(P2_FIX_SQL) &&
   !/token_total_supply_text,/.test(P2_FIX_SQL),
   "P2 fix migration only replaces the draft RPC; the generated column is never inserted");
-const MIG_PCART_PROTECTED = MIG_PCART.filter((f) => f !== READINESS_MIG && f !== HARDEN_MIG && f !== P2_MIG && f !== P2_FIX_MIG && f !== ENV_IDX_MIG && f !== P3_MIG && f !== GETTER_FIX_MIG && f !== P4_MIG && f !== P5_MIG).filter((f) => f !== RECOVERY_MIG ||
+const MIG_PCART_PROTECTED = MIG_PCART.filter((f) => f !== READINESS_MIG && f !== HARDEN_MIG && f !== P2_MIG && f !== P2_FIX_MIG && f !== ENV_IDX_MIG && f !== P3_MIG && f !== GETTER_FIX_MIG && f !== P4_MIG && f !== P5_MIG && f !== P6_MIG).filter((f) => f !== RECOVERY_MIG ||
   /FUNCTION public\.create_launch_chain_pcart_rehearsal_attempt\(|is_canonical_pcart_launch\(\)? *RETURNS|enforce_canonical_pcart_no_production_deployment\(\) *RETURNS/.test(read(`supabase/migrations/${f}`)));
 check("D0", MIG.length > 0 && MIG_PCART_PROTECTED.length === 1 && MIG_PCART_PROTECTED[0] === MIG_FILE &&
   MIG.includes("FUNCTION public.create_launch_chain_pcart_rehearsal_attempt(") &&
