@@ -36,10 +36,16 @@ function check(id: string, ok: boolean, label: string) {
 const read = (p: string) => readFileSync(p, "utf8");
 const noComments = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 
-const MIG_NAME = readdirSync("supabase/migrations").find((f) => read(`supabase/migrations/${f}`).includes("create_canonical_pcart_production_draft"));
+const P2_MIG_FILES = readdirSync("supabase/migrations")
+  .filter((f) => read(`supabase/migrations/${f}`).includes("create_canonical_pcart_production_draft"))
+  .sort();
+const MIG_NAME = P2_MIG_FILES.at(-1);
 const MIG = MIG_NAME ? read(`supabase/migrations/${MIG_NAME}`) : "";
-const CREATE = MIG.slice(MIG.indexOf("FUNCTION public.create_canonical_pcart_production_draft"), MIG.indexOf("FUNCTION public.abandon_canonical_pcart_production_draft"));
-const ABANDON = MIG.slice(MIG.indexOf("FUNCTION public.abandon_canonical_pcart_production_draft"));
+const CREATE = MIG.slice(MIG.indexOf("FUNCTION public.create_canonical_pcart_production_draft"));
+const ABANDON_NAME = P2_MIG_FILES.findLast((f) => read(`supabase/migrations/${f}`).includes("FUNCTION public.abandon_canonical_pcart_production_draft"));
+const ABANDON = ABANDON_NAME
+  ? read(`supabase/migrations/${ABANDON_NAME}`).slice(read(`supabase/migrations/${ABANDON_NAME}`).indexOf("FUNCTION public.abandon_canonical_pcart_production_draft"))
+  : "";
 const INTENT = read("src/lib/pcart-production-intent.ts");
 const REVIEW = read("src/lib/pcart-production-review.functions.ts");
 const DRAFT = read("src/lib/pcart-production-draft.ts");
@@ -58,7 +64,7 @@ const PINNED_HASH = "0x3482c250d8500b20f731938be3cf2eab39e59b9fa7aff21ffb5085e1c
 
 // 1. recipient derived from approval Safe, never freeform
 check("1a", MIG_NAME !== undefined && CREATE.includes(`c_safe constant text := '${SAFE}'`) &&
-  /lower\(a\.safe_address\) IS DISTINCT FROM c_safe/.test(CREATE) && /c_supply, '1000000000000000000000000000', c_safe/.test(CREATE),
+  /lower\(a\.safe_address\) IS DISTINCT FROM c_safe/.test(CREATE) && /c_supply, c_safe,/.test(CREATE),
   "RPC pins recipient to the approval Safe; no recipient parameter");
 check("1b", !/_token_recipient|_recipient/.test(CREATE.slice(0, CREATE.indexOf("RETURNS"))), "RPC signature has no recipient input");
 check("1c", !/recipient/i.test(noComments(PANEL).match(/<input[\s\S]*?\/>/g)?.join("") ?? "") && !/<Input/.test(PANEL),
