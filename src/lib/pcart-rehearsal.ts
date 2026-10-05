@@ -15,7 +15,8 @@ import { supabase } from "@/integrations/supabase/client";
 import type { DeploymentRow } from "./chain-launcher";
 import { PCART_FIXED_INTENT, normalizePcartRehearsalRecipient } from "./launch-artifact-registry";
 
-export const PCART_REHEARSAL_RPC = "create_launch_chain_pcart_rehearsal_attempt" as const;
+/** v2 also persists the pre-broadcast deployer nonce for unsent-draft recovery. */
+export const PCART_REHEARSAL_RPC = "create_launch_chain_pcart_rehearsal_attempt_v2" as const;
 
 export class PcartRehearsalUnavailableError extends Error {
   constructor() {
@@ -38,20 +39,27 @@ export async function createPcartRehearsalAttempt(input: {
   clientRequestId: string;
   deployerAddress: string;
   rehearsalRecipient: string;
+  /** Live `latest` nonce, proven equal to `pending`, read right before this call. */
+  deployerNonceBefore: bigint;
 }): Promise<DeploymentRow> {
   const recipient = normalizePcartRehearsalRecipient(input.rehearsalRecipient);
   const deployer = input.deployerAddress.trim().toLowerCase();
   if (!/^0x[0-9a-f]{40}$/.test(deployer)) throw new Error("Invalid deployer address.");
+  if (input.deployerNonceBefore < 0n || input.deployerNonceBefore > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new Error("Invalid deployer nonce.");
+  }
+  const nonce = Number(input.deployerNonceBefore);
   const { data, error } = await supabase.rpc(PCART_REHEARSAL_RPC, {
     _launch_id: input.launchId,
     _client_request_id: input.clientRequestId,
     _deployer_address: deployer,
     _rehearsal_recipient: recipient,
+    _deployer_nonce_before: nonce,
   });
   if (isMissingRpcError(error)) throw new PcartRehearsalUnavailableError();
   if (error) throw new Error(error.message || "Could not start the PCART rehearsal attempt.");
   const row = (Array.isArray(data) ? data[0] : data) as unknown as DeploymentRow | null;
-  if (!isExactPcartRehearsalRow(row, recipient)) {
+  if (!isExactPcartRehearsalRow(row, recipient) || Number(row?.deployer_nonce_before) !== nonce) {
     throw new Error("The rehearsal attempt returned by the server does not match the PCART intent.");
   }
   return row as DeploymentRow;
