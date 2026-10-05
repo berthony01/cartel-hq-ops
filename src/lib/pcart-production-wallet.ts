@@ -205,8 +205,9 @@ export async function readPcartWalletEvidence(): Promise<PcartWalletEvidence | n
     }
   };
   const accounts = await readAccounts(p);
-  const live = normalizeAddress(accounts[0] ?? null);
-  const account = live && accounts.map((a) => a.toLowerCase()).includes(b.account) ? b.account : (live ?? b.account);
+  const lower = accounts.map((a) => a.toLowerCase());
+  // If the wallet no longer exposes the bound account, report what it does expose (fails the gate).
+  const account = lower.includes(b.account) ? b.account : (normalizeAddress(lower[0] ?? null) ?? "");
   const [chainRaw, latestRaw, pendingRaw, balRaw] = await Promise.all([
     safe("eth_chainId"),
     safe("eth_getTransactionCount", [b.account, "latest"]),
@@ -215,7 +216,7 @@ export async function readPcartWalletEvidence(): Promise<PcartWalletEvidence | n
   ]);
   const chain = hexToBigInt(chainRaw);
   return {
-    account: accounts.length && !accounts.map((a) => a.toLowerCase()).includes(b.account) ? (live ?? account) : account,
+    account,
     chainId: chain === null ? null : Number(chain),
     latestNonce: hexToBigInt(latestRaw),
     pendingNonce: hexToBigInt(pendingRaw),
