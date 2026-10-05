@@ -475,6 +475,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           deployer_address: string
+          deployer_nonce_before: number | null
           deployment_kind: string
           failure_code: string | null
           failure_detail: string | null
@@ -524,6 +525,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           deployer_address: string
+          deployer_nonce_before?: number | null
           deployment_kind?: string
           failure_code?: string | null
           failure_detail?: string | null
@@ -573,6 +575,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           deployer_address?: string
+          deployer_nonce_before?: number | null
           deployment_kind?: string
           failure_code?: string | null
           failure_detail?: string | null
@@ -5101,6 +5104,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           deployer_address: string
+          deployer_nonce_before: number | null
           deployment_kind: string
           failure_code: string | null
           failure_detail: string | null
@@ -5196,6 +5200,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           deployer_address: string
+          deployer_nonce_before: number | null
           deployment_kind: string
           failure_code: string | null
           failure_detail: string | null
@@ -5262,6 +5267,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           deployer_address: string
+          deployer_nonce_before: number | null
           deployment_kind: string
           failure_code: string | null
           failure_detail: string | null
@@ -5334,6 +5340,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           deployer_address: string
+          deployer_nonce_before: number | null
           deployment_kind: string
           failure_code: string | null
           failure_detail: string | null
@@ -5406,6 +5413,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           deployer_address: string
+          deployer_nonce_before: number | null
           deployment_kind: string
           failure_code: string | null
           failure_detail: string | null
@@ -5896,6 +5904,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           deployer_address: string
+          deployer_nonce_before: number | null
           deployment_kind: string
           failure_code: string | null
           failure_detail: string | null
@@ -5959,6 +5968,72 @@ export type Database = {
           created_at: string
           created_by: string | null
           deployer_address: string
+          deployer_nonce_before: number | null
+          deployment_kind: string
+          failure_code: string | null
+          failure_detail: string | null
+          finality_last_checked_at: string | null
+          finality_notice: string | null
+          finality_provider_kind: string | null
+          finality_state: string
+          finalized_at: string | null
+          finalized_block_hash_confirmed: boolean | null
+          finalized_block_number: number | null
+          finalized_head_block_number: number | null
+          id: string
+          init_code_hash: string | null
+          last_checked_at: string | null
+          launch_id: string
+          network_environment: string
+          review_fingerprint: string | null
+          status: string
+          submitted_at: string | null
+          token_decimals: number | null
+          token_name: string | null
+          token_recipient: string | null
+          token_symbol: string | null
+          token_total_supply: number | null
+          token_total_supply_text: string | null
+          tx_hash: string | null
+          updated_at: string
+          verified_at: string | null
+          verified_recipient_balance: number | null
+          verified_recipient_balance_text: string | null
+          verified_token_decimals: number | null
+          verified_token_name: string | null
+          verified_token_symbol: string | null
+          verified_total_supply: number | null
+          verified_total_supply_text: string | null
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "launch_chain_deployments"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      create_launch_chain_pcart_rehearsal_attempt_v2: {
+        Args: {
+          _client_request_id: string
+          _deployer_address: string
+          _deployer_nonce_before: number
+          _launch_id: string
+          _rehearsal_recipient: string
+        }
+        Returns: {
+          artifact_id: string | null
+          attempt_number: number
+          block_hash: string | null
+          block_number: number | null
+          chain_id: number
+          client_request_id: string
+          confirmations: number
+          contract_address: string | null
+          created_at: string
+          created_by: string | null
+          deployer_address: string
+          deployer_nonce_before: number | null
           deployment_kind: string
           failure_code: string | null
           failure_detail: string | null
@@ -6027,6 +6102,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           deployer_address: string
+          deployer_nonce_before: number | null
           deployment_kind: string
           failure_code: string | null
           failure_detail: string | null
@@ -6093,6 +6169,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           deployer_address: string
+          deployer_nonce_before: number | null
           deployment_kind: string
           failure_code: string | null
           failure_detail: string | null
@@ -6970,6 +7047,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           deployer_address: string
+          deployer_nonce_before: number | null
           deployment_kind: string
           failure_code: string | null
           failure_detail: string | null
@@ -8283,6 +8361,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           deployer_address: string
+          deployer_nonce_before: number | null
           deployment_kind: string
           failure_code: string | null
           failure_detail: string | null
@@ -8346,6 +8425,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           deployer_address: string
+          deployer_nonce_before: number | null
           deployment_kind: string
           failure_code: string | null
           failure_detail: string | null
