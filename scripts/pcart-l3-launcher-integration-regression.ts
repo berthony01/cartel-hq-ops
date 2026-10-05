@@ -105,7 +105,7 @@ check("C1", isCanonicalPcartLaunch(CANON) &&
   !isCanonicalPcartLaunch(null), "exact semantic identity: all four fields required, never slug/id alone");
 check("C1b", CANONICAL_PCART_IDENTITY.ticker === "$PCART" && !/CANONICAL_PCART_LAUNCH_ID/.test(REGISTRY),
   "no pinned launch id export");
-check("C2", /isCanonicalPcartLaunch\(selected\)\s*\?\s*\(\s*pcartSafeReady\s*\?\s*\(\s*<div[^>]*>[\s\S]*?<PcartProductionBlockedCheckpoint launchId=\{selected\.id\} \/>\s*<\/div>\s*\)\s*:\s*null\s*\)\s*:\s*selected && selectedIsProjectLaunch \? \(\s*<ProductionDeploymentRequestPanel/.test(LC),
+check("C2", /isCanonicalPcartLaunch\(selected\)\s*\?\s*\(\s*pcartSafeReady\s*\?\s*\(\s*<div[^>]*>[\s\S]*?<PcartProductionBlockedCheckpoint launchId=\{selected\.id\} \/>[\s\S]*?<\/div>\s*\)\s*:\s*null\s*\)\s*:\s*selected && selectedIsProjectLaunch \? \(\s*<ProductionDeploymentRequestPanel/.test(LC),
   "Launch Control renders the blocked checkpoint instead of the generic request form for the canonical launch");
 check("C3", !/<input|<Input|onSubmit|wallet|provider|eth_|sendTransaction|appkit/i.test(CHECKPOINT.replace(/\/\*[\s\S]*?\*\//g, "").replace(/does not use a wallet/g, "")) && /AlertDialog/.test(CHECKPOINT),
   "checkpoint has no inputs/wallet; its only action is a confirmed DB approval");
@@ -172,13 +172,16 @@ const READINESS_MIG = "20261005030008_98ee5be2-ad18-4084-b97a-1c2172544c20.sql";
 // Authorized guard-hardening migration: replaces ONLY the guard function to make
 // pepecartel-token-v1 canonical-only on production; no schema or other SQL.
 const HARDEN_MIG = "20261005031358_a37422a1-1ef9-47c0-875d-036f20a4b225.sql";
+// Authorized PCART P2 migration: adds NEW owner-only production DRAFT/abandon
+// RPCs only; never redefines the protected original SQL.
+const P2_MIG = "20261005094833_33607368-857a-4487-b5cb-4b62419a4980.sql";
 const HARDEN_SQL = read(`supabase/migrations/${HARDEN_MIG}`);
 check("D0h", /CREATE OR REPLACE FUNCTION public\.enforce_canonical_pcart_no_production_deployment/.test(HARDEN_SQL) &&
   /ELSIF NEW\.artifact_id = 'pepecartel-token-v1' THEN/.test(HARDEN_SQL) &&
   /reserved for the canonical PEPECARTEL launch/.test(HARDEN_SQL) &&
   !/CREATE TABLE|ALTER TABLE|ADD CONSTRAINT|CREATE POLICY|GRANT |INSERT |UPDATE |DELETE /.test(HARDEN_SQL),
   "hardening migration only replaces the guard function (canonical-only PCART artifact on production)");
-const MIG_PCART_PROTECTED = MIG_PCART.filter((f) => f !== READINESS_MIG && f !== HARDEN_MIG).filter((f) => f !== RECOVERY_MIG ||
+const MIG_PCART_PROTECTED = MIG_PCART.filter((f) => f !== READINESS_MIG && f !== HARDEN_MIG && f !== P2_MIG).filter((f) => f !== RECOVERY_MIG ||
   /FUNCTION public\.create_launch_chain_pcart_rehearsal_attempt\(|is_canonical_pcart_launch\(\)? *RETURNS|enforce_canonical_pcart_no_production_deployment\(\) *RETURNS/.test(read(`supabase/migrations/${f}`)));
 check("D0", MIG.length > 0 && MIG_PCART_PROTECTED.length === 1 && MIG_PCART_PROTECTED[0] === MIG_FILE &&
   MIG.includes("FUNCTION public.create_launch_chain_pcart_rehearsal_attempt(") &&
