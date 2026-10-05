@@ -36,7 +36,7 @@ const raw = { code: "23505", message: 'duplicate key value violates unique const
 const out = mapPcartProductionDraftError(raw);
 check("U9", out === PCART_PRODUCTION_DUPLICATE_MESSAGE && !/launch_chain_deployments/.test(out), "duplicate error mapped to plain message without constraint name");
 check("U10", mapPcartProductionDraftError({ message: "Mainnet execution must remain locked to prepare a draft" }) === "Mainnet execution must remain locked to prepare a draft", "other errors pass through");
-const canary = readdirSync("src/lib").map((n) => readFileSync(`src/lib/${n}`, "utf8")).join("\n");
+const canary = readdirSync("src/lib").filter((n) => n.endsWith(".ts")).map((n) => readFileSync(`src/lib/${n}`, "utf8")).join("\n");
 check("U11", /CANONICAL_PCART_PROTECTED/.test(canary), "generic canary still CANONICAL_PCART_PROTECTED");
 const DRAFT = readFileSync("src/lib/pcart-production-draft.ts", "utf8");
 check("U12", !/eth_sendTransaction|sendTransaction|signTypedData|personal_sign|presign|send_window|arm_launch|walletconnect|appkit/i.test(DRAFT + SQL), "no send/sign/presign/window/arming code added");
