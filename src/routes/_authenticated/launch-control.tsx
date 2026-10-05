@@ -2923,7 +2923,7 @@ function LaunchControlPage() {
                       <p className="text-sm font-semibold text-foreground">
                         Next step: Test PCART before launch
                       </p>
-                      <PcartProductionBlockedCheckpoint />
+                      <PcartProductionBlockedCheckpoint launchId={selected.id} />
                     </div>
                   ) : null
                 ) : selected && selectedIsProjectLaunch ? (
