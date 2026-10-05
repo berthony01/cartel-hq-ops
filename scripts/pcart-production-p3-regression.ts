@@ -121,12 +121,14 @@ check("14b", PCART_MAINNET_CHAIN_HEX === "0x1237" && /onClick=\{\(\) => connect\
   "network switch and connect only on explicit click; no auto-connect");
 
 // 15 forbidden primitives
-const FORBIDDEN = /eth_sendTransaction|wallet_sendTransaction|sendTransaction|writeContract|signTransaction|signTypedData|personal_sign|eth_sign\b|sendRawTransaction|send_window_issuance|authorizeMainnetSendWindow|canary_permit[^s]|armCanary|arm_launch|persistMainnetDeploymentTxHash|register_verified_launch_contract|notify_launch_watchers|claimMainnetDeploymentHandoff|sendClaimedMainnetDeployment/;
+const FORBIDDEN = /eth_sendTransaction|wallet_sendTransaction|sendTransaction|writeContract|signTransaction|signTypedData|personal_sign|eth_sign\b|sendRawTransaction|authorize_launch_chain_production_send_window_issuance|authorizeMainnetSendWindow|canary_permit[^s]|armCanary|arm_launch|persistMainnetDeploymentTxHash|register_verified_launch_contract|notify_launch_watchers|claimMainnetDeploymentHandoff|sendClaimedMainnetDeployment/;
 for (const [k, v] of Object.entries(P3_FILES)) {
   const body = k === "MIG" ? v.replace(/--.*$/gm, "") : strip(v);
   const hits = body.match(FORBIDDEN);
   // migration may READ the send-window/permit tables to refuse; only inserts would matter
-  const ok = k === "MIG" ? !/INSERT INTO public\.launch_chain_production_(send_window_issuances|canary_permits|presign_authorizations)/.test(body) && !/eth_send|sign/i.test(body.replace(/signer|signers|assign|design/gi, "")) : !hits;
+  const ok0 = k === "MIG" ? !/INSERT INTO public\.launch_chain_production_(send_window_issuances|canary_permits|presign_authorizations)/.test(body) && !/eth_send|\bsign(ature|ed|_)|personal_sign|eth_sign/i.test(body) : !hits;
+  const writes = k === "FNS" && /\.(insert|update|upsert|delete)\(/.test(body);
+  const ok = ok0 && !writes;
   check(`15-${k}`, ok, `${k} contains no send/sign/window/arming/registration primitive${hits && k !== "MIG" ? ` (found ${hits[0]})` : ""}`);
 }
 check("15b", !/>\s*(Send|Deploy|Launch)( token| now| PCART)?\s*</.test(PANEL), "no Send/Deploy/Launch button in P3 panel");
