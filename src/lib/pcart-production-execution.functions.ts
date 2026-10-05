@@ -65,17 +65,22 @@ async function finalReview(ctx: Ctx, deploymentId: string, authorizationId: stri
   if (!base.ok) return base;
 
   const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
-  const [{ data: d }, { data: p }, { data: approval }, { count: presigns }] = await Promise.all([
+  const [{ data: d }, { data: p }, { count: presigns }] = await Promise.all([
     supabaseAdmin.from("launch_chain_deployments").select("id, launch_id").eq("id", deploymentId).maybeSingle(),
     supabaseAdmin
       .from("pcart_production_preparation_authorizations")
       .select("id, deployment_id, wallet_account, predicted_contract_address, review_fingerprint, init_code_hash, issued_at, expires_at, cancelled_at")
       .eq("id", authorizationId)
       .maybeSingle(),
-    supabaseAdmin.from("pcart_production_readiness_approvals").select("readiness_fingerprint, launch_id").eq("artifact_id", "pepecartel-token-v1").maybeSingle(),
     supabaseAdmin.from("launch_chain_production_presign_authorizations").select("id", { count: "exact", head: true }).eq("deployment_id", deploymentId),
   ]);
   if (!d) return fail("DRAFT_NOT_FOUND");
+  const { data: approval } = await supabaseAdmin
+    .from("pcart_production_readiness_approvals")
+    .select("readiness_fingerprint, launch_id")
+    .eq("launch_id", d.launch_id)
+    .eq("artifact_id", "pepecartel-token-v1")
+    .maybeSingle();
   if ((presigns ?? 0) > 0) return fail("SEND_STAGE_ALREADY_EXISTS");
   const now = Date.now();
   if (
