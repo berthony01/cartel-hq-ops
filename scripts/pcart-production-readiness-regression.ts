@@ -100,6 +100,16 @@ check("14b", canOfferApproval(base) && !canOfferApproval({ ...base, is_platform_
   !canOfferApproval({ ...base, approval: { id: "x", artifact_id: "pepecartel-token-v1", rehearsal_tx_hash: "", safe_address: "", approved_at: "", evidence_still_matches: true } }) &&
   !canOfferApproval(undefined), "approval action offered only when owner + all evidence proven");
 check("15", /is_platform_owner\(uid\)/.test(GET) && /workspace_members/.test(GET), "read RPC limited to owner or workspace members");
+// 19 getter lifecycle semantics: getter uses evidence(false) so the expected production DRAFT
+// does not stale an existing approval; initial approval still requires evidence(true).
+check("19a", /pcart_production_readiness_evidence\(_launch_id, false\)/.test(GET) && !/pcart_production_readiness_evidence\(_launch_id, true\)/.test(GET),
+  "getter calls evidence(false) — expected production DRAFT does not stale the approval");
+check("19b", /pcart_production_readiness_evidence\(_launch_id, true\)/.test(APPROVE) && !/pcart_production_readiness_evidence\(_launch_id, false\)/.test(APPROVE),
+  "initial approval still calls evidence(true) — zero production rows required to approve");
+check("19c", /readiness_fingerprint = ev->>'fingerprint'/.test(GET) && /evidence_still_matches/.test(GET),
+  "getter still compares approval fingerprint to fresh evidence — rehearsal/Safe/fingerprint changes still stale it");
+check("19d", /execution_enabled = false AND c\.emergency_stop_engaged = true/.test(GET),
+  "getter still reports execution lock state");
 
 console.log(`pcart-production-readiness: ${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
