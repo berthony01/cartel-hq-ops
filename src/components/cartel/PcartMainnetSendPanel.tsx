@@ -93,11 +93,13 @@ export function PcartMainnetSendPanel({
   launchWindowStart,
   launchWindowEnd,
   lifecycle,
+  onChanged,
 }: {
   attempt: DeploymentRow;
   launchWindowStart: string | null;
   launchWindowEnd: string | null;
   lifecycle: string | null;
+  onChanged?: () => void;
 }) {
   const qc = useQueryClient();
   const runClaim = useServerFn(claimPcartMainnetSend);
@@ -129,7 +131,7 @@ export function PcartMainnetSendPanel({
     setMarker(readPcartSendMarker(attempt.id));
     qc.invalidateQueries({ queryKey: pcartSendClaimQueryKey(attempt.id) });
     qc.invalidateQueries({ queryKey: pcartExecutionPermitQueryKey(attempt.id) });
-    qc.invalidateQueries({ queryKey: ["launch-deployment-evidence"] });
+    onChanged?.();
   };
   const saveMarker = (m: PcartSendMarker) => { writePcartSendMarker(m); setMarker(m); };
 
