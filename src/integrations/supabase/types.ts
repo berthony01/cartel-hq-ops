@@ -8709,6 +8709,52 @@ export type Database = {
         Args: { _pinned: boolean; _target_id: string }
         Returns: boolean
       }
+      register_canonical_pcart_official_contract: {
+        Args: {
+          _deployment_id: string
+          _expected_contract_address: string
+          _launch_id: string
+        }
+        Returns: {
+          announced_at: string | null
+          chain: string
+          completed_at: string | null
+          contract_pending_at: string | null
+          contract_registered_at: string | null
+          contract_registered_by: string | null
+          created_at: string
+          created_by: string | null
+          id: string
+          internal_notes: string | null
+          launch_approaching_at: string | null
+          launch_at: string | null
+          launch_kind: string
+          launch_watch_token: string | null
+          launch_watch_token_created_at: string | null
+          launch_window_end: string | null
+          launch_window_start: string | null
+          live_at: string | null
+          official_contract_address: string | null
+          official_contract_deployment_id: string | null
+          project_profile_id: string
+          public_slug: string
+          status: string
+          status_changed_at: string
+          status_changed_by: string | null
+          ticker: string
+          timezone: string
+          token_name: string
+          updated_at: string
+          watchlist_opened_at: string | null
+          workspace_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "launches"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       register_verified_launch_contract: {
         Args: {
           _deployment_id: string
