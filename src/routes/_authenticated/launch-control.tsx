@@ -117,6 +117,8 @@ import { PcartMainnetSendPanel, fetchLatestPcartSendClaim, pcartSendClaimQueryKe
 import { pcartP5SummaryText, pcartSendWindowState } from "@/lib/pcart-production-send";
 import { PcartVerificationPanel } from "@/components/cartel/PcartVerificationPanel";
 import { pcartP6SummaryText } from "@/lib/pcart-production-verify";
+import { PcartOfficialRegistrationPanel } from "@/components/cartel/PcartOfficialRegistrationPanel";
+import { pcartP7SummaryText } from "@/lib/pcart-production-register";
 import { fetchLatestPcartExecutionPermit, pcartExecutionPermitQueryKey } from "@/lib/pcart-production-execution-permit";
 import { isPcartExecutionPermitActive } from "@/lib/pcart-production-execution";
 import {
@@ -1175,7 +1177,8 @@ function LaunchControlPage() {
     ) ??
     null;
   const pcartP6Text = pcartP6Attempt ? pcartP6SummaryText({ status: pcartP6Attempt.status, finalityState: pcartP6Attempt.finality_state }) : null;
-  const pcartMainnetText = pcartP6Text ?? pcartP5Text ?? pcartMainnetBaseText;
+  const pcartP7Text = pcartP7SummaryText({ launchStatus: selected?.status, officialContractAddress: selected?.official_contract_address });
+  const pcartMainnetText = pcartP7Text ?? pcartP6Text ?? pcartP5Text ?? pcartMainnetBaseText;
   const pcartScheduleExpired = isPcartLaunchScheduleExpired(
     selected?.launch_at,
     selected?.launch_window_end,
@@ -3029,6 +3032,13 @@ function LaunchControlPage() {
                           attempt={pcartP6Attempt}
                           predictedAddress={pcartSendClaimQuery.data?.predicted_contract_address ?? null}
                           onChanged={() => queryClient.invalidateQueries({ queryKey: chainDeploymentsQueryKey(selected.id) })}
+                        />
+                      ) : null}
+                      {pcartProdReadinessQuery.data?.is_platform_owner === true && pcartP6Attempt ? (
+                        <PcartOfficialRegistrationPanel
+                          attempt={pcartP6Attempt}
+                          launch={{ id: selected.id, status: selected.status ?? null, official_contract_address: selected.official_contract_address ?? null, official_contract_deployment_id: selected.official_contract_deployment_id ?? null }}
+                          onChanged={() => queryClient.invalidateQueries()}
                         />
                       ) : null}
                     </div>
