@@ -185,6 +185,11 @@ check("D0h", /CREATE OR REPLACE FUNCTION public\.enforce_canonical_pcart_no_prod
   /reserved for the canonical PEPECARTEL launch/.test(HARDEN_SQL) &&
   !/CREATE TABLE|ALTER TABLE|ADD CONSTRAINT|CREATE POLICY|GRANT |INSERT |UPDATE |DELETE /.test(HARDEN_SQL),
   "hardening migration only replaces the guard function (canonical-only PCART artifact on production)");
+check("D0i", /CREATE OR REPLACE FUNCTION public\.create_canonical_pcart_production_draft/.test(P2_FIX_SQL) &&
+  !/abandon_canonical_pcart_production_draft/.test(P2_FIX_SQL) &&
+  !/CREATE TABLE|ALTER TABLE|CREATE POLICY/.test(P2_FIX_SQL) &&
+  !/token_total_supply_text,/.test(P2_FIX_SQL),
+  "P2 fix migration only replaces the draft RPC; the generated column is never inserted");
 const MIG_PCART_PROTECTED = MIG_PCART.filter((f) => f !== READINESS_MIG && f !== HARDEN_MIG && f !== P2_MIG && f !== P2_FIX_MIG).filter((f) => f !== RECOVERY_MIG ||
   /FUNCTION public\.create_launch_chain_pcart_rehearsal_attempt\(|is_canonical_pcart_launch\(\)? *RETURNS|enforce_canonical_pcart_no_production_deployment\(\) *RETURNS/.test(read(`supabase/migrations/${f}`)));
 check("D0", MIG.length > 0 && MIG_PCART_PROTECTED.length === 1 && MIG_PCART_PROTECTED[0] === MIG_FILE &&
