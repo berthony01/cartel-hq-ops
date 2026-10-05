@@ -115,6 +115,8 @@ import { PcartWalletPreparationPanel } from "@/components/cartel/PcartWalletPrep
 import { PcartFinalSendReviewPanel } from "@/components/cartel/PcartFinalSendReviewPanel";
 import { PcartMainnetSendPanel, fetchLatestPcartSendClaim, pcartSendClaimQueryKey } from "@/components/cartel/PcartMainnetSendPanel";
 import { pcartP5SummaryText, pcartSendWindowState } from "@/lib/pcart-production-send";
+import { PcartVerificationPanel } from "@/components/cartel/PcartVerificationPanel";
+import { pcartP6SummaryText } from "@/lib/pcart-production-verify";
 import { fetchLatestPcartExecutionPermit, pcartExecutionPermitQueryKey } from "@/lib/pcart-production-execution-permit";
 import { isPcartExecutionPermitActive } from "@/lib/pcart-production-execution";
 import {
@@ -1165,7 +1167,15 @@ function LaunchControlPage() {
     walletReady: isPcartPreparationActive(pcartPreparationQuery.data, Date.now()),
     readyToSend: isPcartExecutionPermitActive(pcartPermitQuery.data, Date.now()),
   });
-  const pcartMainnetText = pcartP5Text ?? pcartMainnetBaseText;
+  // PCART P6: post-broadcast row (FAILED included so a terminal failure stays visible).
+  const pcartP6Attempt =
+    pcartProductionAttempt ??
+    (deploymentEvidenceQuery.data ?? []).find(
+      (r) => r.network_environment === "PRODUCTION" && r.chain_id === 4663 && r.artifact_id === "pepecartel-token-v1" && r.status === "FAILED" && !!r.tx_hash,
+    ) ??
+    null;
+  const pcartP6Text = pcartP6Attempt ? pcartP6SummaryText({ status: pcartP6Attempt.status, finalityState: pcartP6Attempt.finality_state }) : null;
+  const pcartMainnetText = pcartP6Text ?? pcartP5Text ?? pcartMainnetBaseText;
   const pcartScheduleExpired = isPcartLaunchScheduleExpired(
     selected?.launch_at,
     selected?.launch_window_end,
@@ -3011,6 +3021,13 @@ function LaunchControlPage() {
                           launchWindowStart={selected.launch_window_start ?? null}
                           launchWindowEnd={selected.launch_window_end ?? null}
                           lifecycle={selected.status ?? null}
+                          onChanged={() => queryClient.invalidateQueries({ queryKey: chainDeploymentsQueryKey(selected.id) })}
+                        />
+                      ) : null}
+                      {pcartProdReadinessQuery.data?.is_platform_owner === true && pcartP6Attempt ? (
+                        <PcartVerificationPanel
+                          attempt={pcartP6Attempt}
+                          predictedAddress={pcartSendClaimQuery.data?.predicted_contract_address ?? null}
                           onChanged={() => queryClient.invalidateQueries({ queryKey: chainDeploymentsQueryKey(selected.id) })}
                         />
                       ) : null}
