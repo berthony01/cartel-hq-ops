@@ -363,7 +363,7 @@ check(
     check("WG-1", d["@reown/appkit"] === "1.8.24" && d["@reown/appkit-adapter-wagmi"] === "1.8.24" && !d["@reown/appkit-adapter-ethers"] && /^\d+\.\d+\.\d+$/.test(d["wagmi"] ?? "") && /^\d+\.\d+\.\d+$/.test(d["@wagmi/core"] ?? ""), "aligned exact stable Reown 1.8.24 + exact wagmi; EthersAdapter dependency removed");
     const bridge = strip(read("src/lib/reown-appkit-browser.ts"));
     check("WG-2", /export \{ createAppKit \} from "@reown\/appkit";/.test(bridge) && /export \{ WagmiAdapter \} from "@reown\/appkit-adapter-wagmi";/.test(bridge) && !/new |createAppKit\(|window|document|ethers/i.test(bridge.replace(/export \{[^}]*\} from "[^"]*";/g, "")), "bridge statically re-exports AppKit + WagmiAdapter only, no module-scope action");
-    check("WG-3", /open\(\{ view: "Connect" \}\)/.test(r) && (r.match(/networks: \[ROBINHOOD_APPKIT_NETWORK\]/g) ?? []).length === 2, "Robinhood-only networks for adapter + AppKit; eip155 Connect view");
+    check("WG-3", /open\(\{ view: "Connect" \}\)/.test(r) && (r.match(/networks: \[ROBINHOOD_APPKIT_NETWORK, ROBINHOOD_TESTNET_APPKIT_NETWORK\]/g) ?? []).length === 2, "Robinhood-only networks for adapter + AppKit; eip155 Connect view");
     check("WG-4", /reloadAndRetry/.test(p) && /connectNotice === "REOWN_CHUNK_FETCH_FAILED" \|\| connectNotice === "REOWN_CUSTOM_ELEMENT_CONFLICT"/.test(p) && /REOWN_CUSTOM_ELEMENT_CONFLICT: "The wallet interface did not initialize cleanly\. Reload this page once and try again\."/.test(p) && !/"REOWN_CUSTOM_ELEMENT_CONFLICT",?\s*\n?\s*"REOWN_APPKIT/.test(p), "custom-element conflict gets one-time reload recovery and exact copy");
   }
   {

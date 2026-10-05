@@ -3,6 +3,11 @@ import {
   ROBINHOOD_MAINNET_EXPLORER_URL,
   ROBINHOOD_MAINNET_PUBLIC_DIAGNOSTIC_RPC_URL,
 } from "./chain-mainnet-registry";
+import {
+  ROBINHOOD_TESTNET_CHAIN_ID,
+  ROBINHOOD_TESTNET_EXPLORER_URL,
+  ROBINHOOD_TESTNET_RPC_URL,
+} from "./chain-registry";
 
 /**
  * P3C-G — OFFICIAL REOWN APPKIT SINGLETON (browser only).
@@ -75,6 +80,26 @@ export const ROBINHOOD_APPKIT_NETWORK: import("@reown/appkit-common").CaipNetwor
   blockExplorers: {
     default: { name: "Blockscout", url: ROBINHOOD_MAINNET_EXPLORER_URL },
   },
+};
+
+/**
+ * Robinhood Chain TESTNET (46630), declared ONLY so a WalletConnect session can
+ * authorize it for the Testnet Lab's explicit switch. Declaring it grants no
+ * mainnet capability: the mainnet connector still requires live `eip155:4663`
+ * evidence, and the Testnet Lab still requires live 46630 before any send.
+ * Mainnet remains the default network.
+ */
+export const ROBINHOOD_TESTNET_APPKIT_NETWORK: import("@reown/appkit-common").CaipNetwork = {
+  id: ROBINHOOD_TESTNET_CHAIN_ID as number,
+  caipNetworkId: `eip155:${ROBINHOOD_TESTNET_CHAIN_ID}`,
+  chainNamespace: "eip155",
+  name: "Robinhood Chain Testnet",
+  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+  rpcUrls: { default: { http: [ROBINHOOD_TESTNET_RPC_URL] } },
+  blockExplorers: {
+    default: { name: "Blockscout", url: ROBINHOOD_TESTNET_EXPLORER_URL },
+  },
+  testnet: true,
 };
 
 let appKitHandle: AppKitHandle | null = null;
@@ -272,7 +297,7 @@ async function runCreateAppKit(
     // Coinbase-Base / WalletConnect connectors. Browser-only, so ssr: false.
     const wagmiAdapter = new WagmiAdapter({
       projectId,
-      networks: [ROBINHOOD_APPKIT_NETWORK],
+      networks: [ROBINHOOD_APPKIT_NETWORK, ROBINHOOD_TESTNET_APPKIT_NETWORK],
       ssr: false,
     });
     // THE ONLY `createAppKit` CALL IN THE APPLICATION.
@@ -302,7 +327,7 @@ async function runCreateAppKit(
       // Our own proven provider — AppKit never runs its silent internal init.
       universalProvider,
       projectId,
-      networks: [ROBINHOOD_APPKIT_NETWORK],
+      networks: [ROBINHOOD_APPKIT_NETWORK, ROBINHOOD_TESTNET_APPKIT_NETWORK],
       defaultNetwork: ROBINHOOD_APPKIT_NETWORK,
       // Never restore a wallet on its own, and never move the network itself.
       enableReconnect: false,
