@@ -21,7 +21,7 @@ export const pcartExecutionPermitQueryKey = (deploymentId: string) => ["pcart-pr
 
 export async function fetchLatestPcartExecutionPermit(deploymentId: string): Promise<PcartExecutionPermit | null> {
   const { data, error } = await supabase
-    .from("pcart_production_execution_permits" as never)
+    .from("pcart_production_execution_permits")
     .select("id, deployment_id, preparation_authorization_id, wallet_account, predicted_contract_address, unsigned_tx_fingerprint, issued_at, expires_at, cancelled_at, consumed_at")
     .eq("deployment_id", deploymentId)
     .order("issued_at", { ascending: false })
@@ -33,6 +33,6 @@ export async function fetchLatestPcartExecutionPermit(deploymentId: string): Pro
 
 /** Cancels the permit only. The production DRAFT is never touched. */
 export async function cancelPcartExecutionPermit(permitId: string): Promise<void> {
-  const { error } = await supabase.rpc("cancel_canonical_pcart_execution_permit" as never, { _permit_id: permitId } as never);
+  const { error } = await supabase.rpc("cancel_canonical_pcart_execution_permit", { _permit_id: permitId });
   if (error) throw new Error("Could not cancel the final send permit.");
 }
