@@ -51,3 +51,15 @@ export async function abandonPcartProductionDraft(deploymentId: string, reason: 
   });
   if (error) throw new Error(error.message);
 }
+
+export const PCART_PRODUCTION_DUPLICATE_MESSAGE = "A PCART production draft or deployment already exists.";
+
+/** Never surface raw database constraint/index names to the UI. */
+export function mapPcartProductionDraftError(error: { code?: string; message?: string } | null | undefined): string {
+  if (!error) return "The draft was refused.";
+  const msg = error.message ?? "";
+  if (error.code === "23505" || /duplicate key|unique constraint|already exists/i.test(msg)) {
+    return PCART_PRODUCTION_DUPLICATE_MESSAGE;
+  }
+  return msg || "The draft was refused.";
+}
