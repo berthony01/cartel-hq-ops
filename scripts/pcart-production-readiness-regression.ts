@@ -22,9 +22,14 @@ const GUARD_SQL = HARDEN_FILES.length
   ? read(`supabase/migrations/${HARDEN_FILES[HARDEN_FILES.length - 1]}`)
   : SQL;
 const fn = (name: string) => SQL.split(`FUNCTION ${name}(`)[1]?.split("$$;")[0] ?? "";
+// Getter lifecycle fix: the newest migration defining the getter wins (P3 fix switches it to evidence(false)).
+const GETTER_FILES = readdirSync("supabase/migrations").filter(
+  (f) => f > MIG_FILE && read(`supabase/migrations/${f}`).includes("FUNCTION public.get_canonical_pcart_production_readiness"),
+);
+const GETTER_SQL = GETTER_FILES.length ? read(`supabase/migrations/${GETTER_FILES[GETTER_FILES.length - 1]}`) : SQL;
 const EV = fn("private.pcart_production_readiness_evidence");
 const APPROVE = fn("public.approve_canonical_pcart_production_readiness");
-const GET = fn("public.get_canonical_pcart_production_readiness");
+const GET = GETTER_SQL.split("FUNCTION public.get_canonical_pcart_production_readiness(")[1]?.split("$$;")[0] ?? "";
 const GUARD = ((s) => s.split("FUNCTION public.enforce_canonical_pcart_no_production_deployment(")[1]?.split("$$;")[0] ?? "")(GUARD_SQL);
 
 // 1 non-owner
