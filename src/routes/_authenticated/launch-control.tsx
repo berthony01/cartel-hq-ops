@@ -112,6 +112,9 @@ import { PcartProductionBlockedCheckpoint } from "@/components/cartel/PcartProdu
 import { PcartReviewLaunchSummary } from "@/components/cartel/PcartReviewLaunchSummary";
 import { PcartProductionReviewPanel } from "@/components/cartel/PcartProductionReviewPanel";
 import { PcartWalletPreparationPanel } from "@/components/cartel/PcartWalletPreparationPanel";
+import { PcartFinalSendReviewPanel } from "@/components/cartel/PcartFinalSendReviewPanel";
+import { fetchLatestPcartExecutionPermit, pcartExecutionPermitQueryKey } from "@/lib/pcart-production-execution-permit";
+import { isPcartExecutionPermitActive } from "@/lib/pcart-production-execution";
 import {
   fetchLatestPcartPreparation,
   isPcartPreparationActive,
@@ -1133,11 +1136,18 @@ function LaunchControlPage() {
     queryFn: () => fetchLatestPcartPreparation(pcartUnsentDraft!.id),
     refetchInterval: 15_000,
   });
+  const pcartPermitQuery = useQuery({
+    queryKey: pcartExecutionPermitQueryKey(pcartUnsentDraft?.id ?? "none"),
+    enabled: !!pcartUnsentDraft && pcartProdReadinessQuery.data?.is_platform_owner === true,
+    queryFn: () => fetchLatestPcartExecutionPermit(pcartUnsentDraft!.id),
+    refetchInterval: 10_000,
+  });
   const pcartMainnetText = pcartMainnetSummary({
     approved: pcartApproved,
     executionLocked: pcartProdReadinessQuery.data?.execution_locked !== false,
     draftSaved: pcartProductionAttempt?.status === "DRAFT",
     walletReady: isPcartPreparationActive(pcartPreparationQuery.data, Date.now()),
+    readyToSend: isPcartExecutionPermitActive(pcartPermitQuery.data, Date.now()),
   });
   const pcartScheduleExpired = isPcartLaunchScheduleExpired(
     selected?.launch_at,
@@ -2973,6 +2983,9 @@ function LaunchControlPage() {
                       ) : null}
                       {pcartApproved && pcartProdReadinessQuery.data?.is_platform_owner === true && pcartUnsentDraft ? (
                         <PcartWalletPreparationPanel attempt={pcartUnsentDraft} />
+                      ) : null}
+                      {pcartApproved && pcartProdReadinessQuery.data?.is_platform_owner === true && pcartUnsentDraft ? (
+                        <PcartFinalSendReviewPanel attempt={pcartUnsentDraft} />
                       ) : null}
                     </div>
                   ) : null
