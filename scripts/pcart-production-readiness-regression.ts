@@ -86,7 +86,9 @@ const CANARY = read("src/lib/chain-mainnet-canary.functions.ts");
 check("12", /attemptFail\("CANONICAL_PCART_PROTECTED"\)/.test(CANARY) && !/pepecartel-token-v1/.test(CANARY), "generic canary still CANONICAL_PCART_PROTECTED");
 // 13 no new production/send path
 check("13", !/create_launch_chain_pcart_production|presign|send_window|canary_permit|eth_sendTransaction|arm_/i.test(SQL) &&
-  !readdirSync("src/lib").some((f) => /pcart-production-(attempt|send|deploy)/.test(f)), "no production attempt/send/presign/arming path");
+  !readdirSync("src/lib").some((f) => /pcart-production-(attempt|deploy)/.test(f)) &&
+  readdirSync("src/lib").filter((f) => /pcart-production-send/.test(f)).every((f) => ["pcart-production-send.ts", "pcart-production-send-wallet.ts", "pcart-production-send.functions.ts"].includes(f)),
+  "readiness SQL has no send path; the only send path is the dedicated, separately tested P5 module");
 // 14 UI
 const UI = read("src/components/cartel/PcartProductionBlockedCheckpoint.tsx");
 const LIB = read("src/lib/pcart-production-readiness.ts");
