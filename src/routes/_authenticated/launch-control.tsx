@@ -110,10 +110,18 @@ import { VerifiedContractRegistrationPanel } from "@/components/cartel/VerifiedC
 import { ProductionDeploymentRequestPanel } from "@/components/cartel/ProductionDeploymentRequestPanel";
 import { PcartProductionBlockedCheckpoint } from "@/components/cartel/PcartProductionBlockedCheckpoint";
 import { PcartReviewLaunchSummary } from "@/components/cartel/PcartReviewLaunchSummary";
+import { PcartProductionReviewPanel } from "@/components/cartel/PcartProductionReviewPanel";
+import { fetchPcartReadiness, pcartReadinessQueryKey } from "@/lib/pcart-production-readiness";
+import { findPcartProductionAttempt } from "@/lib/pcart-production-draft";
 import { PCART_FIXED_INTENT, isCanonicalPcartLaunch } from "@/lib/launch-artifact-registry";
 import { TreasurySignerSetupPanel } from "@/components/cartel/TreasurySignerSetupPanel";
 import { PcartLaunchSetupGuide } from "@/components/cartel/PcartLaunchSetupGuide";
-import { derivePcartReadiness, isPcartTreasurySafeReady } from "@/lib/pcart-launch-readiness";
+import {
+  derivePcartReadiness,
+  isPcartLaunchScheduleExpired,
+  isPcartTreasurySafeReady,
+  pcartMainnetSummary,
+} from "@/lib/pcart-launch-readiness";
 import { getLaunchTreasurySigners, treasurySignerConfigQueryKey } from "@/lib/treasury-signers";
 import {
   TreasurySafeCreatePanel,
@@ -1103,6 +1111,24 @@ function LaunchControlPage() {
           })
         : null,
     [selectedIsCanonicalPcart, pcartSignerQuery.data, pcartSafeReady, deploymentEvidenceQuery.data],
+  );
+  // ---- PCART P2: authoritative readiness/control + production draft (read-only) ----
+  const pcartProdReadinessQuery = useQuery({
+    queryKey: pcartReadinessQueryKey(selected?.id ?? "none"),
+    enabled: !!selected?.id && selectedIsCanonicalPcart,
+    queryFn: () => fetchPcartReadiness(selected!.id),
+  });
+  const pcartProductionAttempt = findPcartProductionAttempt(deploymentEvidenceQuery.data);
+  const pcartApproved = !!pcartProdReadinessQuery.data?.approval;
+  const pcartMainnetText = pcartMainnetSummary({
+    approved: pcartApproved,
+    executionLocked: pcartProdReadinessQuery.data?.execution_locked !== false,
+    draftSaved: pcartProductionAttempt?.status === "DRAFT",
+  });
+  const pcartScheduleExpired = isPcartLaunchScheduleExpired(
+    selected?.launch_at,
+    selected?.launch_window_end,
+    Date.now(),
   );
   const deploymentEvidence = useMemo(() => {
     if (!selected) return null;
@@ -2924,6 +2950,13 @@ function LaunchControlPage() {
                         Next step: Final production readiness
                       </p>
                       <PcartProductionBlockedCheckpoint launchId={selected.id} />
+                      {pcartApproved && pcartProdReadinessQuery.data?.is_platform_owner === true && pcartSignerQuery.data ? (
+                        <PcartProductionReviewPanel
+                          launchId={selected.id}
+                          signers={pcartSignerQuery.data.signers}
+                          attempt={pcartProductionAttempt}
+                        />
+                      ) : null}
                     </div>
                   ) : null
                 ) : selected && selectedIsProjectLaunch ? (
@@ -2965,6 +2998,8 @@ function LaunchControlPage() {
                     chain={selected.chain}
                     fixedSupply={`${PCART_FIXED_INTENT.totalSupplyWhole.toLocaleString("en-US")} ${PCART_FIXED_INTENT.symbol}`}
                     readiness={pcartReadiness}
+                    mainnetSummary={pcartMainnetText}
+                    scheduleExpired={pcartScheduleExpired}
                   />
                 ) : null}
 

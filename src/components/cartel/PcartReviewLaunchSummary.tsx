@@ -10,6 +10,10 @@ type PcartReviewLaunchSummaryProps = {
   chain: string;
   fixedSupply: string;
   readiness: PcartReadiness;
+  /** Authoritative Mainnet row text (readiness approval + execution control + draft). */
+  mainnetSummary: string;
+  /** Saved schedule is in the past. Warning only; never mutated here. */
+  scheduleExpired?: boolean;
 };
 
 function statusFor(readiness: PcartReadiness, id: "auction" | "treasury" | "review") {
@@ -23,6 +27,8 @@ export function PcartReviewLaunchSummary({
   chain,
   fixedSupply,
   readiness,
+  mainnetSummary,
+  scheduleExpired = false,
 }: PcartReviewLaunchSummaryProps) {
   const facts = [
     ["Token", tokenName],
@@ -32,7 +38,7 @@ export function PcartReviewLaunchSummary({
     ["Treasury", statusFor(readiness, "treasury")],
     ["Test rehearsal", statusFor(readiness, "review")],
     ["Auction", statusFor(readiness, "auction")],
-    ["Mainnet", readiness.mainnetLocked ? "Locked — not ready" : "Pending approval"],
+    ["Mainnet", mainnetSummary],
   ] as const;
 
   return (
@@ -65,7 +71,12 @@ export function PcartReviewLaunchSummary({
         ))}
       </dl>
 
-      <div className="min-w-0 p-4">
+      <div className="min-w-0 space-y-3 p-4">
+        {scheduleExpired ? (
+          <p role="status" className="rounded-md border border-gold/40 bg-gold/10 px-3 py-2 text-xs leading-relaxed text-foreground">
+            The saved launch window is in the past. Set a new launch time before announcing.
+          </p>
+        ) : null}
         <Button type="button" className="min-h-11 w-full whitespace-normal" disabled>
           <ShieldCheck className="size-4" aria-hidden="true" />
           Launch unavailable until setup is complete

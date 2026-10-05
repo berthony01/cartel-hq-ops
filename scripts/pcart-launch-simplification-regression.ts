@@ -30,15 +30,15 @@ const base = derivePcartReadiness({ treasurySignersRecorded: false, deploymentRo
 check("S1", base.steps.map((s) => s.label).join(",") === "Token,Auction,Treasury,Review,Launch",
   "five exact step labels in order");
 check("S2", PCART_STEP_ORDER.join(",") === "token,auction,treasury,review,launch", "step order constant");
-check("S3", base.steps[1]!.state === "pending_build" && base.steps[1]!.status === "Auction setup pending",
-  "auction pending by default");
+check("S3", base.steps[1]!.state === "pending_build" && base.steps[1]!.status === "Auction — after token deployment" && base.steps[1]!.nextAction === null,
+  "auction shown as post-deployment phase, never a next action");
 const allElse = derivePcartReadiness({
   treasurySignersRecorded: true,
   treasurySafeVerified: true,
   deploymentRows: [row(PCART, "CONFIRMED")],
 });
-check("S4", allElse.steps[1]!.state !== "ready" && !allElse.buildReady,
-  "auction never ready without explicit integration input");
+check("S4", allElse.steps[1]!.state !== "ready" && allElse.buildReady,
+  "auction never ready without integration input, and never blocks deployment readiness (P2)");
 check("S5", hasConfirmedPcartRehearsal([row(PCART, "CONFIRMED")]) && allElse.steps[3]!.state === "ready",
   "confirmed pepecartel-token-v1 testnet rehearsal makes Review ready");
 check("S6", !hasConfirmedPcartRehearsal([row(GENERIC, "CONFIRMED")]) &&
@@ -65,8 +65,8 @@ const onlyPending = derivePcartReadiness({
   treasurySafeVerified: true,
   deploymentRows: [row(PCART, "CONFIRMED")],
 });
-check("S11b", onlyPending.next?.stepId === "auction",
-  "once all setup is done, next may name the pending build dependency");
+check("S11b", onlyPending.next === null && onlyPending.overall === "Ready",
+  "once treasury + rehearsal are done, auction is not presented as the blocker (P2)");
 check("S12", base.steps[0]!.state === "ready" && base.steps[4]!.state === "locked", "token ready, launch locked");
 
 const LIB = readFileSync("src/lib/pcart-launch-readiness.ts", "utf8");
