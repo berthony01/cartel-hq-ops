@@ -2512,6 +2512,94 @@ export type Database = {
           },
         ]
       }
+      pcart_production_send_claims: {
+        Row: {
+          broadcast_at: string | null
+          chain_id: number
+          claim_status: string
+          claimed_at: string
+          claimed_by: string
+          created_at: string
+          deployer_nonce: number
+          deployment_id: string
+          id: string
+          last_recovery_checked_at: string | null
+          launch_id: string
+          permit_id: string
+          predicted_contract_address: string
+          release_reason: string | null
+          released_at: string | null
+          tx_hash: string | null
+          unsigned_tx_fingerprint: string
+          updated_at: string
+          wallet_account: string
+        }
+        Insert: {
+          broadcast_at?: string | null
+          chain_id?: number
+          claim_status?: string
+          claimed_at?: string
+          claimed_by: string
+          created_at?: string
+          deployer_nonce: number
+          deployment_id: string
+          id?: string
+          last_recovery_checked_at?: string | null
+          launch_id: string
+          permit_id: string
+          predicted_contract_address: string
+          release_reason?: string | null
+          released_at?: string | null
+          tx_hash?: string | null
+          unsigned_tx_fingerprint: string
+          updated_at?: string
+          wallet_account: string
+        }
+        Update: {
+          broadcast_at?: string | null
+          chain_id?: number
+          claim_status?: string
+          claimed_at?: string
+          claimed_by?: string
+          created_at?: string
+          deployer_nonce?: number
+          deployment_id?: string
+          id?: string
+          last_recovery_checked_at?: string | null
+          launch_id?: string
+          permit_id?: string
+          predicted_contract_address?: string
+          release_reason?: string | null
+          released_at?: string | null
+          tx_hash?: string | null
+          unsigned_tx_fingerprint?: string
+          updated_at?: string
+          wallet_account?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pcart_production_send_claims_deployment_id_fkey"
+            columns: ["deployment_id"]
+            isOneToOne: false
+            referencedRelation: "launch_chain_deployments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pcart_production_send_claims_launch_id_fkey"
+            columns: ["launch_id"]
+            isOneToOne: false
+            referencedRelation: "launches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pcart_production_send_claims_permit_id_fkey"
+            columns: ["permit_id"]
+            isOneToOne: true
+            referencedRelation: "pcart_production_execution_permits"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       platform_message_templates: {
         Row: {
           created_at: string
@@ -6151,6 +6239,36 @@ export type Database = {
         }
         Returns: string
       }
+      claim_canonical_pcart_mainnet_send: {
+        Args: { _permit_id: string }
+        Returns: {
+          broadcast_at: string | null
+          chain_id: number
+          claim_status: string
+          claimed_at: string
+          claimed_by: string
+          created_at: string
+          deployer_nonce: number
+          deployment_id: string
+          id: string
+          last_recovery_checked_at: string | null
+          launch_id: string
+          permit_id: string
+          predicted_contract_address: string
+          release_reason: string | null
+          released_at: string | null
+          tx_hash: string | null
+          unsigned_tx_fingerprint: string
+          updated_at: string
+          wallet_account: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "pcart_production_send_claims"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       claim_due_social_mission_schedule_events: {
         Args: { _limit?: number }
         Returns: {
@@ -7750,6 +7868,36 @@ export type Database = {
           status: string
         }[]
       }
+      mark_canonical_pcart_send_ambiguous: {
+        Args: { _claim_id: string }
+        Returns: {
+          broadcast_at: string | null
+          chain_id: number
+          claim_status: string
+          claimed_at: string
+          claimed_by: string
+          created_at: string
+          deployer_nonce: number
+          deployment_id: string
+          id: string
+          last_recovery_checked_at: string | null
+          launch_id: string
+          permit_id: string
+          predicted_contract_address: string
+          release_reason: string | null
+          released_at: string | null
+          tx_hash: string | null
+          unsigned_tx_fingerprint: string
+          updated_at: string
+          wallet_account: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "pcart_production_send_claims"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       mark_stale_launch_notification_claims: { Args: never; Returns: number }
       mark_stale_project_inbox_delivery_claims: { Args: never; Returns: number }
       miniapp_inbox_ack_uncertainty: {
@@ -7892,6 +8040,36 @@ export type Database = {
           status: string
           updated_at: string
         }[]
+      }
+      note_canonical_pcart_send_recovery_check: {
+        Args: { _claim_id: string; _operator_user_id: string }
+        Returns: {
+          broadcast_at: string | null
+          chain_id: number
+          claim_status: string
+          claimed_at: string
+          claimed_by: string
+          created_at: string
+          deployer_nonce: number
+          deployment_id: string
+          id: string
+          last_recovery_checked_at: string | null
+          launch_id: string
+          permit_id: string
+          predicted_contract_address: string
+          release_reason: string | null
+          released_at: string | null
+          tx_hash: string | null
+          unsigned_tx_fingerprint: string
+          updated_at: string
+          wallet_account: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "pcart_production_send_claims"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       notify_launch_watchers_official_contract: {
         Args: { _launch_id: string }
@@ -8316,6 +8494,36 @@ export type Database = {
         }
         Returns: Json
       }
+      record_canonical_pcart_mainnet_tx_hash: {
+        Args: { _claim_id: string; _tx_hash: string }
+        Returns: {
+          broadcast_at: string | null
+          chain_id: number
+          claim_status: string
+          claimed_at: string
+          claimed_by: string
+          created_at: string
+          deployer_nonce: number
+          deployment_id: string
+          id: string
+          last_recovery_checked_at: string | null
+          launch_id: string
+          permit_id: string
+          predicted_contract_address: string
+          release_reason: string | null
+          released_at: string | null
+          tx_hash: string | null
+          unsigned_tx_fingerprint: string
+          updated_at: string
+          wallet_account: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "pcart_production_send_claims"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       record_launch_watch_confirmation: {
         Args: {
           _attempted_at: string
@@ -8401,6 +8609,36 @@ export type Database = {
         SetofOptions: {
           from: "*"
           to: "launches"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      release_canonical_pcart_mainnet_send_claim: {
+        Args: { _claim_id: string; _mode: string; _operator_user_id: string }
+        Returns: {
+          broadcast_at: string | null
+          chain_id: number
+          claim_status: string
+          claimed_at: string
+          claimed_by: string
+          created_at: string
+          deployer_nonce: number
+          deployment_id: string
+          id: string
+          last_recovery_checked_at: string | null
+          launch_id: string
+          permit_id: string
+          predicted_contract_address: string
+          release_reason: string | null
+          released_at: string | null
+          tx_hash: string | null
+          unsigned_tx_fingerprint: string
+          updated_at: string
+          wallet_account: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "pcart_production_send_claims"
           isOneToOne: true
           isSetofReturn: false
         }
