@@ -2921,7 +2921,7 @@ function LaunchControlPage() {
                   pcartSafeReady ? (
                     <div className="min-w-0 space-y-2">
                       <p className="text-sm font-semibold text-foreground">
-                        Next step: Test PCART before launch
+                        Next step: Final production readiness
                       </p>
                       <PcartProductionBlockedCheckpoint launchId={selected.id} />
                     </div>

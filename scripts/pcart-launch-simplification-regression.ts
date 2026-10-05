@@ -77,7 +77,7 @@ check("S15", !/<input|<Input|<Button|onClick|onSubmit/.test(GUIDE), "guide is re
 check("S15a", /Launch setup/.test(GUIDE) && /Current next action/.test(GUIDE),
   "guide is compact and emphasizes one current next action");
 const CP = readFileSync("src/components/cartel/PcartProductionBlockedCheckpoint.tsx", "utf8");
-check("S16", /Technical details/.test(CP) && !/<Button|onClick|<Input/.test(CP), "checkpoint plain-first, technical collapsed, read-only");
+check("S16", /AlertDialog/.test(CP) && !/<Input|wallet|provider|sendTransaction/i.test(CP), "checkpoint: only a confirmed DB approval action, no wallet/inputs");
 
 const LAUNCH_CONTROL = readFileSync("src/routes/_authenticated/launch-control.tsx", "utf8");
 const safePanelIndex = LAUNCH_CONTROL.indexOf("<TreasurySafeCreatePanel");
@@ -93,7 +93,7 @@ const tail = LAUNCH_CONTROL.slice(safePanelIndex);
 check("S16b", /!selectedIsCanonicalPcart \? \(\s*<details[\s\S]*Technical deployment evidence[\s\S]*<VerifiedDeploymentEvidencePanel/.test(tail) &&
   !/Advanced \/ Audit history|Historical test\/generic records/.test(tail),
   "PCART omits historical evidence from the current-step flow; generic evidence remains");
-check("S16c", /pcartSafeReady \? \([\s\S]{0,200}Next step: Test PCART before launch[\s\S]{0,120}<PcartProductionBlockedCheckpoint \/>/.test(LAUNCH_CONTROL),
+check("S16c", /pcartSafeReady \? \([\s\S]{0,200}Next step: Final production readiness[\s\S]{0,120}<PcartProductionBlockedCheckpoint launchId=\{selected\.id\} \/>/.test(LAUNCH_CONTROL),
   "PCART checkpoint renders only after Safe verified, framed as next step");
 check("S16d", /\{!selectedIsCanonicalPcart \? \(\s*<>\s*<dl/.test(LAUNCH_CONTROL) &&
   LAUNCH_CONTROL.indexOf("<OfficialContractCorrectionPanel") < LAUNCH_CONTROL.indexOf("</>\n                ) : null}"),
