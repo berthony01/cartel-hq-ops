@@ -12,7 +12,7 @@ import { PEPECARTEL_TOKEN_ARTIFACT_ID } from "@/lib/pepecartel-token.artifact";
 import { buildPcartProductionInitCode, normalizeAddress, PCART_PRODUCTION_CHAIN_ID } from "@/lib/pcart-production-intent";
 
 export const PCART_EXECUTION_PERMIT_MAX_TTL_MS = 30_000;
-export const PCART_FINAL_REVIEW_TTL_MS = 30_000;
+export const PCART_FINAL_REVIEW_TTL_MS = 60_000;
 export const PCART_UNSIGNED_TX_DOMAIN = "pcart-unsigned-tx-v1" as const;
 /** Objective gas headroom over the live eth_estimateGas result (20%). */
 export const PCART_GAS_LIMIT_NUMERATOR = 120n;

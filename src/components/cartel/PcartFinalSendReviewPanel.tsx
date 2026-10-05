@@ -44,6 +44,18 @@ export function PcartFinalSendReviewPanel({ attempt }: { attempt: DeploymentRow 
   const [review, setReview] = useState<PcartFinalSendReview | null>(null);
   const [ack, setAck] = useState(false);
   const [typed, setTyped] = useState("");
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const copyPredicted = async () => {
+    if (!review) return;
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("unavailable");
+      await navigator.clipboard.writeText(review.predictedAddress);
+      setCopied("Copied predicted address.");
+    } catch {
+      setCopied("Copy unavailable — type or paste the address manually.");
+    }
+  };
 
   const deployer = String(attempt.deployer_address ?? "");
   const nonce = BigInt(attempt.deployer_nonce_before ?? -1);
@@ -72,8 +84,13 @@ export function PcartFinalSendReviewPanel({ attempt }: { attempt: DeploymentRow 
       if (!r.ok) throw new Error(TEXT[r.reason] ?? "Final send review failed. Nothing was saved or sent.");
       return r;
     },
-    onMutate: () => { setReview(null); setAck(false); setTyped(""); },
-    onSuccess: (r) => setReview(r),
+    onMutate: () => { setCopied(null); },
+    onSuccess: (r) => {
+      // Preserve typed confirmation only when the predicted address is unchanged.
+      if (!review || review.predictedAddress.toLowerCase() !== r.predictedAddress.toLowerCase()) { setTyped(""); setAck(false); }
+      setReview(r);
+    },
+    onError: () => { setReview(null); setAck(false); },
   });
 
   const prepareMutation = useMutation({
@@ -150,18 +167,23 @@ export function PcartFinalSendReviewPanel({ attempt }: { attempt: DeploymentRow 
             ))}
           </dl>
           <p className="flex items-center gap-2 font-semibold"><Lock className="size-3" aria-hidden="true" /> GLOBAL MAINNET EXECUTION REMAINS LOCKED</p>
-          <p className="text-muted-foreground">{reviewFresh ? `Review valid for ${Math.max(0, Math.ceil((review.expiresAt - now) / 1000))}s.` : "Review expired. Run it again."}</p>
+          <p className={reviewFresh ? "text-muted-foreground" : "font-semibold text-destructive"}>{reviewFresh ? `Review valid for ${Math.max(0, Math.ceil((review.expiresAt - now) / 1000))}s.` : "Review expired. Run final send review again."}</p>
           <label className="flex items-start gap-2">
             <Checkbox checked={ack} onCheckedChange={(v) => setAck(v === true)} aria-label="Confirm real mainnet preparation" />
             <span>I understand this is the real Robinhood Chain mainnet deployment preparation.</span>
           </label>
-          <label className="block space-y-1">
-            <span>Type the predicted contract address ({shortAddress(review.predictedAddress)})</span>
-            <Input value={typed} onChange={(e) => setTyped(e.target.value)} onPaste={(e) => e.preventDefault()} autoComplete="off" spellCheck={false} placeholder="0x…" aria-label="Type predicted contract address" />
-          </label>
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <label htmlFor="pcart-predicted-confirm">Enter the predicted contract address ({shortAddress(review.predictedAddress)})</label>
+              <Button type="button" variant="outline" size="sm" className="min-h-9" onClick={() => void copyPredicted()}>Copy predicted address</Button>
+            </div>
+            <Input id="pcart-predicted-confirm" value={typed} onChange={(e) => setTyped(e.target.value)} autoComplete="off" spellCheck={false} placeholder="0x…" aria-label="Type predicted contract address" />
+            {copied ? <p className="text-muted-foreground">{copied}</p> : null}
+          </div>
           <Button type="button" className="min-h-11 w-full" disabled={!reviewFresh || !ack || !isPcartAddressConfirmation(typed, review.predictedAddress) || prepareMutation.isPending} onClick={() => prepareMutation.mutate()}>
             <ShieldCheck className="size-4" aria-hidden="true" /> Prepare final send
           </Button>
+          {!reviewFresh ? <p className="text-destructive">Prepare is disabled because the review expired. Run final send review again — your typed address is kept if unchanged.</p> : null}
           {prepareMutation.error instanceof Error ? <p role="alert" className="text-destructive">{prepareMutation.error.message}</p> : null}
         </div>
       ) : null}
