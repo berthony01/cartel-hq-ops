@@ -71,12 +71,11 @@ export function isExactPcartRehearsalRow(
   recipient: string,
 ): boolean {
   if (!row) return false;
-  let supply: bigint;
-  try {
-    supply = BigInt(String(row.token_total_supply ?? ""));
-  } catch {
-    return false;
-  }
+  // Exact supply comes ONLY from the generated text mirror. The NUMERIC
+  // column arrives over JSON as a double (1e27 -> "1e+27") and is never used.
+  const supplyText = row.token_total_supply_text;
+  if (typeof supplyText !== "string" || !/^[0-9]+$/.test(supplyText)) return false;
+  const supply = BigInt(supplyText);
   return (
     row.artifact_id === PCART_FIXED_INTENT.artifactId &&
     row.deployment_kind === "FIXED_SUPPLY_ERC20" &&
