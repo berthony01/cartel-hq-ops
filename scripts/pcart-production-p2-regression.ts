@@ -70,6 +70,11 @@ check("1b", !/_token_recipient|_recipient/.test(CREATE.slice(0, CREATE.indexOf("
 check("1c", !/recipient/i.test(noComments(PANEL).match(/<input[\s\S]*?\/>/g)?.join("") ?? "") && !/<Input/.test(PANEL),
   "UI has no recipient text input");
 check("1d", /safe !== PCART_PRODUCTION_TREASURY_SAFE/.test(REVIEW), "review requires approval Safe = pinned Safe");
+check("1e", !/token_total_supply_text/.test(noComments(CREATE)) && /token_total_supply,/.test(CREATE) && /c_supply, c_safe,/.test(CREATE),
+  "RPC inserts exact numeric supply and never writes the generated text column");
+check("1f", /c_supply constant numeric := 1000000000000000000000000000/.test(CREATE) &&
+  /token_total_supply, token_recipient,/.test(noComments(CREATE)),
+  "INSERT column list keeps exact numeric supply and omits the generated column");
 
 // 2. deployer one of 3 signers and never Safe
 check("2a", isAllowedPcartDeployer(SIGNERS[1]!, SIGNERS, SAFE), "signer accepted");
