@@ -8,7 +8,7 @@ import { NETWORK_ENVIRONMENT, ROBINHOOD_TESTNET_CHAIN_ID } from "./chain-registr
 import {
   ZERO_ADDRESS,
   buildTokenInitCode,
-  getInjectedProvider,
+  getLauncherProvider,
   normalizeTokenIntent,
   type TokenIntent,
   type TokenIntentInput,
@@ -265,7 +265,7 @@ async function readFeeWeiPerGas(provider: {
  */
 export async function runPreflight(intent: SimulationIntent): Promise<PreflightResult> {
   const errors: string[] = [];
-  const provider = getInjectedProvider();
+  const provider = getLauncherProvider();
 
   const result: PreflightResult = {
     observedChainId: null,

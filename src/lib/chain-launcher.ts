@@ -16,7 +16,7 @@ import {
 /**
  * C8.2 — Cartel Chain Launcher client layer (TESTNET ONLY).
  *
- * The user's injected wallet is the ONLY signer. This module never requests,
+ * The operator's explicitly connected wallet is the ONLY signer. This module never requests,
  * stores, derives or transmits a private key, seed phrase or signature
  * material, and there is no server-side signer anywhere in the system.
  *
@@ -63,42 +63,88 @@ export function isUserRejection(error: unknown): boolean {
   return message.includes("user rejected") || message.includes("user denied");
 }
 
+/* ------------------------------------------------------------------ */
+/* EXPLICITLY BOUND launcher provider (Testnet Lab)                    */
+/* ------------------------------------------------------------------ */
+
+/**
+ * The ONE provider every launcher read, switch and broadcast goes through.
+ * It is set ONLY by an explicit operator connect (chooser or injected) via
+ * `testnet-wallet-connector.ts`, together with the account the operator
+ * selected. There is deliberately NO fallback to `window.ethereum`: the UI
+ * can never show WalletConnect account A while a send goes out through an
+ * injected account B.
+ */
+let launcherProvider: Eip1193Provider | null = null;
+let launcherAccount: string | null = null;
+
+export function setLauncherProvider(provider: Eip1193Provider | null, account: string | null): void {
+  launcherProvider = provider;
+  launcherAccount = provider && account ? account.toLowerCase() : null;
+}
+
+export function getLauncherProvider(): Eip1193Provider | null {
+  return launcherProvider;
+}
+
+export function getLauncherAccount(): string | null {
+  return launcherAccount;
+}
+
+/** Strict chain-id normalization: injected wallets answer hex, WalletConnect may answer a number. */
+export function parseChainId(raw: unknown): number | null {
+  if (typeof raw === "number") return Number.isSafeInteger(raw) && raw > 0 ? raw : null;
+  if (typeof raw === "string") {
+    const v = raw.trim().toLowerCase();
+    if (/^0x[0-9a-f]+$/.test(v)) return Number.parseInt(v, 16);
+    if (/^eip155:[0-9]+$/.test(v)) return Number.parseInt(v.slice(7), 10);
+    if (/^[0-9]+$/.test(v)) return Number.parseInt(v, 10);
+  }
+  return null;
+}
+
+/** Desktop-extension fallback: explicit click only. Binds the injected wallet. */
 export async function connectWallet(): Promise<string> {
   const provider = getInjectedProvider();
   if (!provider) throw new WalletError("No browser wallet detected.");
   const accounts = (await provider.request({ method: "eth_requestAccounts" })) as string[];
   const address = Array.isArray(accounts) ? accounts[0] : null;
   if (!address) throw new WalletError("Wallet returned no account.");
+  setLauncherProvider(provider, address);
   return address.toLowerCase();
 }
 
-/** Read-only: the currently authorized account, without prompting the wallet. */
+/**
+ * Read-only: the SELECTED account, re-proven against the bound provider's
+ * live approved accounts. Never prompts. Returns null when the selection is
+ * no longer approved (account switched in the wallet).
+ */
 export async function readAccount(): Promise<string | null> {
-  const provider = getInjectedProvider();
-  if (!provider) return null;
+  const provider = getLauncherProvider();
+  const selected = launcherAccount;
+  if (!provider || !selected) return null;
   try {
     const accounts = (await provider.request({ method: "eth_accounts" })) as unknown;
-    const first = Array.isArray(accounts) && typeof accounts[0] === "string" ? accounts[0] : null;
-    return first ? first.toLowerCase() : null;
+    if (!Array.isArray(accounts)) return null;
+    const live = accounts.filter((a): a is string => typeof a === "string").map((a) => a.toLowerCase());
+    return live.includes(selected) ? selected : null;
   } catch {
     return null;
   }
 }
 
 export async function readChainId(): Promise<number | null> {
-  const provider = getInjectedProvider();
+  const provider = getLauncherProvider();
   if (!provider) return null;
   try {
-    const hex = (await provider.request({ method: "eth_chainId" })) as string;
-    const parsed = Number.parseInt(hex, 16);
-    return Number.isFinite(parsed) ? parsed : null;
+    return parseChainId(await provider.request({ method: "eth_chainId" }));
   } catch {
     return null;
   }
 }
 
 export async function readBalanceWei(address: string): Promise<bigint | null> {
-  const provider = getInjectedProvider();
+  const provider = getLauncherProvider();
   if (!provider) return null;
   try {
     const hex = (await provider.request({
@@ -118,33 +164,41 @@ export function formatEth(wei: bigint | null): string {
   return `${whole.toString()}.${frac} ETH`;
 }
 
-/** Switches (or adds) the wallet to Robinhood Chain Testnet. Testnet only. */
-export async function ensureTestnet(): Promise<void> {
-  const provider = getInjectedProvider();
-  if (!provider) throw new WalletError("No browser wallet detected.");
+export type TestnetSwitchOutcome = "SWITCHED" | "REJECTED" | "UNKNOWN_NETWORK" | "FAILED" | "NO_WALLET";
+
+/** EXPLICIT CLICK ONLY. Switch the bound wallet to Robinhood Chain Testnet. Never adds. */
+export async function requestTestnetSwitch(): Promise<TestnetSwitchOutcome> {
+  const provider = getLauncherProvider();
+  if (!provider) return "NO_WALLET";
   try {
-    await provider.request({
-      method: "wallet_switchEthereumChain",
-      params: [{ chainId: CHAIN_ID_HEX }],
-    });
+    await provider.request({ method: "wallet_switchEthereumChain", params: [{ chainId: CHAIN_ID_HEX }] });
+    return "SWITCHED";
   } catch (error) {
     const code = (error as { code?: number } | null)?.code;
-    if (code === 4902 || code === -32603) {
-      await provider.request({
-        method: "wallet_addEthereumChain",
-        params: [
-          {
-            chainId: CHAIN_ID_HEX,
-            chainName: "Robinhood Chain Testnet",
-            nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
-            rpcUrls: [ROBINHOOD_TESTNET_RPC_URL],
-            blockExplorerUrls: [ROBINHOOD_TESTNET_EXPLORER_URL],
-          },
-        ],
-      });
-      return;
-    }
-    throw error;
+    if (code === 4001) return "REJECTED";
+    if (code === 4902) return "UNKNOWN_NETWORK";
+    return "FAILED";
+  }
+}
+
+/** Frozen official Robinhood Chain TESTNET parameters (chain 46630 only). */
+export const TESTNET_ADD_CHAIN_PARAMS = {
+  chainId: CHAIN_ID_HEX,
+  chainName: "Robinhood Chain Testnet",
+  nativeCurrency: { name: "Ether", symbol: "ETH", decimals: 18 },
+  rpcUrls: [ROBINHOOD_TESTNET_RPC_URL],
+  blockExplorerUrls: [ROBINHOOD_TESTNET_EXPLORER_URL],
+} as const;
+
+/** EXPLICIT CLICK ONLY, offered after the wallet reports the network unknown. */
+export async function requestTestnetAdd(): Promise<TestnetSwitchOutcome> {
+  const provider = getLauncherProvider();
+  if (!provider) return "NO_WALLET";
+  try {
+    await provider.request({ method: "wallet_addEthereumChain", params: [TESTNET_ADD_CHAIN_PARAMS] });
+    return "SWITCHED";
+  } catch (error) {
+    return (error as { code?: number } | null)?.code === 4001 ? "REJECTED" : "FAILED";
   }
 }
 
@@ -154,8 +208,12 @@ export async function ensureTestnet(): Promise<void> {
  * server-side during verification.
  */
 export async function broadcastTestDeployment(from: string): Promise<string> {
-  const provider = getInjectedProvider();
-  if (!provider) throw new WalletError("No browser wallet detected.");
+  const provider = getLauncherProvider();
+  if (!provider) throw new WalletError("Connect a wallet first.");
+  const liveAccount = await readAccount();
+  if (!liveAccount || liveAccount !== from.toLowerCase()) {
+    throw new WalletError("The connected wallet account changed. Reconnect and try again.");
+  }
 
   const chainId = await readChainId();
   if (chainId !== ROBINHOOD_TESTNET_CHAIN_ID) {
@@ -328,8 +386,10 @@ export async function broadcastTokenDeployment(
   from: string,
   reviewedInitCode: `0x${string}`,
 ): Promise<string> {
-  const provider = getInjectedProvider();
-  if (!provider) throw new WalletError("No browser wallet detected.");
+  // The SAME explicitly bound connector the Testnet Lab displays. Live chain +
+  // live selected account are re-read from it below before any send.
+  const provider = getLauncherProvider();
+  if (!provider) throw new WalletError("Connect a wallet first.");
 
   if (typeof reviewedInitCode !== "string" || !/^0x[0-9a-f]+$/i.test(reviewedInitCode)) {
     throw new WalletError("The reviewed deployment payload is not valid creation data.");
