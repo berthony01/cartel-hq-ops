@@ -113,6 +113,8 @@ import { PcartReviewLaunchSummary } from "@/components/cartel/PcartReviewLaunchS
 import { PcartProductionReviewPanel } from "@/components/cartel/PcartProductionReviewPanel";
 import { PcartWalletPreparationPanel } from "@/components/cartel/PcartWalletPreparationPanel";
 import { PcartFinalSendReviewPanel } from "@/components/cartel/PcartFinalSendReviewPanel";
+import { PcartMainnetSendPanel, fetchLatestPcartSendClaim, pcartSendClaimQueryKey } from "@/components/cartel/PcartMainnetSendPanel";
+import { pcartP5SummaryText, pcartSendWindowState } from "@/lib/pcart-production-send";
 import { fetchLatestPcartExecutionPermit, pcartExecutionPermitQueryKey } from "@/lib/pcart-production-execution-permit";
 import { isPcartExecutionPermitActive } from "@/lib/pcart-production-execution";
 import {
@@ -1142,13 +1144,28 @@ function LaunchControlPage() {
     queryFn: () => fetchLatestPcartExecutionPermit(pcartUnsentDraft!.id),
     refetchInterval: 10_000,
   });
-  const pcartMainnetText = pcartMainnetSummary({
+  const pcartSendClaimQuery = useQuery({
+    queryKey: pcartSendClaimQueryKey(pcartProductionAttempt?.id ?? "none"),
+    enabled: !!pcartProductionAttempt && pcartProdReadinessQuery.data?.is_platform_owner === true,
+    queryFn: () => fetchLatestPcartSendClaim(pcartProductionAttempt!.id),
+    refetchInterval: 15_000,
+  });
+  const pcartP5Text = pcartProductionAttempt
+    ? pcartP5SummaryText({
+        window: pcartSendWindowState(selected?.launch_window_start, selected?.launch_window_end, selected?.status, Date.now()),
+        readyToSend: isPcartExecutionPermitActive(pcartPermitQuery.data, Date.now()),
+        claimStatus: pcartSendClaimQuery.data && pcartSendClaimQuery.data.claim_status !== "RELEASED" ? pcartSendClaimQuery.data.claim_status : null,
+        submitted: !!pcartProductionAttempt.tx_hash || pcartProductionAttempt.status !== "DRAFT",
+      })
+    : null;
+  const pcartMainnetBaseText = pcartMainnetSummary({
     approved: pcartApproved,
     executionLocked: pcartProdReadinessQuery.data?.execution_locked !== false,
     draftSaved: pcartProductionAttempt?.status === "DRAFT",
     walletReady: isPcartPreparationActive(pcartPreparationQuery.data, Date.now()),
     readyToSend: isPcartExecutionPermitActive(pcartPermitQuery.data, Date.now()),
   });
+  const pcartMainnetText = pcartP5Text ?? pcartMainnetBaseText;
   const pcartScheduleExpired = isPcartLaunchScheduleExpired(
     selected?.launch_at,
     selected?.launch_window_end,
@@ -2986,6 +3003,16 @@ function LaunchControlPage() {
                       ) : null}
                       {pcartApproved && pcartProdReadinessQuery.data?.is_platform_owner === true && pcartUnsentDraft ? (
                         <PcartFinalSendReviewPanel attempt={pcartUnsentDraft} />
+                      ) : null}
+                      {pcartApproved && pcartProdReadinessQuery.data?.is_platform_owner === true && pcartProductionAttempt &&
+                      (pcartUnsentDraft || pcartProductionAttempt.status === "SUBMITTED") ? (
+                        <PcartMainnetSendPanel
+                          attempt={pcartProductionAttempt}
+                          launchWindowStart={selected.launch_window_start ?? null}
+                          launchWindowEnd={selected.launch_window_end ?? null}
+                          lifecycle={selected.status ?? null}
+                          onChanged={() => queryClient.invalidateQueries({ queryKey: chainDeploymentsQueryKey(selected.id) })}
+                        />
                       ) : null}
                     </div>
                   ) : null
