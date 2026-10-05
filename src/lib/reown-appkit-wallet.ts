@@ -385,6 +385,7 @@ async function runCreateAppKit(
       return { appKit: null, notice: "REOWN_WALLETCONNECT_UNAVAILABLE" };
     }
     wagmiAdapterHandle = wagmiAdapter;
+    universalProviderHandle = universalProvider;
     return { appKit: instance, notice: null };
   } catch (error) {
     wagmiAdapterHandle = null;
