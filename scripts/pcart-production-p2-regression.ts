@@ -169,7 +169,7 @@ check("16", r.buildReady && r.next === null && r.steps[1]!.status === "Auction �
 // 17. mainnet summary authoritative
 check("17a", pcartMainnetSummary({ approved: false, executionLocked: true, draftSaved: false }) === "Locked — not ready" &&
   pcartMainnetSummary({ approved: true, executionLocked: true, draftSaved: false }) === "Approved — deployment review next" &&
-  pcartMainnetSummary({ approved: true, executionLocked: true, draftSaved: true }) === "Reviewed draft saved — send still locked",
+  pcartMainnetSummary({ approved: true, executionLocked: true, draftSaved: true }) === "Reviewed draft saved — wallet preparation next",
   "mainnet summary states");
 check("17b", /\["Mainnet", mainnetSummary\]/.test(SUMMARY) && !/readiness\.mainnetLocked \?/.test(SUMMARY) &&
   /mainnetSummary=\{pcartMainnetText\}/.test(LC) && /execution_locked/.test(LC), "card reads authoritative state, not a hard-coded lock");

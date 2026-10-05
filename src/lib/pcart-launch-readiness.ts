@@ -34,13 +34,16 @@ export type PcartMainnetSummaryInput = {
   approved: boolean;
   executionLocked: boolean;
   draftSaved: boolean;
+  /** P3: an active (unexpired, uncancelled) wallet-ready preparation authorization exists. */
+  walletReady?: boolean;
 };
 
 /** Mainnet row text, driven only by authoritative readiness/control/draft state. */
 export function pcartMainnetSummary(i: PcartMainnetSummaryInput): string {
   if (!i.executionLocked) return "Execution control not locked — review required";
   if (!i.approved) return "Locked — not ready";
-  if (i.draftSaved) return "Reviewed draft saved — send still locked";
+  if (i.draftSaved && i.walletReady) return "Wallet ready — mainnet send locked";
+  if (i.draftSaved) return "Reviewed draft saved — wallet preparation next";
   return "Approved — deployment review next";
 }
 

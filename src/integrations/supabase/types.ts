@@ -2252,6 +2252,99 @@ export type Database = {
         }
         Relationships: []
       }
+      pcart_production_preparation_authorizations: {
+        Row: {
+          artifact_id: string
+          cancelled_at: string | null
+          cancelled_by: string | null
+          chain_id: number
+          client_request_id: string
+          created_at: string
+          deployer_address: string
+          deployer_nonce_before: number
+          deployment_id: string
+          expires_at: string
+          id: string
+          init_code_hash: string
+          issued_at: string
+          issued_by: string
+          launch_id: string
+          network_environment: string
+          observed_latest_nonce: number
+          observed_pending_nonce: number
+          predicted_contract_address: string
+          readiness_fingerprint: string
+          review_fingerprint: string
+          safe_address: string
+          wallet_account: string
+        }
+        Insert: {
+          artifact_id?: string
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          chain_id?: number
+          client_request_id: string
+          created_at?: string
+          deployer_address: string
+          deployer_nonce_before: number
+          deployment_id: string
+          expires_at: string
+          id?: string
+          init_code_hash: string
+          issued_at?: string
+          issued_by: string
+          launch_id: string
+          network_environment?: string
+          observed_latest_nonce: number
+          observed_pending_nonce: number
+          predicted_contract_address: string
+          readiness_fingerprint: string
+          review_fingerprint: string
+          safe_address: string
+          wallet_account: string
+        }
+        Update: {
+          artifact_id?: string
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          chain_id?: number
+          client_request_id?: string
+          created_at?: string
+          deployer_address?: string
+          deployer_nonce_before?: number
+          deployment_id?: string
+          expires_at?: string
+          id?: string
+          init_code_hash?: string
+          issued_at?: string
+          issued_by?: string
+          launch_id?: string
+          network_environment?: string
+          observed_latest_nonce?: number
+          observed_pending_nonce?: number
+          predicted_contract_address?: string
+          readiness_fingerprint?: string
+          review_fingerprint?: string
+          safe_address?: string
+          wallet_account?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pcart_production_preparation_authorizations_deployment_id_fkey"
+            columns: ["deployment_id"]
+            isOneToOne: false
+            referencedRelation: "launch_chain_deployments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pcart_production_preparation_authorizations_launch_id_fkey"
+            columns: ["launch_id"]
+            isOneToOne: false
+            referencedRelation: "launches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pcart_production_readiness_approvals: {
         Row: {
           approved_at: string
@@ -5805,6 +5898,40 @@ export type Database = {
         Args: { _user_id?: string; _workspace_id: string }
         Returns: boolean
       }
+      cancel_canonical_pcart_production_presign_authorization: {
+        Args: { _authorization_id: string }
+        Returns: {
+          artifact_id: string
+          cancelled_at: string | null
+          cancelled_by: string | null
+          chain_id: number
+          client_request_id: string
+          created_at: string
+          deployer_address: string
+          deployer_nonce_before: number
+          deployment_id: string
+          expires_at: string
+          id: string
+          init_code_hash: string
+          issued_at: string
+          issued_by: string
+          launch_id: string
+          network_environment: string
+          observed_latest_nonce: number
+          observed_pending_nonce: number
+          predicted_contract_address: string
+          readiness_fingerprint: string
+          review_fingerprint: string
+          safe_address: string
+          wallet_account: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "pcart_production_preparation_authorizations"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       cancel_claimed_launch_chain_production_presign_authorization: {
         Args: {
           _authorization_id: string
@@ -7154,6 +7281,48 @@ export type Database = {
       is_workspace_owner: {
         Args: { _user_id: string; _workspace_id: string }
         Returns: boolean
+      }
+      issue_canonical_pcart_production_presign_authorization: {
+        Args: {
+          _client_request_id: string
+          _deployment_id: string
+          _observed_chain_id: number
+          _observed_latest_nonce: number
+          _observed_pending_nonce: number
+          _predicted_contract_address: string
+          _wallet_account: string
+        }
+        Returns: {
+          artifact_id: string
+          cancelled_at: string | null
+          cancelled_by: string | null
+          chain_id: number
+          client_request_id: string
+          created_at: string
+          deployer_address: string
+          deployer_nonce_before: number
+          deployment_id: string
+          expires_at: string
+          id: string
+          init_code_hash: string
+          issued_at: string
+          issued_by: string
+          launch_id: string
+          network_environment: string
+          observed_latest_nonce: number
+          observed_pending_nonce: number
+          predicted_contract_address: string
+          readiness_fingerprint: string
+          review_fingerprint: string
+          safe_address: string
+          wallet_account: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "pcart_production_preparation_authorizations"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       issue_launch_chain_production_presign_authorization: {
         Args: {

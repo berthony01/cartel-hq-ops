@@ -111,8 +111,14 @@ import { ProductionDeploymentRequestPanel } from "@/components/cartel/Production
 import { PcartProductionBlockedCheckpoint } from "@/components/cartel/PcartProductionBlockedCheckpoint";
 import { PcartReviewLaunchSummary } from "@/components/cartel/PcartReviewLaunchSummary";
 import { PcartProductionReviewPanel } from "@/components/cartel/PcartProductionReviewPanel";
+import { PcartWalletPreparationPanel } from "@/components/cartel/PcartWalletPreparationPanel";
+import {
+  fetchLatestPcartPreparation,
+  isPcartPreparationActive,
+  pcartPreparationQueryKey,
+} from "@/lib/pcart-production-preparation";
 import { fetchPcartReadiness, pcartReadinessQueryKey } from "@/lib/pcart-production-readiness";
-import { findPcartProductionAttempt } from "@/lib/pcart-production-draft";
+import { findPcartProductionAttempt, isUnsentPcartDraft } from "@/lib/pcart-production-draft";
 import { PCART_FIXED_INTENT, isCanonicalPcartLaunch } from "@/lib/launch-artifact-registry";
 import { TreasurySignerSetupPanel } from "@/components/cartel/TreasurySignerSetupPanel";
 import { PcartLaunchSetupGuide } from "@/components/cartel/PcartLaunchSetupGuide";
@@ -1120,10 +1126,18 @@ function LaunchControlPage() {
   });
   const pcartProductionAttempt = findPcartProductionAttempt(deploymentEvidenceQuery.data);
   const pcartApproved = !!pcartProdReadinessQuery.data?.approval;
+  const pcartUnsentDraft = isUnsentPcartDraft(pcartProductionAttempt) ? pcartProductionAttempt : null;
+  const pcartPreparationQuery = useQuery({
+    queryKey: pcartPreparationQueryKey(pcartUnsentDraft?.id ?? "none"),
+    enabled: !!pcartUnsentDraft && pcartProdReadinessQuery.data?.is_platform_owner === true,
+    queryFn: () => fetchLatestPcartPreparation(pcartUnsentDraft!.id),
+    refetchInterval: 15_000,
+  });
   const pcartMainnetText = pcartMainnetSummary({
     approved: pcartApproved,
     executionLocked: pcartProdReadinessQuery.data?.execution_locked !== false,
     draftSaved: pcartProductionAttempt?.status === "DRAFT",
+    walletReady: isPcartPreparationActive(pcartPreparationQuery.data, Date.now()),
   });
   const pcartScheduleExpired = isPcartLaunchScheduleExpired(
     selected?.launch_at,
@@ -2956,6 +2970,9 @@ function LaunchControlPage() {
                           signers={pcartSignerQuery.data.signers}
                           attempt={pcartProductionAttempt}
                         />
+                      ) : null}
+                      {pcartApproved && pcartProdReadinessQuery.data?.is_platform_owner === true && pcartUnsentDraft ? (
+                        <PcartWalletPreparationPanel attempt={pcartUnsentDraft} />
                       ) : null}
                     </div>
                   ) : null
