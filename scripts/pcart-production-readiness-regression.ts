@@ -14,11 +14,18 @@ function check(id: string, ok: boolean, msg: string) {
 const read = (p: string) => readFileSync(p, "utf8");
 const MIG_FILE = "20261005030008_98ee5be2-ad18-4084-b97a-1c2172544c20.sql";
 const SQL = read(`supabase/migrations/${MIG_FILE}`);
+// Hardening migration: guard function is replaced by the newest migration that defines it.
+const HARDEN_FILES = readdirSync("supabase/migrations").filter(
+  (f) => f > MIG_FILE && read(`supabase/migrations/${f}`).includes("enforce_canonical_pcart_no_production_deployment"),
+);
+const GUARD_SQL = HARDEN_FILES.length
+  ? read(`supabase/migrations/${HARDEN_FILES[HARDEN_FILES.length - 1]}`)
+  : SQL;
 const fn = (name: string) => SQL.split(`FUNCTION ${name}(`)[1]?.split("$$;")[0] ?? "";
 const EV = fn("private.pcart_production_readiness_evidence");
 const APPROVE = fn("public.approve_canonical_pcart_production_readiness");
 const GET = fn("public.get_canonical_pcart_production_readiness");
-const GUARD = fn("public.enforce_canonical_pcart_no_production_deployment");
+const GUARD = ((s) => s.split("FUNCTION public.enforce_canonical_pcart_no_production_deployment(")[1]?.split("$$;")[0] ?? "")(GUARD_SQL);
 
 // 1 non-owner
 check("1", /uid IS NULL OR NOT public\.is_platform_owner\(uid\)/.test(APPROVE) && /42501/.test(APPROVE), "approval refuses non-owner");
