@@ -44,6 +44,18 @@ export function PcartFinalSendReviewPanel({ attempt }: { attempt: DeploymentRow 
   const [review, setReview] = useState<PcartFinalSendReview | null>(null);
   const [ack, setAck] = useState(false);
   const [typed, setTyped] = useState("");
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const copyPredicted = async () => {
+    if (!review) return;
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error("unavailable");
+      await navigator.clipboard.writeText(review.predictedAddress);
+      setCopied("Copied predicted address.");
+    } catch {
+      setCopied("Copy unavailable — type or paste the address manually.");
+    }
+  };
 
   const deployer = String(attempt.deployer_address ?? "");
   const nonce = BigInt(attempt.deployer_nonce_before ?? -1);
@@ -72,8 +84,13 @@ export function PcartFinalSendReviewPanel({ attempt }: { attempt: DeploymentRow 
       if (!r.ok) throw new Error(TEXT[r.reason] ?? "Final send review failed. Nothing was saved or sent.");
       return r;
     },
-    onMutate: () => { setReview(null); setAck(false); setTyped(""); },
-    onSuccess: (r) => setReview(r),
+    onMutate: () => { setCopied(null); },
+    onSuccess: (r) => {
+      // Preserve typed confirmation only when the predicted address is unchanged.
+      if (!review || review.predictedAddress.toLowerCase() !== r.predictedAddress.toLowerCase()) { setTyped(""); setAck(false); }
+      setReview(r);
+    },
+    onError: () => { setReview(null); setAck(false); },
   });
 
   const prepareMutation = useMutation({
