@@ -120,6 +120,11 @@ let universalProviderHandle: {
   disconnect: () => Promise<void>;
   cleanupPendingPairings: () => Promise<void>;
 } | null = null;
+/**
+ * AppKit's own ConnectionController singleton (same instance the chooser reads),
+ * retained ONLY for the explicit fresh-reset proof. Module-private; never exported.
+ */
+let connectionControllerHandle: AppKitBridge["ConnectionController"] | null = null;
 
 export function getReownProjectId(): string | null {
   const raw = (import.meta.env as Record<string, string | undefined>)[
@@ -386,6 +391,7 @@ async function runCreateAppKit(
     }
     wagmiAdapterHandle = wagmiAdapter;
     universalProviderHandle = universalProvider;
+    connectionControllerHandle = loaded.libs.ConnectionController;
     return { appKit: instance, notice: null };
   } catch (error) {
     wagmiAdapterHandle = null;
@@ -603,12 +609,28 @@ export async function resetAppKitConnection(): Promise<boolean> {
         universalProviderHandle?.session == null
       );
     },
+    hasControllerWalletConnect: () => {
+      const controller = connectionControllerHandle;
+      if (!controller) throw new Error("no controller");
+      return controller.hasAnyConnection(APPKIT_WALLET_CONNECT_CONNECTOR_ID) === true;
+    },
+    clearControllerConnections: () => {
+      const controller = connectionControllerHandle;
+      if (!controller) throw new Error("no controller");
+      controller.setConnections([], "eip155");
+    },
     settle: () => new Promise<void>((r) => setTimeout(r, RESET_SETTLE_STEP_MS)),
   });
 }
 
 export const RESET_SETTLE_STEP_MS = 150;
 export const RESET_SETTLE_MAX_CHECKS = 6;
+/**
+ * Installed `@reown/appkit-common` 1.8.24 `ConstantsUtil.CONNECTOR_ID.WALLET_CONNECT`.
+ * `ConnectionController.hasAnyConnection(this)` is the exact chooser condition
+ * (`w3m-connector-list` / `w3m-all-wallets-widget`) that disables every row.
+ */
+export const APPKIT_WALLET_CONNECT_CONNECTOR_ID = "walletConnect";
 
 export type FreshResetDeps = {
   ensure: () => Promise<boolean>;
@@ -617,7 +639,12 @@ export type FreshResetDeps = {
   disconnectWalletConnect: () => Promise<void>;
   cleanupPendingPairings: () => Promise<void>;
   closeModal: () => Promise<void>;
+  /** EXTERNAL evidence only: AppKit disconnected, no address/provider, no WC session. */
   isFresh: () => boolean;
+  /** AppKit ConnectionController.hasAnyConnection("walletConnect"). */
+  hasControllerWalletConnect: () => boolean;
+  /** AppKit ConnectionController.setConnections([], "eip155"). */
+  clearControllerConnections: () => void;
   settle: () => Promise<void>;
 };
 
@@ -625,8 +652,11 @@ export type FreshResetDeps = {
  * Pure, dependency-injected teardown core (deterministically testable).
  * Order: initialize -> close stale view -> official AppKit disconnect ->
  * official UniversalProvider disconnect if a session survives -> pending
- * pairing cleanup -> bounded settle proving freshness. Never touches storage
- * keys, never opens the chooser. Unprovable => false (caller fails closed).
+ * pairing cleanup -> bounded settle proving EXTERNAL freshness -> inspect the
+ * chooser's own ConnectionController. Only when every external signal is clean
+ * but the controller still reports WalletConnect is that entry treated as stale
+ * UI residue and cleared, then re-proven under a second bounded settle.
+ * Never touches storage keys, never opens the chooser. Unprovable => false.
  */
 export async function performFreshReset(d: FreshResetDeps): Promise<boolean> {
   try {
@@ -641,6 +671,21 @@ export async function performFreshReset(d: FreshResetDeps): Promise<boolean> {
       // Teardown is PROVEN below, never assumed from the absence of an error.
     }
   };
+  const externallyClean = () => {
+    try {
+      return d.isFresh() === true;
+    } catch {
+      return false;
+    }
+  };
+  /** null = unreadable => caller fails closed. */
+  const controllerHasWc = (): boolean | null => {
+    try {
+      return d.hasControllerWalletConnect() === true;
+    } catch {
+      return null;
+    }
+  };
   await bestEffort(d.closeModal);
   await bestEffort(d.disconnectAppKit);
   let wcSession = true;
@@ -651,19 +696,37 @@ export async function performFreshReset(d: FreshResetDeps): Promise<boolean> {
   }
   if (wcSession) await bestEffort(d.disconnectWalletConnect);
   await bestEffort(d.cleanupPendingPairings);
+
+  // Phase 1 — external evidence must be proven gone (bounded).
+  let external = false;
   for (let i = 0; i < RESET_SETTLE_MAX_CHECKS; i++) {
-    try {
-      if (d.isFresh()) return true;
-    } catch {
-      return false;
+    if (externallyClean()) {
+      external = true;
+      break;
     }
     await d.settle();
   }
+  if (!external && !externallyClean()) return false;
+
+  // Phase 2 — the chooser's own ConnectionController.
+  const before = controllerHasWc();
+  if (before === null) return false;
+  if (before === false) return true; // Normal fresh state: no mutation.
+
+  // Stale UI residue: re-prove external evidence IMMEDIATELY before clearing.
+  if (!externallyClean()) return false;
   try {
-    return d.isFresh();
+    d.clearControllerConnections();
   } catch {
     return false;
   }
+  for (let i = 0; i < RESET_SETTLE_MAX_CHECKS; i++) {
+    const has = controllerHasWc();
+    if (has === null) return false;
+    if (has === false) return externallyClean();
+    await d.settle();
+  }
+  return controllerHasWc() === false && externallyClean();
 }
 
 /** True when AppKit currently holds ANY eip155 connection evidence. */
