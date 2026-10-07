@@ -257,8 +257,9 @@ const tsPostGate = migrationFiles.filter((f) => f > POLICY_COMPLETION_MIGRATION_
 // Signer config may only be defined by the pinned signer + policy-completion migrations. Any later
 // migration that creates/alters/drops the table, changes its policies, grants on it, or rewrites
 // its RLS would be a forbidden signer change — this replaces a brittle total-file-count pin.
-const SIGNER_TOUCH = /launch_treasury_signer_configs/i;
-const tsForbiddenLater = tsPostGate.filter((f) => SIGNER_TOUCH.test(readFileSync(`supabase/migrations/${f}`, "utf8")));
+// Read-only references (SELECT, %rowtype, FK REFERENCES) by later launch phases are allowed.
+const SIGNER_MUTATION = /(ALTER\s+TABLE|DROP\s+TABLE|TRUNCATE|INSERT\s+INTO|UPDATE|DELETE\s+FROM)\s+(IF\s+EXISTS\s+|ONLY\s+)?(public\.)?launch_treasury_signer_configs\b|(CREATE|ALTER|DROP)\s+POLICY[^;]*\bON\s+(public\.)?launch_treasury_signer_configs\b|(GRANT|REVOKE)[^;]*\bON\s+(TABLE\s+)?(public\.)?launch_treasury_signer_configs\b|CREATE\s+(OR\s+REPLACE\s+)?TRIGGER[^;]*\bON\s+(public\.)?launch_treasury_signer_configs\b/i;
+const tsForbiddenLater = tsPostGate.filter((f) => SIGNER_MUTATION.test(readFileSync(`supabase/migrations/${f}`, "utf8")));
 const tsSignerDefiners = migrationFiles.filter((f) => /CREATE TABLE (IF NOT EXISTS )?public\.launch_treasury_signer_configs/i.test(readFileSync(`supabase/migrations/${f}`, "utf8")));
 check(
   "TS-5a",
@@ -273,7 +274,7 @@ check(
     tsPostGate[5] === TS_COMMERCIAL_B_MIGRATION &&
     tsPostGate[6] === "20260924021801_e48c0c41-9053-4f77-a267-04fbba8d206d.sql" &&
     tsForbiddenLater.length === 0,
-  `treasury signer migration + policy completion pinned; signer table defined exactly once; original seven post-gate migrations unchanged in order; no later migration touches launch_treasury_signer_configs (definers: ${tsSignerDefiners.join(", ") || "none"}; later touches: ${tsForbiddenLater.join(", ") || "none"})`,
+  `treasury signer migration + policy completion pinned; signer table defined exactly once; original seven post-gate migrations unchanged in order; no later migration alters/drops/writes/re-policies/re-grants/re-triggers launch_treasury_signer_configs (definers: ${tsSignerDefiners.join(", ") || "none"}; later touches: ${tsForbiddenLater.join(", ") || "none"})`,
 );
 check(
   "TS-5b",
