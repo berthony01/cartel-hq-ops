@@ -257,6 +257,13 @@ const SAFE_CREATE_PIN_VALUES = new Set(
     v.toLowerCase(),
   ),
 );
+/**
+ * THIRD NARROW, EXPLICITLY AUTHORIZED EXCEPTION (PCART P8A, owner-authorized 2026-10-07).
+ * The review-only auction/liquidity manifest pins the Uniswap stack addresses it
+ * attests against. Only Uniswap/Permit2 addresses, only this file; no Safe value.
+ */
+const P8A_PIN_FILE = "src/lib/pcart-auction-liquidity-plan.ts";
+const P8A_PIN_VALUES = new Set(EXTERNAL_ADDRESSES.map((v) => v.toLowerCase()));
 const protectedFiles = PROTECTED_ROOTS.flatMap((root) => walk(root));
 const leaks: string[] = [];
 for (const file of protectedFiles) {
@@ -266,7 +273,8 @@ for (const file of protectedFiles) {
     if (!body.includes(value.toLowerCase())) continue;
     const excepted =
       (normalized === SAFE_PIN_EXCEPTION_FILE && SAFE_PIN_EXCEPTION_VALUES.has(value.toLowerCase())) ||
-      (normalized === SAFE_CREATE_PIN_FILE && SAFE_CREATE_PIN_VALUES.has(value.toLowerCase()));
+      (normalized === SAFE_CREATE_PIN_FILE && SAFE_CREATE_PIN_VALUES.has(value.toLowerCase())) ||
+      (normalized === P8A_PIN_FILE && P8A_PIN_VALUES.has(value.toLowerCase()));
     if (!excepted) leaks.push(`${file}:${value}`);
   }
 }
