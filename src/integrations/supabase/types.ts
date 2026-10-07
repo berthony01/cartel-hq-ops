@@ -2569,14 +2569,18 @@ export type Database = {
       }
       pcart_production_execution_permits: {
         Row: {
+          action_type: string | null
           artifact_id: string
+          binding_version: string | null
           cancelled_at: string | null
           cancelled_by: string | null
           chain_id: number
           consumed_at: string | null
           created_at: string
+          dependency_attestation_fingerprint: string | null
           deployer_nonce: number
           deployment_id: string
+          execution_control_revision: number | null
           expires_at: string
           gas_limit: number
           id: string
@@ -2586,23 +2590,35 @@ export type Database = {
           launch_id: string
           max_fee_per_gas: number
           max_priority_fee_per_gas: number
+          p8a_manifest_fingerprint: string | null
+          p8a_manifest_version: string | null
+          p8a_review_id: string | null
+          p8b_manifest_fingerprint: string | null
+          p8b_manifest_version: string | null
+          p8b_review_id: string | null
           predicted_contract_address: string
           preparation_authorization_id: string
           readiness_fingerprint: string
           review_fingerprint: string
+          safe_attestation_fingerprint: string | null
+          safe_nonce: number | null
           safe_recipient: string
           unsigned_tx_fingerprint: string
           wallet_account: string
         }
         Insert: {
+          action_type?: string | null
           artifact_id?: string
+          binding_version?: string | null
           cancelled_at?: string | null
           cancelled_by?: string | null
           chain_id?: number
           consumed_at?: string | null
           created_at?: string
+          dependency_attestation_fingerprint?: string | null
           deployer_nonce: number
           deployment_id: string
+          execution_control_revision?: number | null
           expires_at: string
           gas_limit: number
           id?: string
@@ -2612,23 +2628,35 @@ export type Database = {
           launch_id: string
           max_fee_per_gas: number
           max_priority_fee_per_gas: number
+          p8a_manifest_fingerprint?: string | null
+          p8a_manifest_version?: string | null
+          p8a_review_id?: string | null
+          p8b_manifest_fingerprint?: string | null
+          p8b_manifest_version?: string | null
+          p8b_review_id?: string | null
           predicted_contract_address: string
           preparation_authorization_id: string
           readiness_fingerprint: string
           review_fingerprint: string
+          safe_attestation_fingerprint?: string | null
+          safe_nonce?: number | null
           safe_recipient: string
           unsigned_tx_fingerprint: string
           wallet_account: string
         }
         Update: {
+          action_type?: string | null
           artifact_id?: string
+          binding_version?: string | null
           cancelled_at?: string | null
           cancelled_by?: string | null
           chain_id?: number
           consumed_at?: string | null
           created_at?: string
+          dependency_attestation_fingerprint?: string | null
           deployer_nonce?: number
           deployment_id?: string
+          execution_control_revision?: number | null
           expires_at?: string
           gas_limit?: number
           id?: string
@@ -2638,10 +2666,18 @@ export type Database = {
           launch_id?: string
           max_fee_per_gas?: number
           max_priority_fee_per_gas?: number
+          p8a_manifest_fingerprint?: string | null
+          p8a_manifest_version?: string | null
+          p8a_review_id?: string | null
+          p8b_manifest_fingerprint?: string | null
+          p8b_manifest_version?: string | null
+          p8b_review_id?: string | null
           predicted_contract_address?: string
           preparation_authorization_id?: string
           readiness_fingerprint?: string
           review_fingerprint?: string
+          safe_attestation_fingerprint?: string | null
+          safe_nonce?: number | null
           safe_recipient?: string
           unsigned_tx_fingerprint?: string
           wallet_account?: string
@@ -6549,14 +6585,18 @@ export type Database = {
       cancel_canonical_pcart_execution_permit: {
         Args: { _permit_id: string }
         Returns: {
+          action_type: string | null
           artifact_id: string
+          binding_version: string | null
           cancelled_at: string | null
           cancelled_by: string | null
           chain_id: number
           consumed_at: string | null
           created_at: string
+          dependency_attestation_fingerprint: string | null
           deployer_nonce: number
           deployment_id: string
+          execution_control_revision: number | null
           expires_at: string
           gas_limit: number
           id: string
@@ -6566,10 +6606,18 @@ export type Database = {
           launch_id: string
           max_fee_per_gas: number
           max_priority_fee_per_gas: number
+          p8a_manifest_fingerprint: string | null
+          p8a_manifest_version: string | null
+          p8a_review_id: string | null
+          p8b_manifest_fingerprint: string | null
+          p8b_manifest_version: string | null
+          p8b_review_id: string | null
           predicted_contract_address: string
           preparation_authorization_id: string
           readiness_fingerprint: string
           review_fingerprint: string
+          safe_attestation_fingerprint: string | null
+          safe_nonce: number | null
           safe_recipient: string
           unsigned_tx_fingerprint: string
           wallet_account: string
@@ -6698,6 +6746,41 @@ export type Database = {
       }
       claim_canonical_pcart_mainnet_send: {
         Args: { _permit_id: string }
+        Returns: {
+          broadcast_at: string | null
+          chain_id: number
+          claim_status: string
+          claimed_at: string
+          claimed_by: string
+          created_at: string
+          deployer_nonce: number
+          deployment_id: string
+          id: string
+          last_recovery_checked_at: string | null
+          launch_id: string
+          permit_id: string
+          predicted_contract_address: string
+          release_reason: string | null
+          released_at: string | null
+          tx_hash: string | null
+          unsigned_tx_fingerprint: string
+          updated_at: string
+          wallet_account: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "pcart_production_send_claims"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      claim_canonical_pcart_mainnet_send_v2: {
+        Args: {
+          _actor: string
+          _dependency_attestation_fingerprint: string
+          _permit_id: string
+          _safe_attestation_fingerprint: string
+        }
         Returns: {
           broadcast_at: string | null
           chain_id: number
@@ -8005,14 +8088,18 @@ export type Database = {
           _unsigned_tx_fingerprint: string
         }
         Returns: {
+          action_type: string | null
           artifact_id: string
+          binding_version: string | null
           cancelled_at: string | null
           cancelled_by: string | null
           chain_id: number
           consumed_at: string | null
           created_at: string
+          dependency_attestation_fingerprint: string | null
           deployer_nonce: number
           deployment_id: string
+          execution_control_revision: number | null
           expires_at: string
           gas_limit: number
           id: string
@@ -8022,10 +8109,76 @@ export type Database = {
           launch_id: string
           max_fee_per_gas: number
           max_priority_fee_per_gas: number
+          p8a_manifest_fingerprint: string | null
+          p8a_manifest_version: string | null
+          p8a_review_id: string | null
+          p8b_manifest_fingerprint: string | null
+          p8b_manifest_version: string | null
+          p8b_review_id: string | null
           predicted_contract_address: string
           preparation_authorization_id: string
           readiness_fingerprint: string
           review_fingerprint: string
+          safe_attestation_fingerprint: string | null
+          safe_nonce: number | null
+          safe_recipient: string
+          unsigned_tx_fingerprint: string
+          wallet_account: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "pcart_production_execution_permits"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
+      issue_canonical_pcart_execution_permit_v2: {
+        Args: {
+          _actor: string
+          _dependency_attestation_fingerprint: string
+          _deployment_id: string
+          _gas_limit: number
+          _max_fee_per_gas: number
+          _max_priority_fee_per_gas: number
+          _preparation_authorization_id: string
+          _safe_attestation_fingerprint: string
+          _safe_nonce: number
+          _unsigned_tx_fingerprint: string
+        }
+        Returns: {
+          action_type: string | null
+          artifact_id: string
+          binding_version: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          chain_id: number
+          consumed_at: string | null
+          created_at: string
+          dependency_attestation_fingerprint: string | null
+          deployer_nonce: number
+          deployment_id: string
+          execution_control_revision: number | null
+          expires_at: string
+          gas_limit: number
+          id: string
+          init_code_hash: string
+          issued_at: string
+          issued_by: string
+          launch_id: string
+          max_fee_per_gas: number
+          max_priority_fee_per_gas: number
+          p8a_manifest_fingerprint: string | null
+          p8a_manifest_version: string | null
+          p8a_review_id: string | null
+          p8b_manifest_fingerprint: string | null
+          p8b_manifest_version: string | null
+          p8b_review_id: string | null
+          predicted_contract_address: string
+          preparation_authorization_id: string
+          readiness_fingerprint: string
+          review_fingerprint: string
+          safe_attestation_fingerprint: string | null
+          safe_nonce: number | null
           safe_recipient: string
           unsigned_tx_fingerprint: string
           wallet_account: string
