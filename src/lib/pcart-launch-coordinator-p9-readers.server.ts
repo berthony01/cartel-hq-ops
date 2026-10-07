@@ -61,3 +61,41 @@ export async function readP9Live(officialToken: string | null, deployer: string 
   }
   return { chain, safe, deps, officialTokenCodeHash: officialTokenCodeHash ?? null, deployerLive };
 }
+
+// ------------------------------------------------------------ P9.3A additions (read-only)
+import { P8B_CODE_HASH_ATTESTATIONS } from "@/lib/pcart-auction-execution-p8b";
+import { observedMsPerBlock } from "@/lib/pcart-launch-coordinator-p9-live";
+import type { FreshHead, P93AuctionObservation } from "@/lib/pcart-launch-coordinator-p9-3";
+
+/** Fresh head + every P8B-pinned code hash + official token runtime keccak + Safe. View calls only. */
+export async function readP9_3PrepareFacts(officialToken: string | null) {
+  const base = await readP9Live(officialToken, null);
+  const c = client();
+  const observed: Record<string, string | null | undefined> = { ...base.deps };
+  await Promise.all(P8B_CODE_HASH_ATTESTATIONS.filter((a) => !(a.key in observed)).map(async (a) => { observed[a.key] = await codeHash(c, a.address); }));
+  let head: FreshHead | null = null;
+  if (base.chain.ok) {
+    const ch = base.chain;
+    head = { chainId: ch.chainId, block: ch.latestBlock, timestampSec: ch.latestTimestampSec, capturedAtMs: Date.parse(ch.capturedAt),
+      msPerBlock: observedMsPerBlock(ch.latestBlock, ch.latestTimestampSec, ch.sampleBlock, ch.sampleTimestampSec) };
+  }
+  return { head, observed, safe: base.safe, tokenRuntimeKeccak: base.officialTokenCodeHash };
+}
+
+/** Auction views proven by the P8B fork rehearsal (ICCA): endBlock, currencyRaised, isGraduated, totalCleared, clearingPrice, tokensRecipient, fundsRecipient. */
+const CCA_VIEW_ABI = parseAbi([
+  "function endBlock() view returns (uint64)", "function currencyRaised() view returns (uint256)", "function isGraduated() view returns (bool)",
+  "function totalCleared() view returns (uint256)", "function clearingPrice() view returns (uint256)",
+  "function tokensRecipient() view returns (address)", "function fundsRecipient() view returns (address)",
+]);
+export async function readP9_3Auction(auctionAddress: string): Promise<P93AuctionObservation> {
+  const capturedAt = new Date().toISOString();
+  if (!/^0x[0-9a-fA-F]{40}$/.test(auctionAddress)) return { ok: false, capturedAt };
+  const c = client();
+  const address = auctionAddress as `0x${string}`;
+  try {
+    const [e, r, g, t, p, tr, fr] = await Promise.all((["endBlock", "currencyRaised", "isGraduated", "totalCleared", "clearingPrice", "tokensRecipient", "fundsRecipient"] as const)
+      .map((fn) => c.readContract({ address, abi: CCA_VIEW_ABI, functionName: fn } as any)));
+    return { ok: true, endBlock: BigInt(e as bigint), currencyRaisedWei: BigInt(r as bigint), isGraduated: g === true, totalClearedWei: BigInt(t as bigint), clearingPriceQ96: BigInt(p as bigint), tokensRecipient: String(tr), fundsRecipient: String(fr), capturedAt };
+  } catch { return { ok: false, capturedAt }; }
+}

@@ -2438,6 +2438,137 @@ export type Database = {
           },
         ]
       }
+      pcart_launch_coordinator_actions: {
+        Row: {
+          action_kind: string
+          auction_address: string | null
+          authoritative_start_block: number | null
+          binding_fingerprint: string
+          binding_version: string
+          call_batch_fingerprint: string
+          chain_head_block: number
+          chain_head_captured_at: string
+          chain_id: number
+          dependency_attestation_fingerprint: string
+          end_block: number | null
+          id: string
+          intended_auction_start_at: string | null
+          launch_id: string
+          official_token_address: string
+          official_token_code_hash: string
+          p8a_manifest_fingerprint: string
+          p8a_manifest_version: string
+          p8a_review_id: string
+          p8b_manifest_fingerprint: string
+          p8b_manifest_version: string
+          p8b_review_id: string
+          permit2_expiration: number | null
+          prepared_at: string
+          prepared_by: string
+          promotion_start_at: string | null
+          safe_address: string
+          safe_nonce: number
+          safe_owners_fingerprint: string
+          safe_threshold: number
+          safe_tx_data_keccak: string
+          safe_tx_hash: string
+          safe_tx_operation: number
+          safe_tx_target: string
+          status: string
+          status_changed_at: string
+          status_reason: string | null
+          unsold_amount: number | null
+        }
+        Insert: {
+          action_kind: string
+          auction_address?: string | null
+          authoritative_start_block?: number | null
+          binding_fingerprint: string
+          binding_version: string
+          call_batch_fingerprint: string
+          chain_head_block: number
+          chain_head_captured_at: string
+          chain_id: number
+          dependency_attestation_fingerprint: string
+          end_block?: number | null
+          id?: string
+          intended_auction_start_at?: string | null
+          launch_id: string
+          official_token_address: string
+          official_token_code_hash: string
+          p8a_manifest_fingerprint: string
+          p8a_manifest_version: string
+          p8a_review_id: string
+          p8b_manifest_fingerprint: string
+          p8b_manifest_version: string
+          p8b_review_id: string
+          permit2_expiration?: number | null
+          prepared_at?: string
+          prepared_by: string
+          promotion_start_at?: string | null
+          safe_address: string
+          safe_nonce: number
+          safe_owners_fingerprint: string
+          safe_threshold: number
+          safe_tx_data_keccak: string
+          safe_tx_hash: string
+          safe_tx_operation: number
+          safe_tx_target: string
+          status?: string
+          status_changed_at?: string
+          status_reason?: string | null
+          unsold_amount?: number | null
+        }
+        Update: {
+          action_kind?: string
+          auction_address?: string | null
+          authoritative_start_block?: number | null
+          binding_fingerprint?: string
+          binding_version?: string
+          call_batch_fingerprint?: string
+          chain_head_block?: number
+          chain_head_captured_at?: string
+          chain_id?: number
+          dependency_attestation_fingerprint?: string
+          end_block?: number | null
+          id?: string
+          intended_auction_start_at?: string | null
+          launch_id?: string
+          official_token_address?: string
+          official_token_code_hash?: string
+          p8a_manifest_fingerprint?: string
+          p8a_manifest_version?: string
+          p8a_review_id?: string
+          p8b_manifest_fingerprint?: string
+          p8b_manifest_version?: string
+          p8b_review_id?: string
+          permit2_expiration?: number | null
+          prepared_at?: string
+          prepared_by?: string
+          promotion_start_at?: string | null
+          safe_address?: string
+          safe_nonce?: number
+          safe_owners_fingerprint?: string
+          safe_threshold?: number
+          safe_tx_data_keccak?: string
+          safe_tx_hash?: string
+          safe_tx_operation?: number
+          safe_tx_target?: string
+          status?: string
+          status_changed_at?: string
+          status_reason?: string | null
+          unsold_amount?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pcart_launch_coordinator_actions_launch_id_fkey"
+            columns: ["launch_id"]
+            isOneToOne: false
+            referencedRelation: "launches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pcart_launch_coordinator_events: {
         Row: {
           actor: string | null
@@ -6582,6 +6713,10 @@ export type Database = {
         Args: { _user_id?: string; _workspace_id: string }
         Returns: boolean
       }
+      cancel_canonical_pcart_coordinator_action: {
+        Args: { _action_id: string; _reason: string }
+        Returns: undefined
+      }
       cancel_canonical_pcart_execution_permit: {
         Args: { _permit_id: string }
         Returns: {
@@ -9133,6 +9268,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      record_canonical_pcart_preauction_prepared: {
+        Args: { _actor: string; _b: Json }
+        Returns: string
       }
       record_launch_watch_confirmation: {
         Args: {
