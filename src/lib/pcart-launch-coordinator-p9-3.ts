@@ -222,9 +222,10 @@ export function staleReasons(a: P93StoredAction, c: P93CurrentFacts): P93StaleRe
 
 /** Effective status: a stored PREPARED action with any mismatch is shown STALE (DB triggers also persist plan/policy/token stales). */
 export function effectiveActionStatus(a: P93StoredAction, c: P93CurrentFacts): { status: string; reasons: P93StaleReason[] } {
-  if (a.status !== "PREPARED") return { status: a.status, reasons: [] };
+  // P9.3B: every pre-execution status (PREPARED / AWAITING_SIGNATURES / READY) is staled by any binding change.
+  if (a.status !== "PREPARED" && a.status !== "AWAITING_SIGNATURES" && a.status !== "READY") return { status: a.status, reasons: [] };
   const r = staleReasons(a, c);
-  return r.length ? { status: "STALE", reasons: r } : { status: "PREPARED", reasons: [] };
+  return r.length ? { status: "STALE", reasons: r } : { status: a.status, reasons: [] };
 }
 
 // ------------------------------------------------------------ sweep disposition (P8B: explicit Safe sweep)
