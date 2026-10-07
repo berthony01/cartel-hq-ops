@@ -8,6 +8,7 @@ import { createServerFn } from "@tanstack/react-start";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { deriveCoordinatorState, milestones, planStatus, policyApproval, type P9Snapshot } from "@/lib/pcart-launch-coordinator-p9";
+import { derivePreflight } from "@/lib/pcart-launch-coordinator-p9-2";
 import { auctionReadModel, estimateAuctionBlocks, interpretChain, interpretDependencies, interpretSafe, validatePlanInput } from "@/lib/pcart-launch-coordinator-p9-live";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -26,7 +27,7 @@ export const getPcartP9CoordinatorSnapshot = createServerFn({ method: "POST" })
     const sb = ctx.supabase;
     const [launch, dep, ctl, p8a, p8b, rev, plan, events, signers] = await Promise.all([
       sb.from("launches").select("id, status, official_contract_address").eq("id", data.launchId).maybeSingle(),
-      sb.from("launch_chain_deployments").select("id, attempt_number, status, tx_hash, contract_address, finality_state, submitted_at")
+      sb.from("launch_chain_deployments").select("id, attempt_number, status, tx_hash, contract_address, finality_state, submitted_at, artifact_id, chain_id, network_environment, deployer_address, deployer_nonce_before, init_code_hash, review_fingerprint")
         .eq("launch_id", data.launchId).eq("network_environment", "PRODUCTION").order("attempt_number", { ascending: false }).limit(1).maybeSingle(),
       sb.from("launch_chain_production_execution_controls").select("execution_enabled, emergency_stop_engaged").eq("control_key", "ROBINHOOD_MAINNET_DEPLOYMENT").maybeSingle(),
       sb.from("pcart_auction_liquidity_plan_reviews").select("id, manifest_version, manifest_fingerprint, reviewed_at, expires_at").eq("launch_id", data.launchId),
@@ -36,13 +37,15 @@ export const getPcartP9CoordinatorSnapshot = createServerFn({ method: "POST" })
       sb.from("pcart_launch_coordinator_events").select("event_kind, created_at").eq("launch_id", data.launchId).order("created_at", { ascending: false }).limit(10),
       sb.from("launch_treasury_signer_configs").select("signer_1, signer_2, signer_3, safe_address").eq("launch_id", data.launchId).maybeSingle(),
     ]);
+    const active = await sb.from("launch_chain_deployments").select("id", { count: "exact", head: true })
+      .eq("launch_id", data.launchId).eq("network_environment", "PRODUCTION").eq("chain_id", 4663).eq("artifact_id", "pepecartel-token-v1").in("status", ["DRAFT", "SUBMITTED", "PENDING", "CONFIRMED"]);
     const claims = dep.data?.id
       ? await sb.from("pcart_production_send_claims").select("claim_status").eq("deployment_id", dep.data.id)
       : { data: [] };
 
     const officialToken: string | null = launch.data?.official_contract_address ?? null;
     const { readP9Live } = await import("@/lib/pcart-launch-coordinator-p9-readers.server");
-    const raw = await readP9Live(officialToken);
+    const raw = await readP9Live(officialToken, dep.data?.deployer_address ?? null);
     const chain = interpretChain(raw.chain);
     const configured = signers.data ? [signers.data.signer_1, signers.data.signer_2, signers.data.signer_3].filter(Boolean) : [];
     const safe = interpretSafe(raw.safe, signers.data?.safe_address ?? null, configured);
@@ -67,8 +70,21 @@ export const getPcartP9CoordinatorSnapshot = createServerFn({ method: "POST" })
       observed: { preAuctionSafeTxExecuted: null, currentBlock, migrated: null, graduated: null, unsoldSwept: null },
       live: { chainLive: chain.status === "LIVE", safeReady: safe.status === "READY", dependenciesVerified: deps.status === "VERIFIED" },
     };
+    const preflight = derivePreflight({
+      chain: { live: chain.status === "LIVE", chainId: "chainId" in chain ? (chain as any).chainId ?? null : null },
+      safe: { status: safe.status, reasons: safe.reasons, threshold: safe.threshold ?? null, nonce: safe.nonce ?? null, owners: safe.owners },
+      configuredSigners: configured as string[],
+      dependencies: deps.status,
+      p8a: a.status, p8b: b.status,
+      attempt: dep.data ? { status: dep.data.status, txHash: dep.data.tx_hash, submittedAt: dep.data.submitted_at, contractAddress: dep.data.contract_address, finalityState: dep.data.finality_state, artifactId: dep.data.artifact_id, chainId: dep.data.chain_id, networkEnvironment: dep.data.network_environment, deployerAddress: dep.data.deployer_address, deployerNonceBefore: dep.data.deployer_nonce_before == null ? null : String(dep.data.deployer_nonce_before), initCodeHash: dep.data.init_code_hash, reviewFingerprint: dep.data.review_fingerprint } : null,
+      activeProductionAttempts: active.count ?? 0,
+      uncertainClaim: (claims.data ?? []).some((c: any) => c.claim_status === "AMBIGUOUS" || c.claim_status === "CLAIMED"),
+      deployerLive: raw.deployerLive,
+      control: snap.control,
+    });
     return {
       ok: true as const,
+      preflight,
       derivation: deriveCoordinatorState(snap),
       milestones: milestones(snap),
       plan: snap.plan,

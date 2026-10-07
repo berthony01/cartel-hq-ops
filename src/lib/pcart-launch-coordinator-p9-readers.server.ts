@@ -21,7 +21,7 @@ const codeHash = async (c: ReturnType<typeof client>, address: string): Promise<
   try { const code = await c.getCode({ address: address as `0x${string}` }); return code && code !== "0x" ? keccak256(code) : null; } catch { return undefined; }
 };
 
-export async function readP9Live(officialToken: string | null) {
+export async function readP9Live(officialToken: string | null, deployer: string | null = null) {
   const c = client();
   const capturedAt = new Date().toISOString();
   let chain: P9ChainObservation;
@@ -52,5 +52,12 @@ export async function readP9Live(officialToken: string | null) {
   await Promise.all(P8A_MAINNET_DEPENDENCIES.map(async (d) => { deps[d.key] = await codeHash(c, d.address); }));
 
   const officialTokenCodeHash = officialToken ? await codeHash(c, officialToken) : null;
-  return { chain, safe, deps, officialTokenCodeHash: officialTokenCodeHash ?? null };
+  // P9.2: read-only deployer nonce (latest) + balance for preflight. No signer, no transaction.
+  let deployerLive: { nonce: string | null; balanceWei: string | null } = { nonce: null, balanceWei: null };
+  if (deployer && /^0x[0-9a-fA-F]{40}$/.test(deployer)) {
+    const addr = deployer as `0x${string}`;
+    const [n, b] = await Promise.all([c.getTransactionCount({ address: addr, blockTag: "latest" }).catch(() => null), c.getBalance({ address: addr }).catch(() => null)]);
+    deployerLive = { nonce: n == null ? null : String(n), balanceWei: b == null ? null : b.toString() };
+  }
+  return { chain, safe, deps, officialTokenCodeHash: officialTokenCodeHash ?? null, deployerLive };
 }
