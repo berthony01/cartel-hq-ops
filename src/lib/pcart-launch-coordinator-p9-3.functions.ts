@@ -21,7 +21,7 @@ type Ctx = { supabase: any; userId: string };
 const isOwner = async (ctx: Ctx) => (await ctx.supabase.rpc("is_platform_owner", { _user_id: ctx.userId })).data === true;
 const launchInput = (i: { launchId: string }) => { if (!i || !UUID.test(String(i.launchId))) throw new Error("Invalid launch"); return { launchId: i.launchId.toLowerCase() }; };
 
-const mapAction = (r: any): P93StoredAction => ({
+export const mapAction = (r: any): P93StoredAction => ({
   id: r.id, actionKind: r.action_kind, status: r.status, statusReason: r.status_reason ?? null,
   officialTokenAddress: r.official_token_address, officialTokenCodeHash: r.official_token_code_hash,
   p8aReviewId: r.p8a_review_id, p8aManifestFingerprint: r.p8a_manifest_fingerprint, p8bReviewId: r.p8b_review_id, p8bManifestFingerprint: r.p8b_manifest_fingerprint,
@@ -30,7 +30,7 @@ const mapAction = (r: any): P93StoredAction => ({
   authoritativeStartBlock: r.authoritative_start_block?.toString() ?? null, endBlock: r.end_block?.toString() ?? null, safeTxHash: r.safe_tx_hash, preparedAt: r.prepared_at,
 });
 
-async function loadFacts(ctx: Ctx, launchId: string) {
+export async function loadFacts(ctx: Ctx, launchId: string) {
   const sb = ctx.supabase;
   const [launch, dep, ctl, p8a, p8b, rev, plan, actions] = await Promise.all([
     sb.from("launches").select("id, status, official_contract_address").eq("id", launchId).maybeSingle(),
