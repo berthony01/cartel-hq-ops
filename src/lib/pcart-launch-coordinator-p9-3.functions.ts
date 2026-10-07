@@ -79,13 +79,18 @@ export const getPcartP9_3Segment = createServerFn({ method: "POST" })
     const pre = f.actions.find((x) => x.actionKind === "PREAUCTION_SETUP" && x.status !== "CANCELLED") ?? null;
     const preEff = pre ? effectiveActionStatus(pre, current) : null;
     // No auction address exists until a confirmed pre-auction execution is reconciled (P9.3B) → NOT_CREATED.
-    const auction = auctionModel({ auctionAddress: null, boundStartBlock: null, boundEndBlock: null, currentBlock: live.head ? live.head.block.toString() : null, obs: null });
+    // P9.3B: the auction address exists only on a CONFIRMED (chain-verified) pre-auction action.
+    const confirmed = f.actions.find((x) => x.actionKind === "PREAUCTION_SETUP" && x.status === "CONFIRMED") ?? null;
+    const auctionAddress = confirmed ? ((await ctx.supabase.from("pcart_launch_coordinator_actions").select("auction_address").eq("id", confirmed.id).maybeSingle()).data?.auction_address ?? null) : null;
+    const { readP9_3Auction } = await import("@/lib/pcart-launch-coordinator-p9-readers.server");
+    const obs = auctionAddress ? await readP9_3Auction(auctionAddress) : null;
+    const auction = auctionModel({ auctionAddress, boundStartBlock: confirmed?.authoritativeStartBlock ?? null, boundEndBlock: confirmed?.endBlock ?? null, currentBlock: live.head ? live.head.block.toString() : null, obs });
     const segment = deriveAuctionSegment({
       nowMs: Date.now(), officialRegistered: f.officialRegistered && live.tokenRuntimeKeccak?.toLowerCase() === P9_3_EXPECTED_TOKEN_RUNTIME_KECCAK.toLowerCase(),
       plan: f.plan, p8aCurrent: f.p8a.status === "CURRENT", p8bCurrent: f.p8b.status === "CURRENT",
       dependenciesVerified: depFp === P9_3_PINNED_DEPENDENCY_FINGERPRINT,
       safeReady: !!live.safe && live.safe.threshold === 2 && live.safe.version === "1.4.1",
-      uncertainTransaction: f.uncertain, preAuction: preEff, preAuctionConfirmed: false, auction, migrationConfirmed: null, sweepAction: null, sweepConfirmed: false,
+      uncertainTransaction: f.uncertain, preAuction: preEff, preAuctionConfirmed: !!confirmed, auction, migrationConfirmed: null, sweepAction: null, sweepConfirmed: false,
     });
     return {
       ok: true as const, segment, steps: auctionSteps(segment), auction, sweepDisposition: P9_3_SWEEP_DISPOSITION,
