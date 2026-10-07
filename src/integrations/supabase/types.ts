@@ -2252,6 +2252,114 @@ export type Database = {
         }
         Relationships: []
       }
+      pcart_auction_execution_rehearsal_reviews: {
+        Row: {
+          created_at: string
+          duration_blocks: number
+          expires_at: string
+          floor_price_q96: number
+          fork_block: number
+          id: string
+          launch_id: string
+          live_attestation: Json
+          lp_custody_mode: string
+          manifest_fingerprint: string
+          manifest_version: string
+          migration_mode: string
+          overall_result: string
+          p8a_review_id: string
+          refund_fingerprint: string
+          refund_mode: string
+          release_schedule_fingerprint: string
+          reviewed_at: string
+          reviewed_by: string
+          safe_tx_count_post: number
+          safe_tx_count_pre: number
+          settlement_mode: string
+          signatures_per_safe_tx: number
+          source_attestation_fingerprint: string
+          success_fingerprint: string
+          tick_spacing_q96: number
+          transaction_sequence: Json
+          unsold_mode: string
+        }
+        Insert: {
+          created_at?: string
+          duration_blocks: number
+          expires_at: string
+          floor_price_q96: number
+          fork_block: number
+          id?: string
+          launch_id: string
+          live_attestation: Json
+          lp_custody_mode: string
+          manifest_fingerprint: string
+          manifest_version: string
+          migration_mode: string
+          overall_result: string
+          p8a_review_id: string
+          refund_fingerprint: string
+          refund_mode: string
+          release_schedule_fingerprint: string
+          reviewed_at?: string
+          reviewed_by: string
+          safe_tx_count_post: number
+          safe_tx_count_pre: number
+          settlement_mode: string
+          signatures_per_safe_tx: number
+          source_attestation_fingerprint: string
+          success_fingerprint: string
+          tick_spacing_q96: number
+          transaction_sequence: Json
+          unsold_mode: string
+        }
+        Update: {
+          created_at?: string
+          duration_blocks?: number
+          expires_at?: string
+          floor_price_q96?: number
+          fork_block?: number
+          id?: string
+          launch_id?: string
+          live_attestation?: Json
+          lp_custody_mode?: string
+          manifest_fingerprint?: string
+          manifest_version?: string
+          migration_mode?: string
+          overall_result?: string
+          p8a_review_id?: string
+          refund_fingerprint?: string
+          refund_mode?: string
+          release_schedule_fingerprint?: string
+          reviewed_at?: string
+          reviewed_by?: string
+          safe_tx_count_post?: number
+          safe_tx_count_pre?: number
+          settlement_mode?: string
+          signatures_per_safe_tx?: number
+          source_attestation_fingerprint?: string
+          success_fingerprint?: string
+          tick_spacing_q96?: number
+          transaction_sequence?: Json
+          unsold_mode?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pcart_auction_execution_rehearsal_reviews_launch_id_fkey"
+            columns: ["launch_id"]
+            isOneToOne: false
+            referencedRelation: "launches"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pcart_auction_execution_rehearsal_reviews_p8a_review_id_fkey"
+            columns: ["p8a_review_id"]
+            isOneToOne: false
+            referencedRelation: "pcart_auction_liquidity_plan_reviews"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pcart_auction_liquidity_plan_reviews: {
         Row: {
           created_at: string
@@ -8954,6 +9062,19 @@ export type Database = {
         Returns: Json
       }
       restore_sticker_pack: { Args: { _pack_id: string }; Returns: Json }
+      review_canonical_pcart_p8b_rehearsal: {
+        Args: {
+          _launch_id: string
+          _live_attestation: Json
+          _manifest_fingerprint: string
+          _refund_fingerprint: string
+          _release_schedule_fingerprint: string
+          _source_attestation_fingerprint: string
+          _success_fingerprint: string
+          _transaction_sequence: Json
+        }
+        Returns: string
+      }
       review_project_verification: {
         Args: {
           _action: string
