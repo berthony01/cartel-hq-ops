@@ -323,7 +323,7 @@ check(
     .split("\n")
     .filter(Boolean)
     // Authorized PCART P8A review-only auction/liquidity plan files (separately tested by pcart-production-p8a-regression).
-    .filter((f) => !/^(src\/lib\/pcart-auction-liquidity(-plan|-attest|\.functions)\.ts|src\/components\/cartel\/PcartAuctionLiquidityPlanPanel\.tsx|scripts\/pcart-production-p8a-regression\.ts)$/.test(f))
+    .filter((f) => !/^(src\/lib\/pcart-auction-liquidity(-plan|-attest|\.functions)\.ts|src\/components\/cartel\/PcartAuctionLiquidityPlanPanel\.tsx|scripts\/pcart-production-p8a-regression\.ts|src\/lib\/pcart-auction-execution-p8b(\.functions)?\.ts|src\/components\/cartel\/PcartP8bRehearsalPanel\.tsx|scripts\/pcart-production-p8b-regression\.ts)$/.test(f))
     .filter((f) =>
       /^(contracts|artifacts)\//.test(f) ||
       /chain-mainnet-(wallet|handoff|registry)|production-deployment|ProductionDeploymentRequestPanel|canary|presign|liquidity|auction|telegram|pcart-token|frozen/i.test(f),

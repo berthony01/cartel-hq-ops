@@ -119,7 +119,7 @@ export const P8B_FORK_EVIDENCE = {
   },
   protocolFeeController: ZERO,
   protocolFeeWei: 0n,
-  forkTokenArtifact: { artifact: "pepecartel-token-v1", creationKeccak: "0x2edebe9de5877c0775dc87644ca9051a54034f4eee8bd9662c7657d0fd3c2196", runtimeKeccak: "0x69ef7ad36b6c4b900d390bc4977eb61a518e9d35e506a6f83712192c7e7d03e4", forkOnly: true },
+  forkTokenArtifact: { artifact: "frozen-pcart-token-v1", creationKeccak: "0x2edebe9de5877c0775dc87644ca9051a54034f4eee8bd9662c7657d0fd3c2196", runtimeKeccak: "0x69ef7ad36b6c4b900d390bc4977eb61a518e9d35e506a6f83712192c7e7d03e4", forkOnly: true },
   rehearsalSafe: { version: "1.4.1", threshold: 2, owners: 3, oneSignatureRejected: true, twoSignaturesAccepted: true },
   success30Eth: {
     grossWei: 29_999_999_999_999_999_999n,

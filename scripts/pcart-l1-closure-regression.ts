@@ -264,6 +264,12 @@ const SAFE_CREATE_PIN_VALUES = new Set(
  */
 const P8A_PIN_FILE = "src/lib/pcart-auction-liquidity-plan.ts";
 const P8A_PIN_VALUES = new Set(EXTERNAL_ADDRESSES.map((v) => v.toLowerCase()));
+/**
+ * FOURTH NARROW, EXPLICITLY AUTHORIZED EXCEPTION (PCART P8B-2, owner-authorized 2026-10-07).
+ * The prepare-only execution manifest re-attests the Safe 1.4.1 singleton code hash. Only these two values, only this file.
+ */
+const P8B_PIN_FILE = "src/lib/pcart-auction-execution-p8b.ts";
+const P8B_PIN_VALUES = new Set([SAFE_SINGLETON, SAFE_SINGLETON_CODEHASH].map((v) => v.toLowerCase()));
 const protectedFiles = PROTECTED_ROOTS.flatMap((root) => walk(root));
 const leaks: string[] = [];
 for (const file of protectedFiles) {
@@ -274,7 +280,8 @@ for (const file of protectedFiles) {
     const excepted =
       (normalized === SAFE_PIN_EXCEPTION_FILE && SAFE_PIN_EXCEPTION_VALUES.has(value.toLowerCase())) ||
       (normalized === SAFE_CREATE_PIN_FILE && SAFE_CREATE_PIN_VALUES.has(value.toLowerCase())) ||
-      (normalized === P8A_PIN_FILE && P8A_PIN_VALUES.has(value.toLowerCase()));
+      (normalized === P8A_PIN_FILE && P8A_PIN_VALUES.has(value.toLowerCase())) ||
+      (normalized === P8B_PIN_FILE && P8B_PIN_VALUES.has(value.toLowerCase()));
     if (!excepted) leaks.push(`${file}:${value}`);
   }
 }

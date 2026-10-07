@@ -34,7 +34,7 @@ export function PcartP8bRehearsalPanel({ launchId }: { launchId: string }) {
     ["Deployed Uniswap source/code", s ? `${pass(s.live.codeHashesOk)} (live code hashes; pinned v3.3.0 / CCA v2.1.0)` : "…"],
     ["Protocol fee", "0 (fee controller is the zero address; measured 0 wei)"],
     ["Real Treasury Safe (read-only)", s ? `${pass(s.live.safeOk)} — Safe ${s.live.safe.version ?? "?"}, ${s.live.safe.threshold ?? "?"}-of-${s.live.safe.owners.length}, nonce ${s.live.safe.nonce ?? "?"}` : "…"],
-    ["Fork PCART artifact", "PASS — frozen pepecartel-token-v1, fork-only token"],
+    ["Fork PCART artifact", "PASS — frozen PCART token build, fork-only token"],
     ["30 ETH success rehearsal", `PASS — ${formatEth(ev.lpEthWei)} to liquidity / ${formatEth(ev.treasuryEthWei)} to Treasury (1 wei rounding)`],
     ["Below-5 ETH refund rehearsal", "PASS — no pool, bidders refunded, all PCART back to the Safe"],
   ];
