@@ -10,7 +10,7 @@
  */
 import { encodeAbiParameters, encodeFunctionData, keccak256, parseAbi, stringToHex } from "viem";
 
-export const P8A_MANIFEST_VERSION = "pcart-auction-liquidity-p8a-v1" as const;
+export const P8A_MANIFEST_VERSION = "pcart-auction-liquidity-p8a-v2" as const;
 export const P8A_STOP_COPY = "AUCTION & LIQUIDITY PLAN REVIEWED — NO TRANSACTION" as const;
 
 const UNIT = 10n ** 18n;
@@ -51,13 +51,20 @@ export const P8A_MAINNET_DEPENDENCIES: readonly P8aDependency[] = [
 
 export const dep = (k: P8aDependencyKey) => P8A_MAINNET_DEPENDENCIES.find((d) => d.key === k)!;
 
+/** Uniswap Liquidity Launcher v3.3.0 `MigratorParams.MAX_BRACKET_RATE` (1e7 = 100%). */
+export const LP_RATE_DENOMINATOR = 10_000_000;
+const DAY_MS = 86_400_000;
+
 export const P8A_MANIFEST = {
   version: P8A_MANIFEST_VERSION,
   chainId: 4663,
   mechanism: "UNISWAP_CCA_LBP_STRATEGY",
   quoteAsset: "NATIVE_ETH",
   auctionAllocation: pcart(150_000_000n),
+  /** Maximum first-pool token reserve; actual amount consumed is proven in P8B fork rehearsal. */
   initialLiquidityReserve: pcart(200_000_000n),
+  initialLiquidityReserveIsMaximum: true,
+  unusedInitialReserveDestination: "TREASURY_SAFE",
   futureLiquidityReserve: pcart(150_000_000n),
   futureLiquidityReserveInFirstLaunch: false,
   publicLaunchBucket: pcart(500_000_000n),
@@ -66,17 +73,44 @@ export const P8A_MANIFEST = {
   targetWei: eth(30n),
   maxRaiseWei: null as bigint | null,
   targetIsGate: false,
-  durationHours: 96,
-  durationIsApproximate: true,
   whitelist: false,
   presale: false,
   extension: false,
-  /** Liquidity share of raised ETH, in basis points, by lower bound (wei). */
-  liquidityBrackets: [
-    { minWei: eth(5n), liquidityBps: 10_000 },
-    { minWei: eth(15n), liquidityBps: 9_000 },
-    { minWei: eth(30n), liquidityBps: 8_000 },
+  timeline: {
+    promotionMinDays: 21,
+    promotionExtendable: true,
+    noFundsDuringPromotion: true,
+    auctionDurationDays: 7,
+    auctionStartConfigurable: true,
+    autoStartAfterPromotion: false,
+    ownerConfirmationRequiredBeforeAuctionStart: true,
+    auctionEndExtension: false,
+    phases: ["PROMOTION", "AUCTION_SCHEDULED", "AUCTION_LIVE", "AUCTION_ENDED"],
+    launchWatchIsPrimaryOptIn: true,
+  },
+  /**
+   * Native v3.3.0 `LiquidityAllocationBracket[]` (uint128 lowerThreshold, uint24 rate in mps).
+   * Marginal: each rate applies only to currency inside its bracket; last bracket extends to infinity.
+   */
+  lpAllocationSchedule: [
+    { lowerThresholdWei: 0n, rateMps: 8_000_000 },
+    { lowerThresholdWei: eth(10n), rateMps: 6_000_000 },
+    { lowerThresholdWei: eth(30n), rateMps: 5_000_000 },
   ],
+  treasuryReceivesRemainder: true,
+  treasuryPolicy: {
+    onChainSeparateWallets: false,
+    approval: "TREASURY_SAFE_2_OF_3",
+    budgetBps: { productDevelopment: 3_000, marketingCommunity: 2_500, contractorsServicesInfrastructure: 1_500, reserveRunway: 1_500, founderOperatorCompensationMax: 1_500 },
+  },
+  founderCompensationPolicy: {
+    kind: "POST_RAISE_TREASURY_EXPENSE",
+    capBpsOfTreasury: 1_500,
+    disclosed: true,
+    approval: "TREASURY_SAFE_2_OF_3",
+    automaticBidderSkim: false,
+    hardWiredInAuctionProceeds: false,
+  },
   pool: { version: "UNISWAP_V4", feePips: 2_500, feeLabel: "0.25%", dynamicFee: false },
   lpCustody: "PERMANENT_FEES_OFF_FEESPLITTER",
   lpCustodyLabel: "Permanent LP custody (functionally burned)",
@@ -84,6 +118,7 @@ export const P8A_MANIFEST = {
   unsoldPolicyRequiresLiveReconfirmation: true,
   treasuryDependency: "VERIFIED_2_OF_3_TREASURY_SAFE",
   officialTokenDependency: "P7_OFFICIAL_CONTRACT_REGISTRATION",
+  rehearsalMode: "FORKED_MAINNET",
   dependencies: P8A_MAINNET_DEPENDENCIES,
 } as const;
 
@@ -100,16 +135,62 @@ export const canonicalJson = (v: unknown) => JSON.stringify(canon(v));
 export const p8aFingerprint = (domain: string, v: unknown) => keccak256(stringToHex(`${domain}|${canonicalJson(v)}`));
 export const P8A_MANIFEST_FINGERPRINT = p8aFingerprint("pcart-p8a-manifest", P8A_MANIFEST);
 
+/** ABI encoding of the schedule exactly as `MigratorParameters.lpAllocationSchedule` expects. */
+export function encodeLpAllocationSchedule(): `0x${string}` {
+  return encodeAbiParameters(
+    [{ type: "tuple[]", components: [{ name: "lowerThreshold", type: "uint128" }, { name: "rate", type: "uint24" }] }],
+    [P8A_MANIFEST.lpAllocationSchedule.map((b) => ({ lowerThreshold: b.lowerThresholdWei, rate: b.rateMps }))],
+  );
+}
+
+/** Mirror of LBPStrategy v3.3.0 `_calculateCurrencyAmountForLp` (floor mulDiv per bracket). */
+export function lpCurrencyForRaise(raisedWei: bigint): bigint {
+  const s = P8A_MANIFEST.lpAllocationSchedule;
+  let remaining = raisedWei, lp = 0n;
+  for (let i = 0; i < s.length; i++) {
+    const rate = BigInt(s[i]!.rateMps);
+    if (i === s.length - 1) { lp += (remaining * rate) / BigInt(LP_RATE_DENOMINATOR); break; }
+    const size = s[i + 1]!.lowerThresholdWei - s[i]!.lowerThresholdWei;
+    const amt = remaining > size ? size : remaining;
+    lp += (amt * rate) / BigInt(LP_RATE_DENOMINATOR);
+    remaining -= amt;
+    if (remaining === 0n) break;
+  }
+  return lp;
+}
+
 // ------------------------------------------------------------ liquidity math (wei only)
+/** liquidityBps = effective (blended) share, floored, for display only. */
 export type P8aSplit = { refund: boolean; pool: boolean; liquidityBps: number; liquidityWei: bigint; treasuryWei: bigint };
 
 export function computeLiquiditySplit(raisedWei: bigint): P8aSplit {
   if (typeof raisedWei !== "bigint" || raisedWei < 0n) throw new Error("INVALID_RAISE");
   if (raisedWei < P8A_MANIFEST.floorWei) return { refund: true, pool: false, liquidityBps: 0, liquidityWei: 0n, treasuryWei: 0n };
-  let bps = 0;
-  for (const b of P8A_MANIFEST.liquidityBrackets) if (raisedWei >= b.minWei) bps = b.liquidityBps;
-  const liquidityWei = (raisedWei * BigInt(bps)) / 10_000n;
+  const liquidityWei = lpCurrencyForRaise(raisedWei);
+  const bps = Number((liquidityWei * 10_000n) / raisedWei);
   return { refund: false, pool: true, liquidityBps: bps, liquidityWei, treasuryWei: raisedWei - liquidityWei };
+}
+
+// ------------------------------------------------------------ promotion + auction timeline (pure)
+export type P8aPhase = "PROMOTION" | "AUCTION_SCHEDULED" | "AUCTION_LIVE" | "AUCTION_ENDED";
+export const auctionEarliestStart = (promotionStartMs: number) => promotionStartMs + P8A_MANIFEST.timeline.promotionMinDays * DAY_MS;
+export const auctionEndFor = (auctionStartMs: number) => auctionStartMs + P8A_MANIFEST.timeline.auctionDurationDays * DAY_MS;
+
+/** Fails closed if the start is before the 21-day minimum runway or not owner-confirmed. No overrides in v2. */
+export function validateAuctionSchedule(i: { promotionStartMs: number; auctionStartMs: number; ownerConfirmed: boolean }):
+  { ok: true; auctionEndMs: number } | { ok: false; reason: "OWNER_CONFIRMATION_REQUIRED" | "PROMOTION_RUNWAY_TOO_SHORT" | "INVALID_TIME" } {
+  if (![i.promotionStartMs, i.auctionStartMs].every(Number.isFinite)) return { ok: false, reason: "INVALID_TIME" };
+  if (!i.ownerConfirmed) return { ok: false, reason: "OWNER_CONFIRMATION_REQUIRED" };
+  if (i.auctionStartMs < auctionEarliestStart(i.promotionStartMs)) return { ok: false, reason: "PROMOTION_RUNWAY_TOO_SHORT" };
+  return { ok: true, auctionEndMs: auctionEndFor(i.auctionStartMs) };
+}
+
+/** Promotion never ends by elapsed time alone; only an owner-confirmed start schedules the auction. */
+export function derivePhase(i: { nowMs: number; confirmedAuctionStartMs: number | null }): P8aPhase {
+  if (i.confirmedAuctionStartMs == null) return "PROMOTION";
+  if (i.nowMs < i.confirmedAuctionStartMs) return "AUCTION_SCHEDULED";
+  if (i.nowMs < auctionEndFor(i.confirmedAuctionStartMs)) return "AUCTION_LIVE";
+  return "AUCTION_ENDED";
 }
 
 // ------------------------------------------------------------ auction accounting simulator
@@ -214,14 +295,14 @@ export function buildSafeApprovalDepositIntent(t: P8aTokenRef): P8aIntent {
 export function buildAuctionCreationIntent(t: P8aTokenRef): P8aIntent {
   const token = assertTokenAddress(t);
   const m = P8A_MANIFEST;
-  const config = { token, currency: ZERO, auctionAmount: m.auctionAllocation, requiredCurrencyRaised: m.floorWei, durationHours: m.durationHours, whitelist: false, extension: false, factory: dep("CCA_FACTORY").address };
+  const config = { token, currency: ZERO, auctionAmount: m.auctionAllocation, requiredCurrencyRaised: m.floorWei, auctionDurationDays: m.timeline.auctionDurationDays, lpAllocationScheduleHash: keccak256(encodeLpAllocationSchedule()), whitelist: false, extension: false, factory: dep("CCA_FACTORY").address };
   const encoded = encodeAbiParameters(
     [{ type: "address" }, { type: "address" }, { type: "uint256" }, { type: "uint256" }, { type: "uint256" }],
-    [token, ZERO, m.auctionAllocation, m.floorWei, BigInt(m.durationHours)],
+    [token, ZERO, m.auctionAllocation, m.floorWei, BigInt(m.timeline.auctionDurationDays)],
   );
   return seal({
     step: "AUCTION_CREATION", simulation: t.simulation,
-    calls: [{ target: dep("LBP_STRATEGY").address, value: 0n, calldataHash: keccak256(encoded), description: "CCA via LBPStrategy (blocks derived from current SDK clock in P8B)" }],
+    calls: [{ target: dep("LBP_STRATEGY").address, value: 0n, calldataHash: keccak256(encoded), description: "CCA via LBPStrategy, 7-day auction (blocks derived from current SDK clock in P8B)" }],
     params: config,
   }, token);
 }

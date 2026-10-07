@@ -60,6 +60,7 @@ Historical items above are preserved as technical evidence; staged vs production
 - [ ] B. Treasury Safe creation + signer recording — NOT DONE
 - [ ] C. Exact PCART testnet rehearsal — NOT DONE
 - [x] P8A auction & liquidity plan + simulation (2026-10-07): review-only manifest, wei math, inert intents, mainnet code-hash attestation (all MATCH), testnet lacks launcher stack => FORKED_MAINNET; owner-only immutable review records; no transaction
+- [x] P8A plan v2 (2026-10-07): manifest `pcart-auction-liquidity-p8a-v2` — native v3.3.0 progressive LP schedule 80% first 10 ETH / 60% 10–30 / 50% above 30, 200M reserve as maximum, ≥21-day promotion runway (extendable, no funds, no auto-start), exactly 7-day auction, Treasury operating-capital + capped founder-comp policy; DB accepts only v2 reviews; owner must re-review v2. P8B still paused, ready to resume
 - [ ] P8B Safe 2-of-3 signing path + forked-mainnet auction rehearsal (real SDK calldata) — NOT STARTED
 - [ ] D. L-S6 testnet auction integration, then L-S7 liquidity/vesting integration — NOT STARTED (after A–C)
 
