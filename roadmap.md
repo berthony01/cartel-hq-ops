@@ -59,6 +59,8 @@ Historical items above are preserved as technical evidence; staged vs production
 - [x] A. Managed-RPC ABI/config verification + pinned observed hashes/configs (2026-10-01, block 77,685,829; all checks passed; manifest section 9) — pre-send recheck still mandatory
 - [ ] B. Treasury Safe creation + signer recording — NOT DONE
 - [ ] C. Exact PCART testnet rehearsal — NOT DONE
+- [x] P8A auction & liquidity plan + simulation (2026-10-07): review-only manifest, wei math, inert intents, mainnet code-hash attestation (all MATCH), testnet lacks launcher stack => FORKED_MAINNET; owner-only immutable review records; no transaction
+- [ ] P8B Safe 2-of-3 signing path + forked-mainnet auction rehearsal (real SDK calldata) — NOT STARTED
 - [ ] D. L-S6 testnet auction integration, then L-S7 liquidity/vesting integration — NOT STARTED (after A–C)
 
 ## PCART treasury Safe creation — 1 October 2026
