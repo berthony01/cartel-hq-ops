@@ -295,14 +295,14 @@ export function buildSafeApprovalDepositIntent(t: P8aTokenRef): P8aIntent {
 export function buildAuctionCreationIntent(t: P8aTokenRef): P8aIntent {
   const token = assertTokenAddress(t);
   const m = P8A_MANIFEST;
-  const config = { token, currency: ZERO, auctionAmount: m.auctionAllocation, requiredCurrencyRaised: m.floorWei, durationHours: m.durationHours, whitelist: false, extension: false, factory: dep("CCA_FACTORY").address };
+  const config = { token, currency: ZERO, auctionAmount: m.auctionAllocation, requiredCurrencyRaised: m.floorWei, auctionDurationDays: m.timeline.auctionDurationDays, lpAllocationScheduleHash: keccak256(encodeLpAllocationSchedule()), whitelist: false, extension: false, factory: dep("CCA_FACTORY").address };
   const encoded = encodeAbiParameters(
     [{ type: "address" }, { type: "address" }, { type: "uint256" }, { type: "uint256" }, { type: "uint256" }],
-    [token, ZERO, m.auctionAllocation, m.floorWei, BigInt(m.durationHours)],
+    [token, ZERO, m.auctionAllocation, m.floorWei, BigInt(m.timeline.auctionDurationDays)],
   );
   return seal({
     step: "AUCTION_CREATION", simulation: t.simulation,
-    calls: [{ target: dep("LBP_STRATEGY").address, value: 0n, calldataHash: keccak256(encoded), description: "CCA via LBPStrategy (blocks derived from current SDK clock in P8B)" }],
+    calls: [{ target: dep("LBP_STRATEGY").address, value: 0n, calldataHash: keccak256(encoded), description: "CCA via LBPStrategy, 7-day auction (blocks derived from current SDK clock in P8B)" }],
     params: config,
   }, token);
 }
