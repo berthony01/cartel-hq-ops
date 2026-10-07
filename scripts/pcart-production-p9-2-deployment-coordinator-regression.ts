@@ -18,7 +18,7 @@ const draft = { status: "DRAFT", txHash: null, submittedAt: null, contractAddres
 const pf = (o: Partial<P92PreflightInput> = {}): P92PreflightInput => ({
   chain: { live: true, chainId: 4663 }, safe: { status: "READY", reasons: [], threshold: 2, nonce: 0, owners: [S3, S1, S2] }, configuredSigners: [S1, S2, S3],
   dependencies: "VERIFIED", p8a: "CURRENT", p8b: "CURRENT", attempt: draft, activeProductionAttempts: 1, uncertainClaim: false,
-  deployerLive: { nonce: "7", balanceWei: "1000000000000000" }, control: { executionEnabled: true, emergencyStopEngaged: false }, ...o,
+  deployerLive: { nonce: "7", balanceWei: "1000000000000000" }, control: { executionEnabled: false, emergencyStopEngaged: true }, sendWindowOpen: true, ...o,
 });
 const blocked = (o: Partial<P92PreflightInput>, key: string) => derivePreflight(pf(o)).checks.find((c) => c.key === key)?.status === "BLOCKED" && !derivePreflight(pf(o)).allPass;
 const seg = (o: Partial<P92Input> = {}, pfo: Partial<P92PreflightInput> = {}) => deriveDeploymentSegment({
@@ -35,10 +35,10 @@ check("4", !/WalletConnect|EthereumProvider|createWalletClient|window\.ethereum|
 check("5", !/eth_sendTransaction|sendTransaction|signTypedData|signMessage|personal_sign|writeContract|walletClient/.test(P9CODE), "passive load cannot prompt a wallet");
 check("6", !/\.insert\(|\.update\(|\.upsert\(|\.delete\(/.test(P9CODE) && !/\.rpc\("(?!is_platform_owner|set_canonical_pcart_launch_day_plan")/.test(FNS), "snapshot is SELECT-only");
 // 7-9 controls
-check("7", seg({}, { control: { executionEnabled: false, emergencyStopEngaged: false } }).panel === null && seg({}, { control: { executionEnabled: false, emergencyStopEngaged: false } }).nextAction === "Deployment locked — mainnet execution is disabled", "execution OFF blocks live action");
-check("8", seg({}, { control: { executionEnabled: true, emergencyStopEngaged: true } }).panel === null && seg({}, { control: null }).panel === null, "emergency stop ON / missing control blocks");
-const locked = derivePreflight(pf({ control: { executionEnabled: false, emergencyStopEngaged: true } }));
-check("9", locked.checks.length >= 18 && locked.allPass && !locked.controlsUnlocked && locked.controlBlockers.length === 2, "read-only preflight evaluates fully while locked");
+check("7", seg({}, { control: { executionEnabled: true, emergencyStopEngaged: true } }).panel === null && seg({}, { control: { executionEnabled: true, emergencyStopEngaged: true } }).nextAction === "Deployment locked — global controls are not in the canonical protected state", "execution switched ON blocks (canonical protected)");
+check("8", seg({}, { control: { executionEnabled: false, emergencyStopEngaged: false } }).panel === null && seg({}, { control: null }).panel === null && seg({}, { sendWindowOpen: false }).panel === null && seg({}, { sendWindowOpen: false }).nextAction === "Deployment locked — launch send window is not open", "emergency stop released / missing control / closed window blocks");
+const locked = derivePreflight(pf({ sendWindowOpen: null }));
+check("9", locked.checks.length >= 18 && locked.allPass && !locked.sendGateOpen && locked.controlBlockers.length === 1, "read-only preflight evaluates fully while the send window is closed");
 // 10-21 preflight blockers
 check("10", blocked({ chain: { live: true, chainId: 1 } }, "CHAIN") && blocked({ chain: { live: false, chainId: 4663 } }, "CHAIN"), "wrong / non-live chain blocks");
 check("11", derivePreflight(pf()).checks.find((c) => c.key === "WALLET")?.status === "AT_SEND_STEP" && /WRONG_ACCOUNT/.test(read("src/components/cartel/PcartMainnetSendPanel.tsx")), "wallet binding enforced by existing P5 send step (WRONG_ACCOUNT)");
@@ -76,7 +76,7 @@ check("35", !/execution_enabled\s*=(?!=)|"execution_enabled":|set_launch_chain_p
 check("36", !/emergency_stop_engaged\s*[:=]\s*false/.test(P9CODE), "no emergency-stop mutation");
 check("37", !/launch_events|launch_notification_deliveries|sendMessage|telegram/i.test(P9CODE), "no notification surface");
 const newMigs = readdirSync("supabase/migrations").filter((f) => f > "20261007170000");
-check("38", newMigs.length === 0, "no new migration in P9.2");
+check("38", newMigs.length === 1 && /P9\.2: bind the EXISTING canonical PCART execution permit/.test(read(`supabase/migrations/${newMigs[0]}`)), "only the P9.2 permit-binding migration added");
 check("39", /CANONICAL_PCART_PROTECTED/.test(read("src/lib/chain-mainnet-canary.functions.ts")), "canary remains CANONICAL_PCART_PROTECTED");
 check("40", (LC.match(/<PcartMainnetSendPanel/g) ?? []).length === 1 && (LC.match(/<PcartOfficialRegistrationPanel/g) ?? []).length === 1 && (LC.match(/<PcartVerificationPanel/g) ?? []).length === 1, "each P5/P6/P7 panel mounted in one place only");
 
