@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { P9_1_STOP_COPY, validatePlanInput } from "@/lib/pcart-launch-coordinator-p9-live";
 import { deriveDeploymentSegment, P9_2_STEPS, type P92Attempt, type P92Panel } from "@/lib/pcart-launch-coordinator-p9-2";
+import { PcartAuctionSegmentPanel } from "@/components/cartel/PcartAuctionSegmentPanel";
 import { getPcartP9CoordinatorSnapshot, savePcartP9LaunchPlan } from "@/lib/pcart-launch-coordinator-p9.functions";
 
 /** datetime-local (browser-local) <-> ISO UTC. */
@@ -198,6 +199,8 @@ export function PcartLaunchDayCoordinatorPanel({ launchId, deployment, panels }:
             <Section title="Emergency stop" status={s.control?.emergencyStopEngaged === false ? "OFF" : "ON"} tone="neutral" />
             <Section title="P8A / P8B approval" status={`${s.p8a.status} / ${s.p8b.status}`} tone={s.p8a.status === "CURRENT" && s.p8b.status === "CURRENT" ? "ok" : "bad"} />
           </div>
+
+          <PcartAuctionSegmentPanel launchId={launchId} />
 
           {/* 7. Blockers / Next step */}
           <div className="rounded border border-border/60 p-3">
