@@ -237,7 +237,9 @@ check("D0q", /FUNCTION public\.register_canonical_pcart_official_contract/.test(
   !/CREATE TABLE|UPDATE public\.(launch_chain_production_execution_controls|pcart_production_send_claims|pcart_production_execution_permits)/.test(P7_SQL) &&
   !/'LIVE'|'COMPLETED'/.test(P7_SQL.slice(P7_SQL.indexOf("FUNCTION public.register_canonical_pcart_official_contract"))),
   "P7 migration adds only PCART registration; no control/claim/permit/rehearsal changes, never LIVE");
-const MIG_PCART_PROTECTED = MIG_PCART.filter((f) => f !== P7_MIG && f !== READINESS_MIG && f !== HARDEN_MIG && f !== P2_MIG && f !== P2_FIX_MIG && f !== ENV_IDX_MIG && f !== P3_MIG && f !== GETTER_FIX_MIG && f !== P4_MIG && f !== P5_MIG && f !== P6_MIG).filter((f) => f !== RECOVERY_MIG ||
+// Authorized P9.2 migration: binds the existing PCART permit; never touches the protected rehearsal SQL.
+const P9_2_PERMIT_MIG = "20261007172933_16f5f3eb-87d7-4732-ac33-82cee945a726.sql";
+const MIG_PCART_PROTECTED = MIG_PCART.filter((f) => f !== P7_MIG && f !== READINESS_MIG && f !== HARDEN_MIG && f !== P2_MIG && f !== P2_FIX_MIG && f !== ENV_IDX_MIG && f !== P3_MIG && f !== GETTER_FIX_MIG && f !== P4_MIG && f !== P5_MIG && f !== P6_MIG && f !== P9_2_PERMIT_MIG).filter((f) => f !== RECOVERY_MIG ||
   /FUNCTION public\.create_launch_chain_pcart_rehearsal_attempt\(|is_canonical_pcart_launch\(\)? *RETURNS|enforce_canonical_pcart_no_production_deployment\(\) *RETURNS/.test(read(`supabase/migrations/${f}`)));
 check("D0", MIG.length > 0 && MIG_PCART_PROTECTED.length === 1 && MIG_PCART_PROTECTED[0] === MIG_FILE &&
   MIG.includes("FUNCTION public.create_launch_chain_pcart_rehearsal_attempt(") &&
