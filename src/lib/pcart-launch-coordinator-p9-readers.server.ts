@@ -99,3 +99,34 @@ export async function readP9_3Auction(auctionAddress: string): Promise<P93Auctio
     return { ok: true, endBlock: BigInt(e as bigint), currencyRaisedWei: BigInt(r as bigint), isGraduated: g === true, totalClearedWei: BigInt(t as bigint), clearingPriceQ96: BigInt(p as bigint), tokensRecipient: String(tr), fundsRecipient: String(fr), capturedAt };
   } catch { return { ok: false, capturedAt }; }
 }
+
+// ------------------------------------------------------------ P9.3B additions (read-only; eth_call simulation only)
+/** Owner account code for each canonical Treasury Safe owner (EOA / EIP-7702 designator / contract). */
+export async function readP9_3bOwnerCodes(owners: readonly string[]): Promise<Record<string, string | null>> {
+  const c = client();
+  const out: Record<string, string | null> = {};
+  await Promise.all(owners.map(async (o) => { try { out[o.toLowerCase()] = (await c.getCode({ address: o as `0x${string}` })) ?? "0x"; } catch { out[o.toLowerCase()] = null; } }));
+  return out;
+}
+const SAFE_CHECK_ABI = parseAbi(["function checkSignatures(bytes32 dataHash, bytes data, bytes signatures) view"]);
+/** Safe 1.4.1's own validation (reverts on any invalid/unsorted/insufficient set). Read-only eth_call. */
+export async function safeAcceptsSignatures(safeTxHash: `0x${string}`, signatures: `0x${string}`): Promise<boolean | null> {
+  const c = client();
+  try {
+    await c.readContract({ address: P8B_REAL_TREASURY_SAFE.address as `0x${string}`, abi: SAFE_CHECK_ABI, functionName: "checkSignatures", args: [safeTxHash, "0x", signatures] });
+    return true;
+  } catch (e) {
+    const name = e instanceof Error ? e.name : "";
+    return /ContractFunctionRevertedError|ContractFunctionExecutionError|CallExecutionError/.test(name) ? false : null;
+  }
+}
+export async function readP9_3bReceipt(txHash: `0x${string}`) {
+  const c = client();
+  try {
+    const r = await c.getTransactionReceipt({ hash: txHash });
+    return { status: r.status, to: r.to ?? null, blockNumber: r.blockNumber, logs: r.logs.map((l) => ({ address: l.address, topics: l.topics as string[], data: l.data })) } as const;
+  } catch { return null; }
+}
+export async function readP9_3bSafeNonce(): Promise<number | null> {
+  try { return Number(await client().readContract({ address: P8B_REAL_TREASURY_SAFE.address as `0x${string}`, abi: SAFE_ABI, functionName: "nonce" })); } catch { return null; }
+}
