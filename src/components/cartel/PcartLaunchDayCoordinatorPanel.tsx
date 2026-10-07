@@ -87,7 +87,7 @@ export function PcartLaunchDayCoordinatorPanel({ launchId, deployment, panels }:
           <span className="rounded border border-border px-2 py-0.5 text-xs text-muted-foreground">P9.2 · guided</span>
         </div>
       </div>
-      {!s?.preflight.controlsUnlocked ? <p className="mb-3 rounded border border-primary/40 bg-primary/10 p-2 text-sm font-medium">{P9_1_STOP_COPY}</p> : null}
+      {!s?.preflight.sendGateOpen ? <p className="mb-3 rounded border border-primary/40 bg-primary/10 p-2 text-sm font-medium">{P9_1_STOP_COPY}</p> : null}
       {q.isLoading ? <p className="text-sm text-muted-foreground">Reading live status…</p> : null}
       {q.data && !q.data.ok ? <p className="text-sm text-destructive">Owner access required.</p> : null}
       {seg ? (

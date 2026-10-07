@@ -41,7 +41,7 @@ const base: P9Snapshot = {
   observed: { preAuctionSafeTxExecuted: null, currentBlock: null, migrated: null, graduated: null, unsoldSwept: null },
 };
 const today = deriveCoordinatorState(base);
-check("8", today.state === "AWAITING_DEPLOYMENT" && today.blockers.includes("EMERGENCY_STOP_ENGAGED") && today.blockers.includes("EXECUTION_DISABLED") && today.liveActionEnabled === false, "today's DRAFT #11 → AWAITING_DEPLOYMENT, blocked by stop + execution off");
+check("8", today.state === "AWAITING_DEPLOYMENT" && !today.blockers.includes("GLOBAL_EXECUTION_NOT_PROTECTED") && today.liveActionEnabled === false, "today's DRAFT #11 → AWAITING_DEPLOYMENT, canonical protected controls (OFF + stop ON) are not a blocker");
 const TOK = "0x" + "ab".repeat(20);
 const fin = { ...base, deployment: { status: "CONFIRMED", txHash: "0x1", contractAddress: TOK, finalityState: "FINALIZED" } };
 const seq: [P9Snapshot, string][] = [
@@ -63,7 +63,7 @@ seq.push([{ ...reg, plan, observed: { ...base.observed, preAuctionSafeTxExecuted
 const results = seq.map(([s, want]) => { const r = deriveCoordinatorState(s); return r.state === want && P9_STATES.includes(r.state); });
 check("9", results.every(Boolean), `full path derives exactly one expected state each (${results.filter(Boolean).length}/${results.length})`);
 check("10", deriveCoordinatorState({ ...reg, plan, sendClaims: [{ claimStatus: "AMBIGUOUS" }] }).state === "BLOCKED_UNCERTAIN_TRANSACTION" && deriveCoordinatorState({ ...base, deployment: { ...base.deployment!, status: "SUBMITTED", txHash: null } }).state === "BLOCKED_UNCERTAIN_TRANSACTION", "uncertain transaction blocks progression");
-check("11", deriveCoordinatorState({ ...reg, p8b: "REVOKED" }).state === "BLOCKED_STALE_DEPENDENCY" && deriveCoordinatorState({ ...reg, control: null }).blockers.includes("EMERGENCY_STOP_ENGAGED") && deriveCoordinatorState({ ...reg, plan, control: { executionEnabled: true, emergencyStopEngaged: false } }).liveActionEnabled === false, "stale dependency blocks; missing control = stop; never live");
+check("11", deriveCoordinatorState({ ...reg, p8b: "REVOKED" }).state === "BLOCKED_STALE_DEPENDENCY" && deriveCoordinatorState({ ...reg, control: null }).blockers.includes("GLOBAL_EXECUTION_NOT_PROTECTED") && deriveCoordinatorState({ ...reg, control: { executionEnabled: true, emergencyStopEngaged: false } }).blockers.includes("GLOBAL_EXECUTION_NOT_PROTECTED") && deriveCoordinatorState({ ...reg, plan, control: { executionEnabled: true, emergencyStopEngaged: false } }).liveActionEnabled === false, "stale dependency blocks; missing control = stop; never live");
 
 // 12 read-only load
 const FN = read(P9_FILES[1]);

@@ -45,6 +45,8 @@ export type P92PreflightInput = {
   uncertainClaim: boolean;
   deployerLive: { nonce: string | null; balanceWei: string | null };
   control: { executionEnabled: boolean; emergencyStopEngaged: boolean } | null;
+  /** Launch send window currently open (launches.launch_window_start/end). Null/false = closed. */
+  sendWindowOpen?: boolean | null;
 };
 
 export type P92CheckStatus = "PASS" | "BLOCKED" | "AT_SEND_STEP";
@@ -53,7 +55,7 @@ export type P92Check = { key: string; label: string; status: P92CheckStatus; det
 const lc = (s: string | null | undefined) => (s ?? "").toLowerCase();
 
 /** Read-only preflight. Controls are reported separately and never hide the other checks. */
-export function derivePreflight(i: P92PreflightInput): { checks: P92Check[]; allPass: boolean; controlsUnlocked: boolean; controlBlockers: string[] } {
+export function derivePreflight(i: P92PreflightInput): { checks: P92Check[]; allPass: boolean; sendGateOpen: boolean; controlBlockers: string[] } {
   const a = i.attempt;
   const ck = (key: string, label: string, ok: boolean, detail?: string): P92Check => ({ key, label, status: ok ? "PASS" : "BLOCKED", detail });
   const safeOwners = i.safe.owners.map(lc).sort();
@@ -96,9 +98,12 @@ export function derivePreflight(i: P92PreflightInput): { checks: P92Check[]; all
     ck("NO_DUPLICATE", "No duplicate active production deployment", i.activeProductionAttempts <= 1),
   ];
   const controlBlockers: string[] = [];
-  if (!i.control || !i.control.executionEnabled) controlBlockers.push("Mainnet execution is disabled");
-  if (!i.control || i.control.emergencyStopEngaged) controlBlockers.push("Emergency stop is engaged");
-  return { checks, allPass: checks.every((c) => c.status !== "BLOCKED"), controlsUnlocked: controlBlockers.length === 0, controlBlockers };
+  // CANONICAL_PCART_PROTECTED: the narrow PCART path runs only while global controls stay locked;
+  // the launch send window + bound short permit are the scoped authorization.
+  if (!i.control || i.control.executionEnabled !== false) controlBlockers.push("Global mainnet execution must stay OFF (canonical protected)");
+  if (!i.control || i.control.emergencyStopEngaged !== true) controlBlockers.push("Emergency stop must stay ON (canonical protected)");
+  if (i.sendWindowOpen !== true) controlBlockers.push("Launch send window is not open");
+  return { checks, allPass: checks.every((c) => c.status !== "BLOCKED"), sendGateOpen: controlBlockers.length === 0, controlBlockers };
 }
 
 export type P92Input = {
@@ -110,7 +115,7 @@ export type P92Input = {
   permitActive: boolean;
   launch: { status: string | null; officialContractAddress: string | null };
   /** null while the live snapshot is unavailable: pre-send steps then fail closed. */
-  preflight: { allPass: boolean; controlsUnlocked: boolean; controlBlockers: string[] } | null;
+  preflight: { allPass: boolean; sendGateOpen: boolean; controlBlockers: string[] } | null;
   planValid: boolean;
 };
 export type P92Derivation = { state: P92State; step: number; panel: P92Panel; nextAction: string; blockers: string[]; complete: boolean };
@@ -146,7 +151,10 @@ export function deriveDeploymentSegment(i: P92Input): P92Derivation {
   // Pre-send: fail closed on missing snapshot, readiness, preflight or controls.
   if (!i.preflight) return out("READY_FOR_FINAL_PREFLIGHT", 0, null, "Reading live preflight…", ["PREFLIGHT_UNAVAILABLE"]);
   if (!i.readinessApproved) return out("READY_FOR_FINAL_PREFLIGHT", 0, null, "Final production readiness approval is required first.", ["READINESS_NOT_APPROVED"]);
-  if (!i.preflight.controlsUnlocked) return out("READY_FOR_FINAL_PREFLIGHT", 0, null, "Deployment locked — mainnet execution is disabled", i.preflight.controlBlockers);
+  if (!i.preflight.sendGateOpen) {
+    const protectedOk = !i.preflight.controlBlockers.some((b) => /canonical protected/.test(b));
+    return out("READY_FOR_FINAL_PREFLIGHT", 0, null, protectedOk ? "Deployment locked — launch send window is not open" : "Deployment locked — global controls are not in the canonical protected state", i.preflight.controlBlockers);
+  }
   if (!i.preflight.allPass) return out("READY_FOR_FINAL_PREFLIGHT", 0, null, "Resolve the blocked preflight items before deployment.", ["PREFLIGHT_BLOCKED"]);
   if (!a || a.status !== "DRAFT") return out("READY_FOR_DEPLOY_REVIEW", 1, "P2_REVIEW", "Review deployment");
   if (!i.preparationActive) return out("READY_FOR_DEPLOY_REVIEW", 2, "P3_WALLET", "Prepare deployment wallet");

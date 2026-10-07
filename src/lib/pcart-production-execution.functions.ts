@@ -207,13 +207,27 @@ export const preparePcartFinalSend = createServerFn({ method: "POST" })
     // permit is bound to the FRESH fee-bound unsigned fingerprint (DB recomputes it exactly).
     const decision = decidePcartPermitFromFreshReview(r, data.reviewedIntentFingerprint, data.typedPredictedAddress);
     if (!decision.ok) return decision;
-    const { data: row, error } = await (context as Ctx).supabase.rpc("issue_canonical_pcart_execution_permit", {
+    // P9.2: owner check + fresh server-side live re-attestation, then the bound (service-role-only) RPC.
+    const ctx = context as Ctx;
+    const { data: isOwner } = await ctx.supabase.rpc("is_platform_owner", { _user_id: ctx.userId });
+    if (isOwner !== true) return { ok: false, reason: "NOT_PLATFORM_OWNER" };
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: dep } = await supabaseAdmin.from("launch_chain_deployments").select("launch_id").eq("id", r.deploymentId).maybeSingle();
+    if (!dep) return { ok: false, reason: "DRAFT_NOT_FOUND" };
+    const { attestP9_2Live } = await import("@/lib/pcart-p9-2-attestation.server");
+    const att = await attestP9_2Live(String(dep.launch_id));
+    if (!att.ok) return { ok: false, reason: `LIVE_ATTESTATION_${att.reason}` };
+    const { data: row, error } = await (supabaseAdmin as any).rpc("issue_canonical_pcart_execution_permit_v2", {
+      _actor: ctx.userId,
       _deployment_id: r.deploymentId,
       _preparation_authorization_id: r.preparationAuthorizationId,
       _unsigned_tx_fingerprint: decision.unsignedTxFingerprint,
       _gas_limit: Number(decision.gasLimit),
       _max_fee_per_gas: decision.maxFeePerGasWei,
       _max_priority_fee_per_gas: decision.maxPriorityFeePerGasWei,
+      _dependency_attestation_fingerprint: att.dependencyFingerprint,
+      _safe_nonce: att.safeNonce,
+      _safe_attestation_fingerprint: att.safeFingerprint,
     });
     if (error || !row) {
       const msg = String(error?.message ?? "");

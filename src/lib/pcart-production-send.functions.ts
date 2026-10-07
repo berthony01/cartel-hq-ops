@@ -49,8 +49,33 @@ export const claimPcartMainnetSend = createServerFn({ method: "POST" })
     const ctx = context as Ctx;
     const base = await revalidate(ctx, data.deploymentId, data.wallet);
     if (!base.ok) return base;
-    const { data: row, error } = await ctx.supabase.rpc("claim_canonical_pcart_mainnet_send", { _permit_id: data.permitId });
-    if (error || !row) return { ok: false, reason: claimReason(String(error?.message ?? "")) };
+    // P9.2: re-read live dependencies/Safe immediately before the claim; the DB requires both
+    // fingerprints to equal the values bound into the permit. Mismatch cancels the permit (no regeneration).
+    const { data: isOwner } = await ctx.supabase.rpc("is_platform_owner", { _user_id: ctx.userId });
+    if (isOwner !== true) return { ok: false, reason: "NOT_PLATFORM_OWNER" };
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: dep } = await supabaseAdmin.from("launch_chain_deployments").select("launch_id").eq("id", data.deploymentId).maybeSingle();
+    if (!dep) return { ok: false, reason: "DRAFT_NOT_FOUND" };
+    const { attestP9_2Live } = await import("@/lib/pcart-p9-2-attestation.server");
+    const att = await attestP9_2Live(String(dep.launch_id));
+    if (!att.ok) {
+      await ctx.supabase.rpc("cancel_canonical_pcart_execution_permit", { _permit_id: data.permitId });
+      return { ok: false, reason: `LIVE_ATTESTATION_${att.reason}` };
+    }
+    const { data: row, error } = await (supabaseAdmin as any).rpc("claim_canonical_pcart_mainnet_send_v2", {
+      _actor: ctx.userId,
+      _permit_id: data.permitId,
+      _dependency_attestation_fingerprint: att.dependencyFingerprint,
+      _safe_attestation_fingerprint: att.safeFingerprint,
+    });
+    if (error || !row) {
+      const msg = String(error?.message ?? "");
+      if (/P9\.2 binding/.test(msg)) {
+        await ctx.supabase.rpc("cancel_canonical_pcart_execution_permit", { _permit_id: data.permitId });
+        return { ok: false, reason: "BOUND_PERMIT_STALE" };
+      }
+      return { ok: false, reason: claimReason(msg) };
+    }
     if (String(row.deployment_id) !== data.deploymentId || row.wallet_account !== data.wallet) return { ok: false, reason: "CLAIM_MISMATCH" };
     return { ok: true, claimId: String(row.id) };
   });

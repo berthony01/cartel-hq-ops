@@ -27,7 +27,7 @@ const check = (id: string, ok: boolean, label: string) => { ok ? pass++ : fail++
 const read = (p: string) => readFileSync(p, "utf8");
 const strip = (s: string) => s.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "").replace(/^\s*\*.*$/gm, "");
 
-const MIG_FILE = readdirSync("supabase/migrations").filter((f) => read(`supabase/migrations/${f}`).includes("FUNCTION public.issue_canonical_pcart_execution_permit")).sort().at(-1)!;
+const MIG_FILE = readdirSync("supabase/migrations").filter((f) => read(`supabase/migrations/${f}`).includes("FUNCTION public.issue_canonical_pcart_execution_permit") && !read(`supabase/migrations/${f}`).includes("P9.2: bind the EXISTING canonical PCART execution permit")).sort().at(-1)!;
 const MIG = read(`supabase/migrations/${MIG_FILE}`);
 const ISSUE = MIG.slice(MIG.indexOf("FUNCTION public.issue_canonical_pcart_execution_permit"), MIG.indexOf("FUNCTION public.cancel_canonical_pcart_execution_permit"));
 const CANCEL = MIG.slice(MIG.indexOf("FUNCTION public.cancel_canonical_pcart_execution_permit"));
