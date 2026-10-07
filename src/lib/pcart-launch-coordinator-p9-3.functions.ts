@@ -9,6 +9,7 @@ import { createServerFn } from "@tanstack/react-start";
 
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 import { policyApproval } from "@/lib/pcart-launch-coordinator-p9";
+import { P8B_REAL_TREASURY_SAFE } from "@/lib/pcart-auction-execution-p8b";
 import {
   auctionModel, auctionSteps, computeAuthoritativeBlocks, dependencyFingerprintP93, deriveAuctionSegment, effectiveActionStatus, ownersFingerprint,
   preparePreAuction, P9_3_EXPECTED_TOKEN_RUNTIME_KECCAK, P9_3_PINNED_DEPENDENCY_FINGERPRINT, P9_3_SWEEP_DISPOSITION,
@@ -126,7 +127,7 @@ export const preparePcartPreAuction = createServerFn({ method: "POST" })
     const r = preparePreAuction({
       nowMs: Date.now(), launchId: data.launchId, launchStatus: f.launchStatus, officialTokenAddress: f.officialToken, deploymentFinalized: f.deploymentFinalized,
       tokenRuntimeKeccak: live.tokenRuntimeKeccak, plan: f.plan, p8a: f.p8a, p8b: f.p8b, observedCodeHashes: live.observed,
-      safe: live.safe ? { address: "0xE0d055B3E07c2D1d9C1762Ca9e19b3062207ad03", version: live.safe.version, threshold: live.safe.threshold, owners: live.safe.owners, nonce: live.safe.nonce, codeHash: live.safe.codeHash } : null,
+      safe: live.safe ? { address: P8B_REAL_TREASURY_SAFE.address, version: live.safe.version, threshold: live.safe.threshold, owners: live.safe.owners, nonce: live.safe.nonce, codeHash: live.safe.codeHash } : null,
       control: f.control, head: live.head, uncertainTransaction: f.uncertain,
       existingOpenAction: f.actions.some((x) => x.actionKind === "PREAUCTION_SETUP" && x.status === "PREPARED"),
       ownerConfirmedStartBlock: data.confirmedStartBlock,
