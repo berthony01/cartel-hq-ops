@@ -2438,6 +2438,135 @@ export type Database = {
           },
         ]
       }
+      pcart_launch_coordinator_events: {
+        Row: {
+          actor: string | null
+          coordinator_state: string | null
+          created_at: string
+          detail: Json
+          event_kind: string
+          id: string
+          launch_id: string
+        }
+        Insert: {
+          actor?: string | null
+          coordinator_state?: string | null
+          created_at?: string
+          detail?: Json
+          event_kind: string
+          id?: string
+          launch_id: string
+        }
+        Update: {
+          actor?: string | null
+          coordinator_state?: string | null
+          created_at?: string
+          detail?: Json
+          event_kind?: string
+          id?: string
+          launch_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pcart_launch_coordinator_events_launch_id_fkey"
+            columns: ["launch_id"]
+            isOneToOne: false
+            referencedRelation: "launches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pcart_launch_day_plans: {
+        Row: {
+          authoritative_start_block: number | null
+          auto_start: boolean
+          cadence_observed_at: string | null
+          created_at: string
+          end_block: number | null
+          estimated_start_block: number | null
+          intended_auction_start_at: string | null
+          launch_id: string
+          observed_ms_per_block: number | null
+          promotion_start_at: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          authoritative_start_block?: number | null
+          auto_start?: boolean
+          cadence_observed_at?: string | null
+          created_at?: string
+          end_block?: number | null
+          estimated_start_block?: number | null
+          intended_auction_start_at?: string | null
+          launch_id: string
+          observed_ms_per_block?: number | null
+          promotion_start_at?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          authoritative_start_block?: number | null
+          auto_start?: boolean
+          cadence_observed_at?: string | null
+          created_at?: string
+          end_block?: number | null
+          estimated_start_block?: number | null
+          intended_auction_start_at?: string | null
+          launch_id?: string
+          observed_ms_per_block?: number | null
+          promotion_start_at?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pcart_launch_day_plans_launch_id_fkey"
+            columns: ["launch_id"]
+            isOneToOne: true
+            referencedRelation: "launches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pcart_policy_approval_revocations: {
+        Row: {
+          id: string
+          launch_id: string
+          reason: string
+          review_id: string
+          review_kind: string
+          revoked_at: string
+          revoked_by: string
+        }
+        Insert: {
+          id?: string
+          launch_id: string
+          reason: string
+          review_id: string
+          review_kind: string
+          revoked_at?: string
+          revoked_by: string
+        }
+        Update: {
+          id?: string
+          launch_id?: string
+          reason?: string
+          review_id?: string
+          review_kind?: string
+          revoked_at?: string
+          revoked_by?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pcart_policy_approval_revocations_launch_id_fkey"
+            columns: ["launch_id"]
+            isOneToOne: false
+            referencedRelation: "launches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pcart_production_execution_permits: {
         Row: {
           artifact_id: string
@@ -9087,6 +9216,15 @@ export type Database = {
           verified_at: string
         }[]
       }
+      revoke_canonical_pcart_policy_approval: {
+        Args: {
+          _launch_id: string
+          _reason: string
+          _review_id: string
+          _review_kind: string
+        }
+        Returns: string
+      }
       save_launch_treasury_safe_evidence: {
         Args: {
           _launch_id: string
@@ -9175,6 +9313,14 @@ export type Database = {
           _note?: string
         }
         Returns: string
+      }
+      set_canonical_pcart_launch_day_plan: {
+        Args: {
+          _intended_auction_start_at: string
+          _launch_id: string
+          _promotion_start_at: string
+        }
+        Returns: undefined
       }
       set_launch_contract_address: {
         Args: { _contract_address: string; _launch_id: string }
