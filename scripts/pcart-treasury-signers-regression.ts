@@ -254,20 +254,26 @@ const TS_IDENTITY_GATE_MIGRATION = "20260922161918_ef6e322a-d993-4970-9d48-3b4f9
 const TS_COMMERCIAL_A_MIGRATION = "20260923170038_eaa2a24d-9c13-49c9-9aa3-6a5a8e18c300.sql";
 const TS_COMMERCIAL_B_MIGRATION = "20260924005521_b9fca846-4db3-4e8f-bf91-bdb4bd863228.sql";
 const tsPostGate = migrationFiles.filter((f) => f > POLICY_COMPLETION_MIGRATION_FILE).sort();
+// Signer config may only be defined by the pinned signer + policy-completion migrations. Any later
+// migration that creates/alters/drops the table, changes its policies, grants on it, or rewrites
+// its RLS would be a forbidden signer change — this replaces a brittle total-file-count pin.
+const SIGNER_TOUCH = /launch_treasury_signer_configs/i;
+const tsForbiddenLater = tsPostGate.filter((f) => SIGNER_TOUCH.test(readFileSync(`supabase/migrations/${f}`, "utf8")));
+const tsSignerDefiners = migrationFiles.filter((f) => /CREATE TABLE (IF NOT EXISTS )?public\.launch_treasury_signer_configs/i.test(readFileSync(`supabase/migrations/${f}`, "utf8")));
 check(
   "TS-5a",
-  migrationFiles.length === 91 &&
-    migrationFiles.includes(MIGRATION_FILE) &&
+  migrationFiles.includes(MIGRATION_FILE) &&
     migrationFiles.includes(POLICY_COMPLETION_MIGRATION_FILE) &&
-    tsPostGate.length === 7 &&
+    tsSignerDefiners.length === 1 && tsSignerDefiners[0] === MIGRATION_FILE &&
     tsPostGate[0] === TS_PHASE1_MIGRATION &&
     tsPostGate[1] === TS_PHASE2B_MIGRATION &&
     tsPostGate[2] === TS_PHASE2B_DURATION_MIGRATION &&
     tsPostGate[3] === TS_IDENTITY_GATE_MIGRATION &&
     tsPostGate[4] === TS_COMMERCIAL_A_MIGRATION &&
     tsPostGate[5] === TS_COMMERCIAL_B_MIGRATION &&
-    tsPostGate[6] === "20260924021801_e48c0c41-9053-4f77-a267-04fbba8d206d.sql",
-  `treasury signer migration plus its policy completion are pinned, with exactly seven authorized post-gate migrations, the Cost Accounting Phase 1, Phase 2B safety, Phase 2B corrective duration, Project Identity Gate A, Commercial Foundation A, Commercial Foundation B and Stripe/Free billing files (${migrationFiles.length} files, expected 91; post-gate: ${tsPostGate.join(", ") || "none"})`,
+    tsPostGate[6] === "20260924021801_e48c0c41-9053-4f77-a267-04fbba8d206d.sql" &&
+    tsForbiddenLater.length === 0,
+  `treasury signer migration + policy completion pinned; signer table defined exactly once; original seven post-gate migrations unchanged in order; no later migration touches launch_treasury_signer_configs (definers: ${tsSignerDefiners.join(", ") || "none"}; later touches: ${tsForbiddenLater.join(", ") || "none"})`,
 );
 check(
   "TS-5b",
