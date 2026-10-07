@@ -2438,6 +2438,120 @@ export type Database = {
           },
         ]
       }
+      pcart_launch_coordinator_action_permits: {
+        Row: {
+          action_id: string
+          action_type: string
+          binding_fingerprint: string
+          binding_version: string
+          call_batch_fingerprint: string
+          cancel_reason: string | null
+          cancelled_at: string | null
+          chain_id: number
+          consumed_at: string | null
+          control_revision: number
+          dependency_attestation_fingerprint: string
+          expires_at: string
+          id: string
+          issued_at: string
+          issued_by: string
+          launch_id: string
+          official_token_address: string
+          official_token_code_hash: string
+          p8a_manifest_fingerprint: string
+          p8a_review_id: string
+          p8b_manifest_fingerprint: string
+          p8b_review_id: string
+          safe_address: string
+          safe_nonce: number
+          safe_owners_fingerprint: string
+          safe_threshold: number
+          safe_tx_hash: string
+          signature_set_fingerprint: string
+          signer_1: string
+          signer_2: string
+        }
+        Insert: {
+          action_id: string
+          action_type: string
+          binding_fingerprint: string
+          binding_version: string
+          call_batch_fingerprint: string
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          chain_id: number
+          consumed_at?: string | null
+          control_revision: number
+          dependency_attestation_fingerprint: string
+          expires_at: string
+          id?: string
+          issued_at?: string
+          issued_by: string
+          launch_id: string
+          official_token_address: string
+          official_token_code_hash: string
+          p8a_manifest_fingerprint: string
+          p8a_review_id: string
+          p8b_manifest_fingerprint: string
+          p8b_review_id: string
+          safe_address: string
+          safe_nonce: number
+          safe_owners_fingerprint: string
+          safe_threshold: number
+          safe_tx_hash: string
+          signature_set_fingerprint: string
+          signer_1: string
+          signer_2: string
+        }
+        Update: {
+          action_id?: string
+          action_type?: string
+          binding_fingerprint?: string
+          binding_version?: string
+          call_batch_fingerprint?: string
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          chain_id?: number
+          consumed_at?: string | null
+          control_revision?: number
+          dependency_attestation_fingerprint?: string
+          expires_at?: string
+          id?: string
+          issued_at?: string
+          issued_by?: string
+          launch_id?: string
+          official_token_address?: string
+          official_token_code_hash?: string
+          p8a_manifest_fingerprint?: string
+          p8a_review_id?: string
+          p8b_manifest_fingerprint?: string
+          p8b_review_id?: string
+          safe_address?: string
+          safe_nonce?: number
+          safe_owners_fingerprint?: string
+          safe_threshold?: number
+          safe_tx_hash?: string
+          signature_set_fingerprint?: string
+          signer_1?: string
+          signer_2?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pcart_launch_coordinator_action_permits_action_id_fkey"
+            columns: ["action_id"]
+            isOneToOne: false
+            referencedRelation: "pcart_launch_coordinator_actions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pcart_launch_coordinator_action_permits_launch_id_fkey"
+            columns: ["launch_id"]
+            isOneToOne: false
+            referencedRelation: "launches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pcart_launch_coordinator_actions: {
         Row: {
           action_kind: string
@@ -2451,6 +2565,10 @@ export type Database = {
           chain_id: number
           dependency_attestation_fingerprint: string
           end_block: number | null
+          execution_confirmed_at: string | null
+          execution_confirmed_block: number | null
+          execution_submitted_at: string | null
+          execution_tx_hash: string | null
           id: string
           intended_auction_start_at: string | null
           launch_id: string
@@ -2491,6 +2609,10 @@ export type Database = {
           chain_id: number
           dependency_attestation_fingerprint: string
           end_block?: number | null
+          execution_confirmed_at?: string | null
+          execution_confirmed_block?: number | null
+          execution_submitted_at?: string | null
+          execution_tx_hash?: string | null
           id?: string
           intended_auction_start_at?: string | null
           launch_id: string
@@ -2531,6 +2653,10 @@ export type Database = {
           chain_id?: number
           dependency_attestation_fingerprint?: string
           end_block?: number | null
+          execution_confirmed_at?: string | null
+          execution_confirmed_block?: number | null
+          execution_submitted_at?: string | null
+          execution_tx_hash?: string | null
           id?: string
           intended_auction_start_at?: string | null
           launch_id?: string
@@ -2600,6 +2726,72 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "pcart_launch_coordinator_events_launch_id_fkey"
+            columns: ["launch_id"]
+            isOneToOne: false
+            referencedRelation: "launches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      pcart_launch_coordinator_signatures: {
+        Row: {
+          action_id: string
+          control_revision: number
+          id: string
+          launch_id: string
+          owner_account_kind: string
+          recorded_by: string
+          recovered_signer: string
+          safe_tx_hash: string
+          signature: string
+          signature_format: string
+          signed_at: string
+          signer_address: string
+          status: string
+          status_reason: string | null
+        }
+        Insert: {
+          action_id: string
+          control_revision: number
+          id?: string
+          launch_id: string
+          owner_account_kind: string
+          recorded_by: string
+          recovered_signer: string
+          safe_tx_hash: string
+          signature: string
+          signature_format: string
+          signed_at?: string
+          signer_address: string
+          status?: string
+          status_reason?: string | null
+        }
+        Update: {
+          action_id?: string
+          control_revision?: number
+          id?: string
+          launch_id?: string
+          owner_account_kind?: string
+          recorded_by?: string
+          recovered_signer?: string
+          safe_tx_hash?: string
+          signature?: string
+          signature_format?: string
+          signed_at?: string
+          signer_address?: string
+          status?: string
+          status_reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pcart_launch_coordinator_signatures_action_id_fkey"
+            columns: ["action_id"]
+            isOneToOne: false
+            referencedRelation: "pcart_launch_coordinator_actions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pcart_launch_coordinator_signatures_launch_id_fkey"
             columns: ["launch_id"]
             isOneToOne: false
             referencedRelation: "launches"
@@ -6879,6 +7071,15 @@ export type Database = {
         }
         Returns: string
       }
+      claim_canonical_pcart_action_permit: {
+        Args: {
+          _actor: string
+          _binding_fingerprint: string
+          _permit_id: string
+          _signature_set_fingerprint: string
+        }
+        Returns: Json
+      }
       claim_canonical_pcart_mainnet_send: {
         Args: { _permit_id: string }
         Returns: {
@@ -7075,6 +7276,16 @@ export type Database = {
           _workspace_id: string
         }
         Returns: number
+      }
+      confirm_canonical_pcart_action: {
+        Args: {
+          _action_id: string
+          _actor: string
+          _auction_address: string
+          _block: number
+          _tx_hash: string
+        }
+        Returns: undefined
       }
       confirm_mission_control_launcher_binding: {
         Args: { _binding_id: string; _telegram_message_id: number }
@@ -8213,6 +8424,10 @@ export type Database = {
         Args: { _user_id: string; _workspace_id: string }
         Returns: boolean
       }
+      issue_canonical_pcart_action_permit: {
+        Args: { _action_id: string; _actor: string; _b: Json }
+        Returns: Json
+      }
       issue_canonical_pcart_execution_permit: {
         Args: {
           _deployment_id: string
@@ -9239,6 +9454,14 @@ export type Database = {
         }
         Returns: Json
       }
+      record_canonical_pcart_action_reverted: {
+        Args: { _action_id: string; _actor: string; _tx_hash: string }
+        Returns: undefined
+      }
+      record_canonical_pcart_action_tx: {
+        Args: { _action_id: string; _actor: string; _tx_hash: string }
+        Returns: undefined
+      }
       record_canonical_pcart_mainnet_tx_hash: {
         Args: { _claim_id: string; _tx_hash: string }
         Returns: {
@@ -9272,6 +9495,18 @@ export type Database = {
       record_canonical_pcart_preauction_prepared: {
         Args: { _actor: string; _b: Json }
         Returns: string
+      }
+      record_canonical_pcart_safe_signature: {
+        Args: {
+          _action_id: string
+          _actor: string
+          _control_revision: number
+          _owner_kind: string
+          _safe_tx_hash: string
+          _signature: string
+          _signer: string
+        }
+        Returns: Json
       }
       record_launch_watch_confirmation: {
         Args: {
@@ -9419,6 +9654,14 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      release_canonical_pcart_action_handoff: {
+        Args: {
+          _action_id: string
+          _actor: string
+          _verified_safe_nonce: number
+        }
+        Returns: undefined
       }
       release_canonical_pcart_mainnet_send_claim: {
         Args: { _claim_id: string; _mode: string; _operator_user_id: string }
