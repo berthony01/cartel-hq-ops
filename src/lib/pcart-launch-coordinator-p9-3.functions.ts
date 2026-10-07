@@ -57,7 +57,7 @@ async function loadFacts(ctx: Ctx, launchId: string) {
     p8a: ref(a), p8b: ref(b),
     plan: plan.data ? { promotionStartAt: plan.data.promotion_start_at as string | null, intendedAuctionStartAt: plan.data.intended_auction_start_at as string | null } : null,
     uncertain: (claims.data ?? []).some((c: any) => c.claim_status === "AMBIGUOUS" || c.claim_status === "CLAIMED") || (!!d && (d.status === "SUBMITTED" || d.status === "PENDING") && !d.tx_hash),
-    actions: (actions.data ?? []).map(mapAction),
+    actions: ((actions.data ?? []) as any[]).map(mapAction) as P93StoredAction[],
   };
 }
 
