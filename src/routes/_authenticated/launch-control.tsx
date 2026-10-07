@@ -3007,43 +3007,6 @@ function LaunchControlPage() {
                         Next step: Final production readiness
                       </p>
                       <PcartProductionBlockedCheckpoint launchId={selected.id} />
-                      {pcartApproved && pcartProdReadinessQuery.data?.is_platform_owner === true && pcartSignerQuery.data ? (
-                        <PcartProductionReviewPanel
-                          launchId={selected.id}
-                          signers={pcartSignerQuery.data.signers}
-                          attempt={pcartProductionAttempt}
-                        />
-                      ) : null}
-                      {pcartApproved && pcartProdReadinessQuery.data?.is_platform_owner === true && pcartUnsentDraft ? (
-                        <PcartWalletPreparationPanel attempt={pcartUnsentDraft} />
-                      ) : null}
-                      {pcartApproved && pcartProdReadinessQuery.data?.is_platform_owner === true && pcartUnsentDraft ? (
-                        <PcartFinalSendReviewPanel attempt={pcartUnsentDraft} />
-                      ) : null}
-                      {pcartApproved && pcartProdReadinessQuery.data?.is_platform_owner === true && pcartProductionAttempt &&
-                      (pcartUnsentDraft || pcartProductionAttempt.status === "SUBMITTED") ? (
-                        <PcartMainnetSendPanel
-                          attempt={pcartProductionAttempt}
-                          launchWindowStart={selected.launch_window_start ?? null}
-                          launchWindowEnd={selected.launch_window_end ?? null}
-                          lifecycle={selected.status ?? null}
-                          onChanged={() => queryClient.invalidateQueries({ queryKey: chainDeploymentsQueryKey(selected.id) })}
-                        />
-                      ) : null}
-                      {pcartProdReadinessQuery.data?.is_platform_owner === true && pcartP6Attempt ? (
-                        <PcartVerificationPanel
-                          attempt={pcartP6Attempt}
-                          predictedAddress={pcartSendClaimQuery.data?.predicted_contract_address ?? null}
-                          onChanged={() => queryClient.invalidateQueries({ queryKey: chainDeploymentsQueryKey(selected.id) })}
-                        />
-                      ) : null}
-                      {pcartProdReadinessQuery.data?.is_platform_owner === true && pcartP6Attempt ? (
-                        <PcartOfficialRegistrationPanel
-                          attempt={pcartP6Attempt}
-                          launch={{ id: selected.id, status: selected.status ?? null, official_contract_address: selected.official_contract_address ?? null, official_contract_deployment_id: selected.official_contract_deployment_id ?? null }}
-                          onChanged={() => queryClient.invalidateQueries()}
-                        />
-                      ) : null}
                       {pcartProdReadinessQuery.data?.is_platform_owner === true ? (
                         <PcartAuctionLiquidityPlanPanel launchId={selected.id} officialContractAddress={selected.official_contract_address ?? null} />
                       ) : null}
@@ -3051,7 +3014,52 @@ function LaunchControlPage() {
                         <PcartP8bRehearsalPanel launchId={selected.id} />
                       ) : null}
                       {pcartProdReadinessQuery.data?.is_platform_owner === true ? (
-                        <PcartLaunchDayCoordinatorPanel launchId={selected.id} />
+                        <PcartLaunchDayCoordinatorPanel
+                          launchId={selected.id}
+                          deployment={{
+                            attempt: pcartP6Attempt ? { status: pcartP6Attempt.status, txHash: pcartP6Attempt.tx_hash ?? null, submittedAt: pcartP6Attempt.submitted_at ?? null, contractAddress: pcartP6Attempt.contract_address ?? null, finalityState: pcartP6Attempt.finality_state ?? null, artifactId: pcartP6Attempt.artifact_id ?? null, chainId: pcartP6Attempt.chain_id ?? null, networkEnvironment: pcartP6Attempt.network_environment ?? null, deployerAddress: null, deployerNonceBefore: null, initCodeHash: null, reviewFingerprint: null } : null,
+                            claimStatus: pcartSendClaimQuery.data?.claim_status ?? null,
+                            readinessApproved: pcartApproved,
+                            preparationActive: isPcartPreparationActive(pcartPreparationQuery.data, Date.now()),
+                            permitActive: isPcartExecutionPermitActive(pcartPermitQuery.data, Date.now()),
+                            launch: { status: selected.status ?? null, officialContractAddress: selected.official_contract_address ?? null },
+                          }}
+                          panels={{
+                            // P9.2: the SAME existing P2–P7 components; the coordinator mounts only the active one.
+                            P2_REVIEW: pcartApproved && pcartSignerQuery.data ? (
+                              <PcartProductionReviewPanel
+                                launchId={selected.id}
+                                signers={pcartSignerQuery.data.signers}
+                                attempt={pcartProductionAttempt}
+                              />
+                            ) : null,
+                            P3_WALLET: pcartApproved && pcartUnsentDraft ? <PcartWalletPreparationPanel attempt={pcartUnsentDraft} /> : null,
+                            P4_FINAL_REVIEW: pcartApproved && pcartUnsentDraft ? <PcartFinalSendReviewPanel attempt={pcartUnsentDraft} /> : null,
+                            P5_SEND: pcartApproved && pcartProductionAttempt && (pcartUnsentDraft || pcartProductionAttempt.status === "SUBMITTED") ? (
+                              <PcartMainnetSendPanel
+                                attempt={pcartProductionAttempt}
+                                launchWindowStart={selected.launch_window_start ?? null}
+                                launchWindowEnd={selected.launch_window_end ?? null}
+                                lifecycle={selected.status ?? null}
+                                onChanged={() => queryClient.invalidateQueries({ queryKey: chainDeploymentsQueryKey(selected.id) })}
+                              />
+                            ) : null,
+                            P6_VERIFY: pcartP6Attempt ? (
+                              <PcartVerificationPanel
+                                attempt={pcartP6Attempt}
+                                predictedAddress={pcartSendClaimQuery.data?.predicted_contract_address ?? null}
+                                onChanged={() => queryClient.invalidateQueries({ queryKey: chainDeploymentsQueryKey(selected.id) })}
+                              />
+                            ) : null,
+                            P7_REGISTER: pcartP6Attempt ? (
+                              <PcartOfficialRegistrationPanel
+                                attempt={pcartP6Attempt}
+                                launch={{ id: selected.id, status: selected.status ?? null, official_contract_address: selected.official_contract_address ?? null, official_contract_deployment_id: selected.official_contract_deployment_id ?? null }}
+                                onChanged={() => queryClient.invalidateQueries()}
+                              />
+                            ) : null,
+                          }}
+                        />
                       ) : null}
                     </div>
                   ) : null

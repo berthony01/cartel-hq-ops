@@ -70,7 +70,7 @@ const FN = read(P9_FILES[1]);
 check("12", !/supabaseAdmin|client\.server/.test(FN) && (FN.match(/\.from\(/g) ?? []).length >= 8 && !/\.(insert|update|upsert|delete)\(/.test(FN), "snapshot load is SELECT-only as the signed-in owner");
 const RPCS = SQL.slice(SQL.indexOf("FUNCTION public.set_canonical_pcart_launch_day_plan"));
 check("13", !/(UPDATE|INSERT INTO|DELETE FROM) public\.(launches|launch_chain_deployments|launch_contract_registration_events|pcart_production_send_claims|launch_chain_production_execution_controls|launch_events|launch_notification_deliveries)/i.test(SQL) && (RPCS.match(/is_platform_owner\(auth\.uid\(\)\)/g) ?? []).length === 2 && /FROM PUBLIC, anon/.test(SQL) && /append-only/.test(SQL), "DB: owner-only, append-only, no lifecycle/control/contract/notification mutation");
-check("14", /CANONICAL_PCART_PROTECTED/.test(read("src/lib/chain-mainnet-canary.functions.ts")) && /<PcartLaunchDayCoordinatorPanel launchId=\{selected\.id\} \/>/.test(read("src/routes/_authenticated/launch-control.tsx")), "canary protection intact; panel wired owner-only");
+check("14", /CANONICAL_PCART_PROTECTED/.test(read("src/lib/chain-mainnet-canary.functions.ts")) && /is_platform_owner === true \? \(\s*<PcartLaunchDayCoordinatorPanel\s+launchId=\{selected\.id\}/.test(read("src/routes/_authenticated/launch-control.tsx")), "canary protection intact; panel wired owner-only");
 
 console.log(`\nP9: ${pass}/${pass + fail} passed`);
 if (fail) process.exit(1);
