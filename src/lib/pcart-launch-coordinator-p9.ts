@@ -72,9 +72,12 @@ export type P9Snapshot = {
   plan: P9Plan;
   /** Observed facts that only exist after later phases (null until P9.1+ readers exist). */
   observed: { preAuctionSafeTxExecuted: boolean | null; currentBlock: string | null; migrated: boolean | null; graduated: boolean | null; unsoldSwept: boolean | null };
+  /** P9.1 live-reader results (pre-computed by the server; the state machine never does RPC). */
+  live?: { chainLive: boolean; safeReady: boolean; dependenciesVerified: boolean };
 };
 
-export type P9Derivation = { state: P9State; nextStep: string; blockers: string[]; liveActionEnabled: false };
+/** `blockers` gate FUTURE live-action readiness only. Planning is never blocked by them. */
+export type P9Derivation = { state: P9State; nextStep: string; blockers: string[]; liveActionEnabled: false; planningAllowed: true };
 
 const NEXT: Record<P9State, string> = {
   BLOCKED_UNCERTAIN_TRANSACTION: "A transaction outcome is uncertain. Resolve it through draft recovery before anything else — never resend.",
@@ -100,7 +103,12 @@ export function deriveCoordinatorState(s: P9Snapshot): P9Derivation {
   const blockers: string[] = [];
   if (!s.control || s.control.emergencyStopEngaged) blockers.push("EMERGENCY_STOP_ENGAGED");
   if (!s.control || !s.control.executionEnabled) blockers.push("EXECUTION_DISABLED");
-  const out = (state: P9State): P9Derivation => ({ state, nextStep: NEXT[state], blockers, liveActionEnabled: false });
+  if (s.live) {
+    if (!s.live.chainLive) blockers.push("CHAIN_NOT_LIVE");
+    if (!s.live.safeReady) blockers.push("SAFE_NOT_READY");
+    if (!s.live.dependenciesVerified) blockers.push("DEPENDENCIES_NOT_VERIFIED");
+  }
+  const out = (state: P9State): P9Derivation => ({ state, nextStep: NEXT[state], blockers, liveActionEnabled: false, planningAllowed: true });
 
   const d = s.deployment;
   const uncertainClaim = s.sendClaims.some((c) => c.claimStatus === "AMBIGUOUS" || c.claimStatus === "CLAIMED");
