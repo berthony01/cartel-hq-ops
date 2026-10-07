@@ -18,7 +18,7 @@ const SQL = read("supabase/migrations/20261007164806_b08013bf-213b-4c7a-809e-dbb
 // 1 no live execution primitives
 check("1", !/eth_sendTransaction|sendTransaction|signTypedData|signMessage|writeContract|walletClient|createWalletClient|proposeTransaction|execTransaction|buildPreAuctionSafeTx|buildSweepSafeTx|buildPublicMigrateCall|\.insert\(|\.update\(|\.upsert\(|\.delete\(|\.rpc\("(?!is_platform_owner|set_canonical_pcart_launch_day_plan")/.test(CODE), "no send/sign/propose/migrate/sweep or write primitive in P9 files");
 const PANEL = read(P9_FILES[2]);
-check("1b", (PANEL.match(/<Button/g) ?? []).length === 3 && /Refresh status/.test(PANEL) && /Save plan/.test(PANEL) && /Clear plan/.test(PANEL) && !/<Button[^>]*>[^<]*(Deploy|Sign|Send|Propose|Start|Migrate|Sweep|Launch)/.test(PANEL) && PANEL.includes("P9_1_STOP_COPY") && P9_STOP_COPY === "No live action is enabled in P9.0.", "panel only has Refresh/Save plan/Clear plan; no execution buttons; stop copy shown");
+check("1b", (PANEL.match(/<Button/g) ?? []).length === 3 && /Refresh status/.test(PANEL) && /Save plan/.test(PANEL) && /Clear plan/.test(PANEL) && [...PANEL.matchAll(/>([^<>]*)<\/Button>/g)].every((m) => !/(Deploy|Sign|Send|Propose|Start|Migrate|Sweep|Launch)/i.test(m[1])) && PANEL.includes("P9_1_STOP_COPY") && P9_STOP_COPY === "No live action is enabled in P9.0.", "panel only has Refresh/Save plan/Clear plan; no execution buttons; stop copy shown");
 
 // 2-4 policy approval
 const rA = (o: Partial<any> = {}) => ({ id: "a1", manifestVersion: P8A_MANIFEST_VERSION, manifestFingerprint: P8A_MANIFEST_FINGERPRINT, reviewedAt: iso(NOW - 30 * DAY), expiresAt: iso(NOW - 29 * DAY), ...o });
