@@ -101,8 +101,8 @@ const NEXT: Record<P9State, string> = {
 /** Exactly one state. Order = priority: uncertainty and stale policy always block progression. */
 export function deriveCoordinatorState(s: P9Snapshot): P9Derivation {
   const blockers: string[] = [];
-  if (!s.control || s.control.emergencyStopEngaged) blockers.push("EMERGENCY_STOP_ENGAGED");
-  if (!s.control || !s.control.executionEnabled) blockers.push("EXECUTION_DISABLED");
+  // CANONICAL_PCART_PROTECTED: the canonical path requires global execution OFF + emergency stop ON.
+  if (!s.control || s.control.executionEnabled !== false || s.control.emergencyStopEngaged !== true) blockers.push("GLOBAL_EXECUTION_NOT_PROTECTED");
   if (s.live) {
     if (!s.live.chainLive) blockers.push("CHAIN_NOT_LIVE");
     if (!s.live.safeReady) blockers.push("SAFE_NOT_READY");

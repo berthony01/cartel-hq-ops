@@ -26,7 +26,7 @@ export const getPcartP9CoordinatorSnapshot = createServerFn({ method: "POST" })
     if (!(await isOwner(ctx))) return { ok: false as const, reason: "NOT_PLATFORM_OWNER" };
     const sb = ctx.supabase;
     const [launch, dep, ctl, p8a, p8b, rev, plan, events, signers] = await Promise.all([
-      sb.from("launches").select("id, status, official_contract_address").eq("id", data.launchId).maybeSingle(),
+      sb.from("launches").select("id, status, official_contract_address, launch_window_start, launch_window_end").eq("id", data.launchId).maybeSingle(),
       sb.from("launch_chain_deployments").select("id, attempt_number, status, tx_hash, contract_address, finality_state, submitted_at, artifact_id, chain_id, network_environment, deployer_address, deployer_nonce_before, init_code_hash, review_fingerprint")
         .eq("launch_id", data.launchId).eq("network_environment", "PRODUCTION").order("attempt_number", { ascending: false }).limit(1).maybeSingle(),
       sb.from("launch_chain_production_execution_controls").select("execution_enabled, emergency_stop_engaged").eq("control_key", "ROBINHOOD_MAINNET_DEPLOYMENT").maybeSingle(),
@@ -81,6 +81,7 @@ export const getPcartP9CoordinatorSnapshot = createServerFn({ method: "POST" })
       uncertainClaim: (claims.data ?? []).some((c: any) => c.claim_status === "AMBIGUOUS" || c.claim_status === "CLAIMED"),
       deployerLive: raw.deployerLive,
       control: snap.control,
+      sendWindowOpen: !!(launch.data?.launch_window_start && launch.data?.launch_window_end && Date.parse(launch.data.launch_window_start) <= Date.now() && Date.now() <= Date.parse(launch.data.launch_window_end)),
     });
     return {
       ok: true as const,
