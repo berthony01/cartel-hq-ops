@@ -61,7 +61,7 @@ Each entry: CURRENT OFFICIAL UPSTREAM SOURCE VERIFIED, NOT YET CARTEL HQ ON-CHAI
 Upstream notes:
 - **CCA v2.1.0** includes an Arbitrum/Orbit bug fix. `startBlock`/`endBlock`/`claimBlock` are fixed in the instance config, and graduation depends on `requiredCurrencyRaised`. If the auction never graduates, bidders can reclaim their funds. There is no normal admin action to extend an auction after it starts.
 - **Liquidity Launcher v3.3.0** (released 2026-09-29) adds fee-update integration and fixes a nested PoolManager unlock issue in `LBPStrategy.migrate`.
-- **Robinhood auction clock:** the current SDK changelog documents a clock of about 0.1 s and an older bug caused by a 12-second fallback. The ~96h duration must be encoded from the current blocknumberish-aware SDK and the current chain timing, then checked independently. Never hand-hardcode a block count.
+- **Robinhood auction clock:** the current SDK changelog documents a clock of about 0.1 s and an older bug caused by a 12-second fallback. The 7-day auction duration (plan v2; ~96h superseded) must be encoded from the current blocknumberish-aware SDK and the current chain timing, then checked independently. Never hand-hardcode a block count.
 - **FeeSplitter** is zero-admin, permanent LP custody. Any position sent to it can never be recovered, by design, while fees are split or compounded.
 
 Sources:

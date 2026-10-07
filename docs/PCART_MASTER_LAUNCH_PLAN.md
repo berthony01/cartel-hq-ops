@@ -8,25 +8,29 @@ Last direction update: 2026-10-01 (L-S5 — economic/auction design lock; docume
 
 Policy/design lock only. Not implementation, not transaction authorization. Where this section conflicts with section 0 or anything below, this section wins.
 
-**1. Auction.** Public Uniswap Continuous Clearing Auction (CCA) run through the current LBPStrategy on Robinhood Chain. About 96 hours (4 days). Exact `startBlock`/`endBlock`/`claimBlock` are derived at execution from the current blocknumberish-aware Uniswap SDK and current Robinhood clock and independently checked; never hardcode a block count from the old 12-second assumption. No normal extension after bidding starts. Currency: native ETH. No whitelist by default. No custom presale. Pre-launch marketing/Launch Watch may run for several weeks and collects no funds.
+**1. Auction.** Public Uniswap Continuous Clearing Auction (CCA) run through the current LBPStrategy on Robinhood Chain. **Plan v2 (2026-10-07): exactly 7-day live auction, after a minimum 21-day pre-auction promotion runway** (extendable before start; no funds accepted during promotion; the auction never auto-starts after 21 days — the owner deliberately confirms the start; end = start + 7 days). _(~96h SUPERSEDED.)_ Exact `startBlock`/`endBlock`/`claimBlock` are derived at execution from the current blocknumberish-aware Uniswap SDK and current Robinhood clock and independently checked; never hardcode a block count from the old 12-second assumption. No normal extension after bidding starts. Currency: native ETH. No whitelist by default. No custom presale. Pre-launch marketing/Launch Watch may run for several weeks and collects no funds.
 
 **2. Target Raise vs Graduation Floor (separate concepts).**
 - Desired **Target Raise: 30 ETH.** An aspiration, not a gate. Missing it does NOT block launch.
 - **Graduation Floor / `requiredCurrencyRaised`: 5 ETH.** Below it the auction does not graduate; bidders use the CCA refund path and the launch does not proceed to liquidity.
 - These are PEPECARTEL economic settings, not Robinhood/Uniswap protocol minimums.
-- Rationale: under the LP schedule below, 5 ETH is the minimum floor at which 100% of raised ETH is still directed to liquidity.
+- Rationale (v1, SUPERSEDED by plan v2 progressive schedule): 5 ETH was the floor at which 100% went to liquidity.
 - No USD promises or projections.
 
 **3. Public-launch/liquidity allocation (final, 500M bucket).** 150,000,000 PCART max auction supply; 200,000,000 PCART reserved token-side LBP/liquidity budget; 150,000,000 PCART future liquidity/market reserve held outside the initial launcher. If execution testing proves a mechanical incompatibility, this fails closed and requires explicit re-review; no silent parameter substitution.
 
-**4. LP allocation of ETH raised (final bracket policy).**
+**4. LP allocation of ETH raised (plan v2, 2026-10-07 — native Uniswap Liquidity Launcher v3.3.0 `LiquidityAllocationBracket[]`, progressive/marginal).** _(v1 100/90/80 SUPERSEDED.)_
 
-| Auction ETH raised | To LP | To treasury/operations |
+| Slice of auction ETH raised | To LP | To Treasury |
 |---|---|---|
-| Under 5 ETH | — no graduation, refund path | — |
-| 5 ETH up to <15 ETH | 100% | 0% |
-| 15 ETH up to <30 ETH | 90% | 10% |
-| 30 ETH or more | 80% | 20% |
+| Total under 5 ETH | — no graduation, refund path | — |
+| First 10 ETH | 80% | 20% |
+| 10 → 30 ETH | 60% | 40% |
+| Above 30 ETH | 50% | 50% |
+
+Cumulative: 5→4/1, 10→8/2, 15→11/4, 20→14/6, 30→20/10, 50→30/20, 75→42.5/32.5, 100→55/45 (LP/Treasury ETH). Encoded on-chain as brackets `{0, 8e6}, {10 ETH, 6e6}, {30 ETH, 5e6}` (rate in mps, 1e7 = 100%); no clawbacks or post-launch withdrawals emulate it. The 200M first-pool token reserve is a **maximum**; any unused amount stays with the Treasury Safe (actual consumption proven in P8B fork rehearsal).
+
+**Treasury purpose (plan v2).** Treasury ETH is operating capital for product/development (30%), marketing/community (25%), contractors/services/listings/infrastructure (15%), reserve/runway (15%) and founder/operator compensation (up to 15%). Accounting categories only, not separate wallets. Founder/operator compensation is a post-raise Treasury expense: capped, publicly disclosed, approved by the 2-of-3 Treasury Safe; never an automatic bidder-fund skim and never hard-wired into auction proceeds.
 
 Percentages apply to net available auction ETH; protocol fees and gas are accounted before any net treasury remainder is claimed. The operational gas reserve policy (0.10 ETH reserve, 0.05 ETH execution-wallet floor) stays outside auction proceeds unless explicitly changed later.
 
@@ -51,7 +55,7 @@ Older text below is kept as history. Where it conflicts with this section, this 
 - **Still frozen:** 1,000,000,000 PCART total supply, set once in the token contract, which cannot be changed. The frozen PCART token artifact and its OpenZeppelin 5.6.1 compilation are not changed.
 - **Locked/preferred:** a 2-of-3 Safe treasury, kept separate from the deployer wallet.
 - **Launch mechanism:** a public Uniswap CCA auction. No traditional long presale and no custom presale contract.
-- **Auction duration:** about 96 hours (4 days). The exact blocks are derived at execution from the current blocknumberish-aware Uniswap SDK and the current Robinhood clock (about 0.1 s per auction clock tick per the SDK changelog), and checked independently. No block count is hardcoded from older 12-second assumptions.
+- **Auction duration (plan v2):** exactly 7 days, after a minimum 21-day promotion runway (~96h SUPERSEDED). The exact blocks are derived at execution from the current blocknumberish-aware Uniswap SDK and the current Robinhood clock (about 0.1 s per auction clock tick per the SDK changelog), and checked independently. No block count is hardcoded from older 12-second assumptions.
 - **No extension:** the auction is not extended after it starts as a normal plan. All rules are fixed before bidding opens. CCA `startBlock`/`endBlock`/`claimBlock` are fixed in the instance config. If the auction does not graduate, bidders can reclaim their funds.
 - **Pre-launch:** several weeks of marketing and Launch Watch, with no funds collected.
 - **Target Raise vs Graduation Floor (separate):**
@@ -149,7 +153,7 @@ Unused migration currency and unused reserved LP tokens return to the configured
 - **Max auction supply:** 150,000,000 PCART.
 - **Reserved token-side LP budget:** 200,000,000 PCART.
 - **Future liquidity/market reserve outside launcher:** 150,000,000 PCART.
-- **Auction window:** ~~24h~~ SUPERSEDED (historical) → ~96 hours, exact blocks derived at execution from current SDK/Robinhood clock (section 0).
+- **Auction window:** ~~24h~~ SUPERSEDED (historical) → ~96 hours SUPERSEDED → plan v2: 7-day auction after ≥21-day promotion, exact blocks derived at execution from current SDK/Robinhood clock (section 0).
 - **Floor FDV planning guardrail (pending L-S5 re-confirmation):** 50 ETH equivalent across the 1,000,000,000 PCART total supply. This is an approved planning input, not a promised valuation or fundraising target.
 - **Graduation Floor / `requiredCurrencyRaised`:** old 10 ETH value SUPERSEDED/UNFROZEN (historical). New Graduation Floor 5 ETH; Target Raise 30 ETH, separate (section 00).
 - **Tick spacing:** approximately 1% of floor price, subject to SDK derivation and validation.
