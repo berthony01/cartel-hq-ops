@@ -120,6 +120,7 @@ import { pcartP6SummaryText } from "@/lib/pcart-production-verify";
 import { PcartOfficialRegistrationPanel } from "@/components/cartel/PcartOfficialRegistrationPanel";
 import { PcartAuctionLiquidityPlanPanel } from "@/components/cartel/PcartAuctionLiquidityPlanPanel";
 import { PcartP8bRehearsalPanel } from "@/components/cartel/PcartP8bRehearsalPanel";
+import { PcartLaunchDayCoordinatorPanel } from "@/components/cartel/PcartLaunchDayCoordinatorPanel";
 import { pcartP7SummaryText } from "@/lib/pcart-production-register";
 import { fetchLatestPcartExecutionPermit, pcartExecutionPermitQueryKey } from "@/lib/pcart-production-execution-permit";
 import { isPcartExecutionPermitActive } from "@/lib/pcart-production-execution";
@@ -3048,6 +3049,9 @@ function LaunchControlPage() {
                       ) : null}
                       {pcartProdReadinessQuery.data?.is_platform_owner === true ? (
                         <PcartP8bRehearsalPanel launchId={selected.id} />
+                      ) : null}
+                      {pcartProdReadinessQuery.data?.is_platform_owner === true ? (
+                        <PcartLaunchDayCoordinatorPanel launchId={selected.id} />
                       ) : null}
                     </div>
                   ) : null
