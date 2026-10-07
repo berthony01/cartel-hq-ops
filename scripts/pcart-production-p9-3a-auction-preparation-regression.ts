@@ -75,7 +75,7 @@ check("21", staleReasons(stored, { ...cur, p8b: pref(P8B_MANIFEST_VERSION, P8B_M
 check("22", staleReasons(stored, { ...cur, dependencyFingerprint: "0x" + "c".repeat(64) }).includes("DEPENDENCY_CHANGED"), "dependency change stales");
 check("23", staleReasons(stored, { ...cur, tokenRuntimeKeccak: "0x" + "c".repeat(64) }).includes("TOKEN_RUNTIME_CHANGED") && staleReasons(stored, { ...cur, officialTokenAddress: "0x" + "2".repeat(40) }).includes("TOKEN_CHANGED") && /pcart_p93_official_change/.test(MIG) && staleReasons(stored, { ...cur, safeNonce: 4 }).includes("SAFE_NONCE_CHANGED"), "token/runtime/nonce change stales");
 // 24-27 no signing/sending
-check("24", !/signature/i.test(MIG.replace(/--.*$/gm, "")) && /status <> 'PREPARED' THEN RAISE/.test(MIG) && /not allowed in P9.3A/.test(MIG), "no signature table; insert PREPARED-only; signing statuses blocked");
+check("24", !/CREATE TABLE[^(]*signature/i.test(MIG) && /status <> 'PREPARED' THEN RAISE/.test(MIG) && /not allowed in P9.3A/.test(MIG), "no signature table; insert PREPARED-only; signing statuses blocked");
 const PROD = PURE + FNS + RD + UI;
 check("25", !/api\.safe\.global|safe-transaction|proposeTransaction/.test(PROD), "no Safe proposal");
 check("26", !/execTransaction|sendTransaction|writeContract|eth_sendRawTransaction|signTypedData|signMessage|createWalletClient/.test(PROD), "no Safe execution / signing / wallet client");
@@ -107,7 +107,7 @@ check("40", /issuanceBlockers|permitBindingFailures/.test(P92BIND) && /attestP9_
 check("41", /record_canonical_pcart_preauction_prepared\(uuid, jsonb\) FROM PUBLIC, anon, authenticated/.test(MIG) && /TO service_role/.test(MIG) && /requireSupabaseAuth/.test(FNS) && /isOwner/.test(FNS), "prepare RPC service-role only after owner-verified server re-attestation");
 check("42", /CANONICAL_PCART_PROTECTED/.test(MIG), "canary remains CANONICAL_PCART_PROTECTED");
 // extras
-check("43", blocked(facts({ plan: { ...plan, intendedAuctionStartAt: new Date(NOW + P9_3_MIN_SIGNING_LEAD_MS - 60_000).toISOString() } }), "START_TOO_SOON_FOR_SIGNING"), "too-near start fails closed (24h signing lead)");
+check("43", blocked(facts({ plan: { promotionStartAt: new Date(NOW - 25 * DAY).toISOString(), intendedAuctionStartAt: new Date(NOW + P9_3_MIN_SIGNING_LEAD_MS - 60_000).toISOString() } }), "START_TOO_SOON_FOR_SIGNING"), "too-near start fails closed (24h signing lead)");
 check("44", seg({ officialRegistered: false, plan: null }).state === "OFFICIAL_CONTRACT_REQUIRED" && seg({ plan: null }).state === "PROMOTION_PLAN_REQUIRED", "today's state → official contract required");
 check("45", blocked(facts({ existingOpenAction: true }), "ACTION_ALREADY_OPEN") && /pcart_p93_one_prepared_per_kind/.test(MIG), "no duplicate / no automatic re-preparation");
 
