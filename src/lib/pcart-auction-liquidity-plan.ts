@@ -20,7 +20,7 @@ export const eth = (whole: bigint) => whole * UNIT;
 export function ethToWei(text: string): bigint {
   const m = /^(\d+)(?:\.(\d{1,18}))?$/.exec(text.trim());
   if (!m) throw new Error("INVALID_ETH_AMOUNT");
-  return BigInt(m[1]) * UNIT + BigInt((m[2] ?? "").padEnd(18, "0") || "0");
+  return BigInt(m[1]!) * UNIT + BigInt((m[2] ?? "").padEnd(18, "0") || "0");
 }
 
 export type P8aDependencyKey =
