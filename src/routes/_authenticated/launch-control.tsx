@@ -118,6 +118,7 @@ import { pcartP5SummaryText, pcartSendWindowState } from "@/lib/pcart-production
 import { PcartVerificationPanel } from "@/components/cartel/PcartVerificationPanel";
 import { pcartP6SummaryText } from "@/lib/pcart-production-verify";
 import { PcartOfficialRegistrationPanel } from "@/components/cartel/PcartOfficialRegistrationPanel";
+import { PcartAuctionLiquidityPlanPanel } from "@/components/cartel/PcartAuctionLiquidityPlanPanel";
 import { pcartP7SummaryText } from "@/lib/pcart-production-register";
 import { fetchLatestPcartExecutionPermit, pcartExecutionPermitQueryKey } from "@/lib/pcart-production-execution-permit";
 import { isPcartExecutionPermitActive } from "@/lib/pcart-production-execution";
@@ -3040,6 +3041,9 @@ function LaunchControlPage() {
                           launch={{ id: selected.id, status: selected.status ?? null, official_contract_address: selected.official_contract_address ?? null, official_contract_deployment_id: selected.official_contract_deployment_id ?? null }}
                           onChanged={() => queryClient.invalidateQueries()}
                         />
+                      ) : null}
+                      {pcartProdReadinessQuery.data?.is_platform_owner === true ? (
+                        <PcartAuctionLiquidityPlanPanel launchId={selected.id} officialContractAddress={selected.official_contract_address ?? null} />
                       ) : null}
                     </div>
                   ) : null

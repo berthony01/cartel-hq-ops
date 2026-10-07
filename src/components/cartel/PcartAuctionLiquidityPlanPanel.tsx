@@ -1,3 +1,4 @@
+import { Fragment } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 
@@ -43,7 +44,7 @@ export function PcartAuctionLiquidityPlanPanel({ launchId, officialContractAddre
         <p className="text-xs text-muted-foreground">{p8aSummaryText({ officialContractAddress, latestReviewActive: active })}</p>
       </div>
       <dl className="grid gap-1 text-xs sm:grid-cols-[12rem_1fr]">
-        {rows.map(([k, v]) => (<><dt key={`${k}-k`} className="text-muted-foreground">{k}</dt><dd key={`${k}-v`}>{v}</dd></>))}
+        {rows.map(([k, v]) => (<Fragment key={k}><dt className="text-muted-foreground">{k}</dt><dd>{v}</dd></Fragment>))}
       </dl>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
