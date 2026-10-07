@@ -2252,6 +2252,84 @@ export type Database = {
         }
         Relationships: []
       }
+      pcart_auction_liquidity_plan_reviews: {
+        Row: {
+          created_at: string
+          dependency_attestation: Json
+          deployment_id: string | null
+          expires_at: string
+          id: string
+          launch_id: string
+          lp_custody_policy: string
+          mainnet_dependencies_ok: boolean
+          manifest_fingerprint: string
+          manifest_version: string
+          rehearsal_mode: string
+          review_kind: string
+          reviewed_at: string
+          reviewed_by: string
+          simulation_fingerprint: string
+          simulation_summary: Json
+          unsold_policy: string
+          unsold_policy_requires_live_reconfirmation: boolean
+        }
+        Insert: {
+          created_at?: string
+          dependency_attestation: Json
+          deployment_id?: string | null
+          expires_at: string
+          id?: string
+          launch_id: string
+          lp_custody_policy: string
+          mainnet_dependencies_ok: boolean
+          manifest_fingerprint: string
+          manifest_version: string
+          rehearsal_mode: string
+          review_kind: string
+          reviewed_at?: string
+          reviewed_by: string
+          simulation_fingerprint: string
+          simulation_summary: Json
+          unsold_policy: string
+          unsold_policy_requires_live_reconfirmation: boolean
+        }
+        Update: {
+          created_at?: string
+          dependency_attestation?: Json
+          deployment_id?: string | null
+          expires_at?: string
+          id?: string
+          launch_id?: string
+          lp_custody_policy?: string
+          mainnet_dependencies_ok?: boolean
+          manifest_fingerprint?: string
+          manifest_version?: string
+          rehearsal_mode?: string
+          review_kind?: string
+          reviewed_at?: string
+          reviewed_by?: string
+          simulation_fingerprint?: string
+          simulation_summary?: Json
+          unsold_policy?: string
+          unsold_policy_requires_live_reconfirmation?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pcart_auction_liquidity_plan_reviews_deployment_id_fkey"
+            columns: ["deployment_id"]
+            isOneToOne: false
+            referencedRelation: "launch_chain_deployments"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pcart_auction_liquidity_plan_reviews_launch_id_fkey"
+            columns: ["launch_id"]
+            isOneToOne: false
+            referencedRelation: "launches"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pcart_production_execution_permits: {
         Row: {
           artifact_id: string
@@ -8676,6 +8754,18 @@ export type Database = {
           _subscription_id: string
         }
         Returns: undefined
+      }
+      record_pcart_auction_liquidity_plan_review: {
+        Args: {
+          _dependency_attestation: Json
+          _launch_id: string
+          _manifest_fingerprint: string
+          _manifest_version: string
+          _rehearsal_mode: string
+          _simulation_fingerprint: string
+          _simulation_summary: Json
+        }
+        Returns: string
       }
       record_referral_attribution: {
         Args: { _code: string; _source?: string }
