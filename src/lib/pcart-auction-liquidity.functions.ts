@@ -65,7 +65,7 @@ export const getPcartP8aStatus = createServerFn({ method: "POST" })
     const sim = runP8aSimulation(a.rehearsalMode, a.mainnetOk);
     const { data: latest } = await ctx.supabase
       .from("pcart_auction_liquidity_plan_reviews")
-      .select("id, review_kind, manifest_fingerprint, rehearsal_mode, simulation_fingerprint, reviewed_at, expires_at")
+      .select("id, review_kind, manifest_version, manifest_fingerprint, rehearsal_mode, simulation_fingerprint, reviewed_at, expires_at")
       .eq("launch_id", data.launchId).order("reviewed_at", { ascending: false }).limit(1).maybeSingle();
     return { ok: true as const, attestation: a, simulation: jsonSafe(sim), manifestFingerprint: P8A_MANIFEST_FINGERPRINT, latestReview: latest ?? null };
   });

@@ -4,10 +4,13 @@ import { useServerFn } from "@tanstack/react-start";
 
 import { Button } from "@/components/ui/button";
 import {
+  computeLiquiditySplit,
   dep,
+  eth,
   formatEth,
   formatPcart,
   P8A_MANIFEST,
+  P8A_MANIFEST_VERSION,
   P8A_STOP_COPY,
   p8aSummaryText,
 } from "@/lib/pcart-auction-liquidity-plan";
@@ -24,14 +27,17 @@ export function PcartAuctionLiquidityPlanPanel({ launchId, officialContractAddre
   const m = P8A_MANIFEST;
   const s = status.data && status.data.ok ? status.data : null;
   const latest = s?.latestReview ?? null;
-  const active = !!latest && new Date(latest.expires_at).getTime() > Date.now() && latest.manifest_fingerprint === s?.manifestFingerprint;
+  const active = !!latest && latest.manifest_version === P8A_MANIFEST_VERSION && new Date(latest.expires_at).getTime() > Date.now() && latest.manifest_fingerprint === s?.manifestFingerprint;
+  const ex = (n: bigint) => { const r = computeLiquiditySplit(eth(n)); return `${formatEth(eth(n))} raised → ${formatEth(r.liquidityWei)} liquidity / ${formatEth(r.treasuryWei)} Treasury`; };
 
   const rows: [string, string][] = [
-    ["Auction allocation", formatPcart(m.auctionAllocation)],
-    ["Liquidity reserve (first pool)", formatPcart(m.initialLiquidityReserve)],
-    ["Future liquidity reserve", `${formatPcart(m.futureLiquidityReserve)} — stays in Treasury Safe, not used now`],
+    ["Auction inventory", formatPcart(m.auctionAllocation)],
+    ["Initial LP reserve", `up to ${formatPcart(m.initialLiquidityReserve)} — any unused amount stays with the Treasury Safe`],
+    ["Future-liquidity reserve", `${formatPcart(m.futureLiquidityReserve)} — untouched, stays in Treasury Safe`],
     ["Floor / target / cap", `${formatEth(m.floorWei)} floor · ${formatEth(m.targetWei)} target (not a gate) · no hard cap`],
-    ["Auction", `~${m.durationHours}h public auction · native ETH · no whitelist, presale or extension`],
+    ["Auction", `${m.timeline.auctionDurationDays}-day public auction · native ETH · no whitelist, presale or extension`],
+    ["Promotion runway", `minimum ${m.timeline.promotionMinDays} days, extendable · no funds accepted during promotion`],
+    ["Auction start", "chosen later by the owner · does not auto-start after 21 days"],
     ["Pool", `Uniswap v4 · ${m.pool.feeLabel} fee`],
     ["LP custody", m.lpCustodyLabel],
     ["Unsold tokens", "Return to Treasury Safe — must be re-confirmed before live auction"],
@@ -40,7 +46,7 @@ export function PcartAuctionLiquidityPlanPanel({ launchId, officialContractAddre
   return (
     <section className="space-y-3 rounded-md border border-border bg-card/60 p-4" aria-label="P8A — Auction & Liquidity Plan">
       <div>
-        <p className="text-sm font-semibold">P8A — Auction &amp; Liquidity Plan</p>
+        <p className="text-sm font-semibold">P8A — Auction &amp; Liquidity Plan (v2)</p>
         <p className="text-xs text-muted-foreground">{p8aSummaryText({ officialContractAddress, latestReviewActive: active })}</p>
       </div>
       <dl className="grid gap-1 text-xs sm:grid-cols-[12rem_1fr]">
@@ -48,15 +54,21 @@ export function PcartAuctionLiquidityPlanPanel({ launchId, officialContractAddre
       </dl>
       <div className="overflow-x-auto">
         <table className="w-full text-xs">
-          <thead><tr className="text-left text-muted-foreground"><th className="py-1">ETH raised</th><th>To liquidity</th><th>To treasury</th></tr></thead>
+          <thead><tr className="text-left text-muted-foreground"><th className="py-1">ETH raised (each slice)</th><th>To liquidity</th><th>To Treasury</th></tr></thead>
           <tbody>
-            <tr><td className="py-1">Under 5 ETH</td><td colSpan={2}>Refund to bidders — no pool</td></tr>
-            <tr><td className="py-1">5 to under 15 ETH</td><td>100%</td><td>0%</td></tr>
-            <tr><td className="py-1">15 to under 30 ETH</td><td>90%</td><td>10%</td></tr>
-            <tr><td className="py-1">30 ETH or more</td><td>80%</td><td>20%</td></tr>
+            <tr><td className="py-1">Total under 5 ETH</td><td colSpan={2}>Refund to bidders — no pool</td></tr>
+            <tr><td className="py-1">First 10 ETH</td><td>80%</td><td>20%</td></tr>
+            <tr><td className="py-1">10–30 ETH slice</td><td>60%</td><td>40%</td></tr>
+            <tr><td className="py-1">Above 30 ETH</td><td>50%</td><td>50%</td></tr>
           </tbody>
         </table>
+        <p className="mt-1 text-xs text-muted-foreground">Examples: {ex(30n)} · {ex(50n)}</p>
       </div>
+      <p className="text-xs text-muted-foreground">
+        Treasury ETH funds product/development, marketing/community, contractors/services/infrastructure, reserve/runway and
+        owner/operator compensation. Owner/operator pay is capped (up to 15% of Treasury), publicly disclosed and approved by the
+        2-of-3 Treasury Safe after the raise — never an automatic cut of bidder funds.
+      </p>
       <div className="space-y-1 text-xs">
         <p className="font-medium">Contract checks</p>
         {status.isLoading ? <p className="text-muted-foreground">Checking Robinhood Chain…</p> : null}
