@@ -16,7 +16,6 @@ import { mainnetChain } from "@/lib/chain-mainnet-verify-shape";
 import { ROBINHOOD_MAINNET_MANAGED_RPC_ENV } from "@/lib/chain-mainnet-registry";
 import { normalizeAddress } from "@/lib/pcart-production-intent";
 import { revalidate } from "@/lib/pcart-production-preparation.functions";
-import { attestP9_2Live } from "@/lib/pcart-p9-2-attestation.server";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /** Bounded history scan for the nonce transition (managed RPC must serve historical nonce reads). */
@@ -57,6 +56,7 @@ export const claimPcartMainnetSend = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: dep } = await supabaseAdmin.from("launch_chain_deployments").select("launch_id").eq("id", data.deploymentId).maybeSingle();
     if (!dep) return { ok: false, reason: "DRAFT_NOT_FOUND" };
+    const { attestP9_2Live } = await import("@/lib/pcart-p9-2-attestation.server");
     const att = await attestP9_2Live(String(dep.launch_id));
     if (!att.ok) {
       await ctx.supabase.rpc("cancel_canonical_pcart_execution_permit", { _permit_id: data.permitId });

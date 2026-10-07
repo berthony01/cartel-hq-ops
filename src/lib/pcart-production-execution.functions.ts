@@ -15,7 +15,6 @@ import { mainnetChain } from "@/lib/chain-mainnet-verify-shape";
 import { ROBINHOOD_MAINNET_MANAGED_RPC_ENV } from "@/lib/chain-mainnet-registry";
 import { normalizeAddress } from "@/lib/pcart-production-intent";
 import { revalidate } from "@/lib/pcart-production-preparation.functions";
-import { attestP9_2Live } from "@/lib/pcart-p9-2-attestation.server";
 import {
   buildPcartUnsignedEnvelope,
   decidePcartPermitFromFreshReview,
@@ -215,6 +214,7 @@ export const preparePcartFinalSend = createServerFn({ method: "POST" })
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: dep } = await supabaseAdmin.from("launch_chain_deployments").select("launch_id").eq("id", r.deploymentId).maybeSingle();
     if (!dep) return { ok: false, reason: "DRAFT_NOT_FOUND" };
+    const { attestP9_2Live } = await import("@/lib/pcart-p9-2-attestation.server");
     const att = await attestP9_2Live(String(dep.launch_id));
     if (!att.ok) return { ok: false, reason: `LIVE_ATTESTATION_${att.reason}` };
     const { data: row, error } = await (supabaseAdmin as any).rpc("issue_canonical_pcart_execution_permit_v2", {
