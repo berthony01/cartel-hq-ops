@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PcartPreAuctionSafePanel } from "@/components/cartel/PcartPreAuctionSafePanel";
 import { P9_3A_STOP_COPY } from "@/lib/pcart-launch-coordinator-p9-3";
 import { cancelPcartCoordinatorAction, getPcartP9_3Segment, preparePcartPreAuction, previewPcartPreAuction } from "@/lib/pcart-launch-coordinator-p9-3.functions";
 
@@ -88,6 +89,8 @@ export function PcartAuctionSegmentPanel({ launchId }: { launchId: string }) {
               <Button size="sm" variant="outline" disabled={cancelReason.trim().length < 3 || cancelM.isPending} onClick={() => cancelM.mutate(s.preAuction!.id)}>Cancel prepared transaction</Button>
             </div>
           ) : null}
+
+          {s.preAuction && s.preAuction.status !== "STALE" && s.preAuction.status !== "CANCELLED" ? <PcartPreAuctionSafePanel actionId={s.preAuction.id} launchKey={key} /> : null}
 
           <details className="text-xs text-muted-foreground">
             <summary className="cursor-pointer select-none">Technical details</summary>
