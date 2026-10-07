@@ -229,7 +229,15 @@ check("D0i", /CREATE OR REPLACE FUNCTION public\.create_canonical_pcart_producti
   !/CREATE TABLE|ALTER TABLE|CREATE POLICY/.test(P2_FIX_SQL) &&
   !/token_total_supply_text,/.test(P2_FIX_SQL),
   "P2 fix migration only replaces the draft RPC; the generated column is never inserted");
-const MIG_PCART_PROTECTED = MIG_PCART.filter((f) => f !== READINESS_MIG && f !== HARDEN_MIG && f !== P2_MIG && f !== P2_FIX_MIG && f !== ENV_IDX_MIG && f !== P3_MIG && f !== GETTER_FIX_MIG && f !== P4_MIG && f !== P5_MIG && f !== P6_MIG).filter((f) => f !== RECOVERY_MIG ||
+// Authorized PCART P7 migration: PCART evidence branch + PCART-only registration RPC; no table/control/rehearsal/guard/draft changes.
+const P7_MIG = "20261005155849_b3e3c947-9eed-4ace-901a-e9cc832b1d21.sql";
+const P7_SQL = read(`supabase/migrations/${P7_MIG}`);
+check("D0q", /FUNCTION public\.register_canonical_pcart_official_contract/.test(P7_SQL) &&
+  !/CREATE OR REPLACE FUNCTION public\.(create_launch_chain_pcart_rehearsal_attempt|enforce_canonical_pcart_no_production_deployment|create_canonical_pcart_production_draft|issue_canonical_pcart_production_presign_authorization|claim_canonical_pcart_mainnet_send)/.test(P7_SQL) &&
+  !/CREATE TABLE|UPDATE public\.(launch_chain_production_execution_controls|pcart_production_send_claims|pcart_production_execution_permits)/.test(P7_SQL) &&
+  !/'LIVE'|'COMPLETED'/.test(P7_SQL.slice(P7_SQL.indexOf("FUNCTION public.register_canonical_pcart_official_contract"))),
+  "P7 migration adds only PCART registration; no control/claim/permit/rehearsal changes, never LIVE");
+const MIG_PCART_PROTECTED = MIG_PCART.filter((f) => f !== P7_MIG && f !== READINESS_MIG && f !== HARDEN_MIG && f !== P2_MIG && f !== P2_FIX_MIG && f !== ENV_IDX_MIG && f !== P3_MIG && f !== GETTER_FIX_MIG && f !== P4_MIG && f !== P5_MIG && f !== P6_MIG).filter((f) => f !== RECOVERY_MIG ||
   /FUNCTION public\.create_launch_chain_pcart_rehearsal_attempt\(|is_canonical_pcart_launch\(\)? *RETURNS|enforce_canonical_pcart_no_production_deployment\(\) *RETURNS/.test(read(`supabase/migrations/${f}`)));
 check("D0", MIG.length > 0 && MIG_PCART_PROTECTED.length === 1 && MIG_PCART_PROTECTED[0] === MIG_FILE &&
   MIG.includes("FUNCTION public.create_launch_chain_pcart_rehearsal_attempt(") &&

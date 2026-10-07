@@ -12,6 +12,8 @@ const PB = A.slice(0, A.indexOf("GENERIC BRANCH"));
 const G = sec("FUNCTION public.register_verified_launch_contract", "FUNCTION public.register_canonical_pcart_official_contract");
 const R = sec("FUNCTION public.register_canonical_pcart_official_contract");
 const P7 = ["src/lib/pcart-production-register.ts", "src/lib/pcart-production-register.functions.ts", "src/components/cartel/PcartOfficialRegistrationPanel.tsx"].map(read).join("\n");
+// Strip comments so disclaimers ("never creates liquidity / notifies Telegram") are not mistaken for code.
+const P7_CODE = P7.replace(/\/\*[\s\S]*?\*\//g, "").replace(/^\s*\/\/.*$/gm, "");
 const ADDR = "0x" + "ab".repeat(20), DEP = "11111111-1111-1111-1111-111111111111";
 const base = { status: "CONFIRMED", finalityState: "FINALIZED", contractAddress: ADDR, launchStatus: "LAUNCH_APPROACHING", officialContractAddress: null, officialContractDeploymentId: null, deploymentId: DEP };
 check("1", /is_platform_owner\(auth\.uid\(\)\)/.test(R) && /REVOKE ALL[^;]+FROM PUBLIC, anon/.test(R), "owner-only RPC, anon revoked");
@@ -36,8 +38,8 @@ check("19", /already exists for this launch/.test(R) && /return l;/.test(R), "si
 check("20", /never corrects/.test(R) && /different official contract is already registered/.test(PB) && classifyPcartP7({ ...base, officialContractAddress: "0x" + "cd".repeat(20), officialContractDeploymentId: DEP }).kind === "CONFLICT", "conflicting binding refused");
 check("21", /Canonical PCART must use register_canonical_pcart_official_contract/.test(G) && /artifact_id is distinct from 'cartel-fixed-erc20-v1'/.test(A), "generic refuses PCART; generic branch intact");
 check("22", /official_contract_address/.test(read("src/routes/network.launch.$launchSlug.tsx")), "public display derives from launches");
-check("23", !/launch_events|notify_launch_watchers|telegram/i.test(R + P7), "no watcher/Telegram/launch_events");
-check("24", !/eth_sendTransaction|sendTransaction|signMessage|signTypedData|liquidity|auction/i.test(P7.replace(/does not create liquidity/g, "")), "no send/sign/liquidity/auction primitives");
+check("23", !/launch_events|notify_launch_watchers|telegram/i.test(R + P7_CODE), "no watcher/Telegram/launch_events");
+check("24", !/eth_sendTransaction|sendTransaction|signMessage|signTypedData|liquidity|auction/i.test(P7_CODE.replace(/does not create liquidity/g, "")), "no send/sign/liquidity/auction primitives");
 check("25", !/launch_chain_production_canary_permits|execution_controls SET|UPDATE public\.launch_chain_production_execution_controls/i.test(M), "canary/controls untouched");
 check("26", classifyPcartP7({ ...base, status: "DRAFT", contractAddress: null }).kind === "INERT" && pcartP7SummaryText({ launchStatus: "LAUNCH_APPROACHING", officialContractAddress: null }) === null, "live DRAFT #11 inert");
 console.log(`\n${pass} passed, ${fail} failed`); if (fail) process.exit(1);
