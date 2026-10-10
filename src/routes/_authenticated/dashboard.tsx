@@ -13,6 +13,7 @@ import {
   RefreshCw,
   Send,
   ShieldAlert,
+  Sparkles,
   Sticker,
   Users,
   CreditCard,
@@ -260,6 +261,27 @@ function HqDashboard() {
   const criticalCount = criticalAttention.length;
   const sortedAttention = [...attention].sort((a, b) => (a.severity === b.severity ? 0 : a.severity === "critical" ? -1 : 1));
 
+  // Guided-setup entry point: nudge workspaces that haven't finished project
+  // identity toward the 4-step onboarding flow. Dismissal is sticky.
+  const identityStage = journey?.stages.find((stage) => stage.key === "project_profile");
+  const [onboardingDismissed, setOnboardingDismissed] = useState(() => {
+    try {
+      return window.localStorage.getItem("hq-onboarding-banner-dismissed") === "1";
+    } catch {
+      return false;
+    }
+  });
+  const showOnboardingBanner =
+    !!workspaceId && !!journey && identityStage?.status !== "complete" && !onboardingDismissed;
+  const dismissOnboardingBanner = () => {
+    try {
+      window.localStorage.setItem("hq-onboarding-banner-dismissed", "1");
+    } catch {
+      /* storage unavailable — dismissal just won't persist */
+    }
+    setOnboardingDismissed(true);
+  };
+
   const launchLoading = profileQuery.isPending || (!!profileId && launchesQuery.isPending);
   const launchUnavailable = profileQuery.isError || launchesQuery.isError;
   const watchPending = launchLoading || (!!watchToken && watchQuery.isPending);
@@ -309,6 +331,29 @@ function HqDashboard() {
         description={workspace?.name ? "Launch readiness, community operations and creative deployment in one private operating view." : "Select or add a project to begin operating from CARTEL HQ."}
         status="Private Beta"
       />
+
+      {showOnboardingBanner ? (
+        <div className="rise-in flex flex-col gap-3 border border-gold/40 bg-gold/5 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <Sparkles className="mt-0.5 size-5 shrink-0 text-gold" aria-hidden="true" />
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-foreground">New here? Take the guided setup.</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">Four steps, about ten minutes — identity, community, launch, review.</p>
+            </div>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <Button variant="ghost" size="sm" className="min-h-11" onClick={dismissOnboardingBanner}>
+              Dismiss
+            </Button>
+            <Button asChild size="sm" className="min-h-11">
+              <Link to="/onboarding">
+                Start guided setup
+                <ArrowRight className="size-4" aria-hidden="true" />
+              </Link>
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       {!workspaceId ? (
         <Section
