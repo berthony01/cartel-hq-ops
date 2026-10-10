@@ -28,6 +28,7 @@ import { Route as AuthenticatedDashboardRouteImport } from './routes/_authentica
 import { Route as AuthenticatedDistributionRouteImport } from './routes/_authenticated/distribution'
 import { Route as AuthenticatedLaunchControlRouteImport } from './routes/_authenticated/launch-control'
 import { Route as AuthenticatedMainnetCanaryRouteImport } from './routes/_authenticated/mainnet-canary'
+import { Route as AuthenticatedOnboardingRouteImport } from './routes/_authenticated/onboarding'
 import { Route as AuthenticatedOperationsRouteImport } from './routes/_authenticated/operations'
 import { Route as AuthenticatedOperativesRouteImport } from './routes/_authenticated/operatives'
 import { Route as AuthenticatedPartnersRouteImport } from './routes/_authenticated/partners'
@@ -154,6 +155,11 @@ const AuthenticatedMainnetCanaryRoute =
     path: '/mainnet-canary',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const AuthenticatedOnboardingRoute = AuthenticatedOnboardingRouteImport.update({
+  id: '/onboarding',
+  path: '/onboarding',
+  getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
 const AuthenticatedOperationsRoute = AuthenticatedOperationsRouteImport.update({
   id: '/operations',
   path: '/operations',
@@ -304,6 +310,7 @@ export interface FileRoutesByFullPath {
   '/distribution': typeof AuthenticatedDistributionRoute
   '/launch-control': typeof AuthenticatedLaunchControlRoute
   '/mainnet-canary': typeof AuthenticatedMainnetCanaryRoute
+  '/onboarding': typeof AuthenticatedOnboardingRoute
   '/operations': typeof AuthenticatedOperationsRoute
   '/operatives': typeof AuthenticatedOperativesRoute
   '/partners': typeof AuthenticatedPartnersRoute
@@ -347,6 +354,7 @@ export interface FileRoutesByTo {
   '/distribution': typeof AuthenticatedDistributionRoute
   '/launch-control': typeof AuthenticatedLaunchControlRoute
   '/mainnet-canary': typeof AuthenticatedMainnetCanaryRoute
+  '/onboarding': typeof AuthenticatedOnboardingRoute
   '/operations': typeof AuthenticatedOperationsRoute
   '/operatives': typeof AuthenticatedOperativesRoute
   '/partners': typeof AuthenticatedPartnersRoute
@@ -393,6 +401,7 @@ export interface FileRoutesById {
   '/_authenticated/distribution': typeof AuthenticatedDistributionRoute
   '/_authenticated/launch-control': typeof AuthenticatedLaunchControlRoute
   '/_authenticated/mainnet-canary': typeof AuthenticatedMainnetCanaryRoute
+  '/_authenticated/onboarding': typeof AuthenticatedOnboardingRoute
   '/_authenticated/operations': typeof AuthenticatedOperationsRoute
   '/_authenticated/operatives': typeof AuthenticatedOperativesRoute
   '/_authenticated/partners': typeof AuthenticatedPartnersRoute
@@ -440,6 +449,7 @@ export interface FileRouteTypes {
     | '/distribution'
     | '/launch-control'
     | '/mainnet-canary'
+    | '/onboarding'
     | '/operations'
     | '/operatives'
     | '/partners'
@@ -483,6 +493,7 @@ export interface FileRouteTypes {
     | '/distribution'
     | '/launch-control'
     | '/mainnet-canary'
+    | '/onboarding'
     | '/operations'
     | '/operatives'
     | '/partners'
@@ -528,6 +539,7 @@ export interface FileRouteTypes {
     | '/_authenticated/distribution'
     | '/_authenticated/launch-control'
     | '/_authenticated/mainnet-canary'
+    | '/_authenticated/onboarding'
     | '/_authenticated/operations'
     | '/_authenticated/operatives'
     | '/_authenticated/partners'
@@ -706,6 +718,13 @@ declare module '@tanstack/react-router' {
       path: '/mainnet-canary'
       fullPath: '/mainnet-canary'
       preLoaderRoute: typeof AuthenticatedMainnetCanaryRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/_authenticated/onboarding': {
+      id: '/_authenticated/onboarding'
+      path: '/onboarding'
+      fullPath: '/onboarding'
+      preLoaderRoute: typeof AuthenticatedOnboardingRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
     '/_authenticated/operations': {
@@ -915,6 +934,7 @@ interface AuthenticatedRouteRouteChildren {
   AuthenticatedDistributionRoute: typeof AuthenticatedDistributionRoute
   AuthenticatedLaunchControlRoute: typeof AuthenticatedLaunchControlRoute
   AuthenticatedMainnetCanaryRoute: typeof AuthenticatedMainnetCanaryRoute
+  AuthenticatedOnboardingRoute: typeof AuthenticatedOnboardingRoute
   AuthenticatedOperationsRoute: typeof AuthenticatedOperationsRoute
   AuthenticatedOperativesRoute: typeof AuthenticatedOperativesRoute
   AuthenticatedPartnersRoute: typeof AuthenticatedPartnersRoute
@@ -936,6 +956,7 @@ const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
   AuthenticatedDistributionRoute: AuthenticatedDistributionRoute,
   AuthenticatedLaunchControlRoute: AuthenticatedLaunchControlRoute,
   AuthenticatedMainnetCanaryRoute: AuthenticatedMainnetCanaryRoute,
+  AuthenticatedOnboardingRoute: AuthenticatedOnboardingRoute,
   AuthenticatedOperationsRoute: AuthenticatedOperationsRoute,
   AuthenticatedOperativesRoute: AuthenticatedOperativesRoute,
   AuthenticatedPartnersRoute: AuthenticatedPartnersRoute,
@@ -1003,13 +1024,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
