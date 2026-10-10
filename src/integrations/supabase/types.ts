@@ -6078,6 +6078,7 @@ export type Database = {
           id: string
           name: string
           owner_id: string
+          project_goal: string | null
           slug: string | null
           updated_at: string
         }
@@ -6086,6 +6087,7 @@ export type Database = {
           id?: string
           name: string
           owner_id: string
+          project_goal?: string | null
           slug?: string | null
           updated_at?: string
         }
@@ -6094,6 +6096,7 @@ export type Database = {
           id?: string
           name?: string
           owner_id?: string
+          project_goal?: string | null
           slug?: string | null
           updated_at?: string
         }
