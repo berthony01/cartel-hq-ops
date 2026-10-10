@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { getProjectProfile } from "@/lib/project-profile";
 import { hasSchedule, listLaunches } from "@/lib/launch-control";
 import { groupIsOperational } from "@/lib/launch-readiness";
+import type { ProjectGoal } from "@/lib/workspace-goal";
 
 /**
  * Guided first-run setup: four steps, about ten minutes.
@@ -69,6 +70,8 @@ export type OnboardingStepState = {
 };
 
 export type OnboardingProgress = {
+  /** Step definitions shown for the current goal, aligned with `steps`. */
+  stepDefs: OnboardingStepDef[];
   steps: OnboardingStepState[];
   /** Index of the first incomplete working step, or the review step when done. */
   currentIndex: number;
@@ -106,6 +109,7 @@ export function deriveOnboardingLoadState(input: {
 
 export function useOnboardingProgress(
   workspaceId: string | null | undefined,
+  goal: ProjectGoal | null,
 ): OnboardingProgress {
   const profileQuery = useQuery({
     queryKey: ["onboarding-profile", workspaceId],
@@ -156,7 +160,7 @@ export function useOnboardingProgress(
   const launches = launchesQuery.data ?? [];
   const launchDone = launches.some((launch) => hasSchedule(launch));
 
-  const steps: OnboardingStepState[] = [
+  const allSteps: OnboardingStepState[] = [
     {
       key: "identity",
       complete: identityDone,
@@ -182,11 +186,27 @@ export function useOnboardingProgress(
     { key: "review", complete: false, detail: null },
   ];
 
-  const allComplete = identityDone && communityDone && launchDone;
-  const firstIncomplete = steps.findIndex(
-    (step) => step.key !== "review" && !step.complete,
-  );
-  const currentIndex = allComplete ? 3 : firstIncomplete === -1 ? 0 : firstIncomplete;
+  return { ...summarizeOnboardingSteps(allSteps, goal), isPending, isError };
+}
 
-  return { steps, currentIndex, allComplete, isPending, isError };
+/** Which guided steps a goal shows. NULL keeps the legacy four-step guide. */
+export function onboardingStepKeysForGoal(goal: ProjectGoal | null): OnboardingStepKey[] {
+  if (goal === "community") return ["identity", "community", "review"];
+  if (goal === "launch") return ["identity", "launch", "review"];
+  return ["identity", "community", "launch", "review"];
+}
+
+/** Pure: filters steps by goal and derives the current index / completion. */
+export function summarizeOnboardingSteps(
+  allSteps: OnboardingStepState[],
+  goal: ProjectGoal | null,
+): Omit<OnboardingProgress, "isPending" | "isError"> {
+  const keys = onboardingStepKeysForGoal(goal);
+  const stepDefs = keys.map((k) => ONBOARDING_STEPS.find((d) => d.key === k)!);
+  const steps = keys.map((k) => allSteps.find((s) => s.key === k)!);
+  const working = steps.filter((s) => s.key !== "review");
+  const allComplete = working.every((s) => s.complete);
+  const firstIncomplete = steps.findIndex((s) => s.key !== "review" && !s.complete);
+  const currentIndex = allComplete ? steps.length - 1 : firstIncomplete === -1 ? 0 : firstIncomplete;
+  return { stepDefs, steps, currentIndex, allComplete };
 }
