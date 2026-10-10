@@ -77,6 +77,33 @@ export type OnboardingProgress = {
   isError: boolean;
 };
 
+type QueryLoadFlags = { isPending: boolean; isError: boolean };
+
+/**
+ * A disabled TanStack query with no data reports `isPending: true` forever.
+ * The launches query is only enabled once a project profile exists, so it
+ * must only count toward pending/error while it is actually enabled —
+ * otherwise a first-run workspace without a profile never leaves loading.
+ */
+export function deriveOnboardingLoadState(input: {
+  profile: QueryLoadFlags;
+  groups: QueryLoadFlags;
+  launches: QueryLoadFlags;
+  launchesEnabled: boolean;
+}): QueryLoadFlags {
+  const { profile, groups, launches, launchesEnabled } = input;
+  return {
+    isPending:
+      profile.isPending ||
+      groups.isPending ||
+      (launchesEnabled && launches.isPending),
+    isError:
+      profile.isError ||
+      groups.isError ||
+      (launchesEnabled && launches.isError),
+  };
+}
+
 export function useOnboardingProgress(
   workspaceId: string | null | undefined,
 ): OnboardingProgress {
@@ -106,10 +133,12 @@ export function useOnboardingProgress(
     queryFn: () => listLaunches(workspaceId!, profileId!),
   });
 
-  const isPending =
-    profileQuery.isPending || groupsQuery.isPending || launchesQuery.isPending;
-  const isError =
-    profileQuery.isError || groupsQuery.isError || launchesQuery.isError;
+  const { isPending, isError } = deriveOnboardingLoadState({
+    profile: profileQuery,
+    groups: groupsQuery,
+    launches: launchesQuery,
+    launchesEnabled: !!workspaceId && !!profileId,
+  });
 
   const profileName = profileQuery.data?.project_name?.trim() ?? "";
   const identityDone = profileName.length > 0;
