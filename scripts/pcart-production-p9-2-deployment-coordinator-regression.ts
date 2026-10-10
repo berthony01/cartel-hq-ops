@@ -76,7 +76,7 @@ check("35", !/execution_enabled\s*=(?!=)|"execution_enabled":|set_launch_chain_p
 check("36", !/emergency_stop_engaged\s*[:=]\s*false/.test(P9CODE), "no emergency-stop mutation");
 check("37", !/launch_events|launch_notification_deliveries|sendMessage|telegram/i.test(P9CODE), "no notification surface");
 const newMigs = readdirSync("supabase/migrations").filter((f) => f > "20261007170000");
-const p92Migs = newMigs.filter((f) => !/P9\.3A: canonical prepared-action model/.test(read(`supabase/migrations/${f}`))); // explicitly allowlisted later phase
+const p92Migs = newMigs.filter((f) => { const s = read(`supabase/migrations/${f}`); return !/P9\.3A: canonical prepared-action model/.test(s) && !/P9\.3B: Treasury Safe/.test(s) && !/pcart_p93b_option1_sig_guard/.test(s); }); // explicitly allowlisted later phases (P9.3A, P9.3B)
 check("38", p92Migs.length === 1 && /P9\.2: bind the EXISTING canonical PCART execution permit/.test(read(`supabase/migrations/${p92Migs[0]}`)), "only the P9.2 permit-binding migration added");
 check("39", /CANONICAL_PCART_PROTECTED/.test(read("src/lib/chain-mainnet-canary.functions.ts")), "canary remains CANONICAL_PCART_PROTECTED");
 check("40", (LC.match(/<PcartMainnetSendPanel/g) ?? []).length === 1 && (LC.match(/<PcartOfficialRegistrationPanel/g) ?? []).length === 1 && (LC.match(/<PcartVerificationPanel/g) ?? []).length === 1, "each P5/P6/P7 panel mounted in one place only");
