@@ -27,6 +27,7 @@ import {
   LAUNCH_STATUS_HELP,
   LAUNCH_STATUS_LABELS,
   listLaunches,
+  listPendingScheduleCommunications,
   nextLaunchStatus,
   selectPrimaryProjectLaunch,
   toLaunchStatus,
@@ -211,6 +212,13 @@ function HqDashboard() {
     queryFn: () => fetchDropStatus(workspaceId!),
   });
 
+  const scheduleCommsQuery = useQuery({
+    queryKey: ["hq-schedule-comms", workspaceId],
+    enabled: !!workspaceId,
+    queryFn: () => listPendingScheduleCommunications(workspaceId!),
+  });
+  const pendingComms = scheduleCommsQuery.data ?? [];
+
   const packs = packsQuery.data?.rows ?? [];
   const recentPacks = packs.slice(0, 4);
   const packTotal = packsQuery.data?.total ?? 0;
@@ -240,12 +248,17 @@ function HqDashboard() {
   const dominantStage = nextStage ?? blockedStage;
   const journeyBlocked = !!journey && !journey.allComplete && nextStage === null && blockedStage !== null;
 
-  const attention: { id: string; text: string; to: "/distribution" | "/launch-control"; action: string }[] = [];
-  if (killSwitch) attention.push({ id: "kill", text: "Sticker Drops emergency pause is ON. No drops are being sent.", to: "/distribution", action: "Open Sticker Drops" });
-  if (autoPaused > 0) attention.push({ id: "auto-paused", text: `${autoPaused} drop schedule${autoPaused === 1 ? " was" : "s were"} auto-paused after repeated failures.`, to: "/distribution", action: "Review schedules" });
-  if (failedEvents > 0) attention.push({ id: "failed", text: `${failedEvents} recent drop event${failedEvents === 1 ? "" : "s"} did not send successfully.`, to: "/distribution", action: "Review activity" });
-  if (primaryLaunch && nextStatus === "LAUNCH_APPROACHING" && !scheduleSet) attention.push({ id: "schedule", text: "The launch cannot advance to Launch Approaching until a schedule is set.", to: "/launch-control", action: "Set schedule" });
-  if (primaryLaunch && status === "CONTRACT_PENDING" && !contractRegistered) attention.push({ id: "contract", text: "The launch is at Contract Pending and no official contract address is registered.", to: "/launch-control", action: "Register contract" });
+  type AttentionSeverity = "critical" | "warning";
+  const attention: { id: string; text: string; to: "/distribution" | "/launch-control"; action: string; severity: AttentionSeverity }[] = [];
+  if (killSwitch) attention.push({ id: "kill", text: "Sticker Drops emergency pause is ON. No drops are being sent.", to: "/distribution", action: "Open Sticker Drops", severity: "critical" });
+  if (pendingComms.length > 0) attention.push({ id: "schedule-comms", text: `${pendingComms.length} launch schedule change${pendingComms.length === 1 ? " has" : "s have"} not been communicated to watchers yet.`, to: "/launch-control", action: "Review & notify", severity: "critical" });
+  if (autoPaused > 0) attention.push({ id: "auto-paused", text: `${autoPaused} drop schedule${autoPaused === 1 ? " was" : "s were"} auto-paused after repeated failures.`, to: "/distribution", action: "Review schedules", severity: "warning" });
+  if (failedEvents > 0) attention.push({ id: "failed", text: `${failedEvents} recent drop event${failedEvents === 1 ? "" : "s"} did not send successfully.`, to: "/distribution", action: "Review activity", severity: "warning" });
+  if (primaryLaunch && nextStatus === "LAUNCH_APPROACHING" && !scheduleSet) attention.push({ id: "schedule", text: "The launch cannot advance to Launch Approaching until a schedule is set.", to: "/launch-control", action: "Set schedule", severity: "warning" });
+  if (primaryLaunch && status === "CONTRACT_PENDING" && !contractRegistered) attention.push({ id: "contract", text: "The launch is at Contract Pending and no official contract address is registered.", to: "/launch-control", action: "Register contract", severity: "warning" });
+  const criticalAttention = attention.filter((item) => item.severity === "critical");
+  const criticalCount = criticalAttention.length;
+  const sortedAttention = [...attention].sort((a, b) => (a.severity === b.severity ? 0 : a.severity === "critical" ? -1 : 1));
 
   const launchLoading = profileQuery.isPending || (!!profileId && launchesQuery.isPending);
   const launchUnavailable = profileQuery.isError || launchesQuery.isError;
@@ -316,6 +329,21 @@ function HqDashboard() {
               </Link>
             </Button>
           </div>
+          {criticalCount > 0 ? (
+            <div className="space-y-3" role="alert" aria-label="Critical items needing immediate action">
+              {criticalAttention.map((item) => (
+                <div key={item.id} className="rise-in flex flex-col gap-3 border border-signal/50 bg-signal/10 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <ShieldAlert className="mt-0.5 size-5 shrink-0 text-signal" aria-hidden="true" />
+                    <p className="text-sm font-semibold leading-relaxed text-foreground [overflow-wrap:anywhere]">{item.text}</p>
+                  </div>
+                  <Button asChild className="min-h-11 shrink-0">
+                    <Link to={item.to}>{item.action}<ArrowRight className="size-4" aria-hidden="true" /></Link>
+                  </Button>
+                </div>
+              ))}
+            </div>
+          ) : null}
           <section className="rise-in overflow-hidden border border-gold/40 bg-surface shadow-[var(--shadow-cartel),var(--glow-gold)]" aria-labelledby="active-launch-heading">
             {launchLoading ? (
               <div className="flex min-h-64 items-center gap-2 px-5 py-8 text-sm text-muted-foreground sm:px-7">
@@ -387,13 +415,13 @@ function HqDashboard() {
           </section>
 
           <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
-             <Section variant="surface" title="Launch readiness" description="Your path from project setup to launch." actions={journey ? <StatusBadge tone={journey.allComplete ? "green" : "gold"}>{journey.completedCount}/{journey.totalCount}</StatusBadge> : undefined} className="min-w-0" contentClassName="min-w-0">
+             <Section variant="surface" title="Launch readiness" description="The full checklist, in dependency order — the prioritized next action above is what matters most right now." actions={journey ? <StatusBadge tone={journey.allComplete ? "green" : "gold"}>{journey.completedCount}/{journey.totalCount}</StatusBadge> : undefined} className="min-w-0" contentClassName="min-w-0">
               <ProjectJourneyPanel workspaceId={workspaceId} />
             </Section>
             <div className="grid content-start gap-4">
               <Section variant="surface" title="Operator focus" leading={<Activity className="size-4" aria-hidden="true" />} contentClassName="space-y-3">
-                <p className="text-sm font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">{attention.length > 0 ? `${attention.length} operational ${attention.length === 1 ? "item needs" : "items need"} review.` : journey?.allComplete ? "Launch foundation is ready." : dominantStage ? dominantStage.title : "Keep the project journey moving."}</p>
-                 <p className="text-xs leading-relaxed text-muted-foreground">{attention.length > 0 ? "Resolve operational warnings before routine work. The action above remains the authoritative next project step." : journeyBlocked && blockedStage ? journeyStageGuidance(blockedStage) : journey?.nextAction.explanation ?? "Live project state will guide the next action when available."}</p>
+                <p className="text-sm font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">{criticalCount > 0 ? `${criticalCount} critical ${criticalCount === 1 ? "item needs" : "items need"} immediate action.` : attention.length > 0 ? `${attention.length} operational ${attention.length === 1 ? "item needs" : "items need"} review.` : journey?.allComplete ? "Launch foundation is ready." : dominantStage ? dominantStage.title : "Keep the project journey moving."}</p>
+                 <p className="text-xs leading-relaxed text-muted-foreground">{criticalCount > 0 ? "Critical items affect your watchers or live operations — resolve them first, then follow the prioritized next action." : attention.length > 0 ? "Resolve operational warnings before routine work. The prioritized action is the authoritative next project step." : journeyBlocked && blockedStage ? journeyStageGuidance(blockedStage) : journey?.nextAction.explanation ?? "Live project state will guide the next action when available."}</p>
               </Section>
               <Section variant="surface" title="Live operations" leading={<Clock3 className="size-4" aria-hidden="true" />} contentClassName="divide-y divide-border-subtle">
                  <InlineRow leading={<Users className="size-4" aria-hidden="true" />} title="Communities" subtitle={communityDetail} trailing={<StatusBadge tone={!telegramQuery.isPending && !telegramQuery.isError && healthyGroups > 0 ? "green" : "muted"}>{communityValue}</StatusBadge>} />
@@ -405,7 +433,7 @@ function HqDashboard() {
 
           {attention.length > 0 ? (
             <Section variant="surface" className="rise-in border-signal/40" title="Needs attention" leading={<ShieldAlert className="size-4 text-signal" aria-hidden="true" />} actions={<StatusBadge tone="red">{attention.length}</StatusBadge>} contentClassName="space-y-1">
-              {attention.map((item) => <InlineRow key={item.id} leading={<AlertTriangle className="size-4" aria-hidden="true" />} title={item.text} trailing={<Button asChild size="sm" variant="outline" className="min-h-11 shrink-0"><Link to={item.to}>{item.action}</Link></Button>} />)}
+              {sortedAttention.map((item) => <InlineRow key={item.id} leading={<AlertTriangle className="size-4 text-signal" aria-hidden="true" />} title={item.text} trailing={<Button asChild size="sm" variant="outline" className="min-h-11 shrink-0"><Link to={item.to}>{item.action}</Link></Button>} />)}
             </Section>
           ) : null}
 
