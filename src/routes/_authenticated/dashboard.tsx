@@ -246,6 +246,9 @@ function HqDashboard() {
   const contractRegistered = Boolean(primaryLaunch?.official_contract_address);
   const scheduleSet = primaryLaunch ? hasSchedule(primaryLaunch) : false;
   const journey = journeyQuery.data ?? null;
+  // Display-only: community goal with no real launch uses community wording; any
+  // real primary launch, unset goal, or unavailable goal keeps legacy launch copy.
+  const communityOnly = goalQuery.data === "community" && !!journey && !journey.primaryLaunchId;
   const nextStage = journey?.nextAction.stage ?? null;
   const blockedStage = journey?.stages.find((stage) => stage.status !== "complete") ?? null;
   const dominantStage = nextStage ?? blockedStage;
