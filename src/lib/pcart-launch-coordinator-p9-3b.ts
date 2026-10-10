@@ -2,11 +2,12 @@
  * PCART P9.3B — Treasury Safe 2-of-3 signatures + permit-bound pre-auction execution (pure, no I/O).
  *
  * Reuses the P8B builder (buildPreAuctionSafeTx + safeTxHash) to reconstruct the exact bound SafeTx.
- * Signature policy:
- *  - plain EOA owners (eth_getCode = 0x): standard 65-byte ECDSA (v 27/28) over the exact safeTxHash only;
- *  - EIP-7702 delegated EOA owners (code = 0xef0100 ‖ delegate): accepted ONLY with the same standard ECDSA
- *    signature recovering exactly that owner, and only after the Safe's own checkSignatures accepts the set;
- *  - any other contract owner, ERC-1271 / ERC-6492 / wrapped smart-account signature: rejected.
+ * Signer policy (owner decision "Option 1"):
+ *  - The Treasury Safe stays 2-of-3 with all three owners; nothing about the Safe is changed.
+ *  - Cartel HQ eligibility is derived from the canonical owner set + LIVE code classification: only owners with
+ *    eth_getCode = 0x are eligible, and there must be EXACTLY two of them. Any other shape fails closed until re-audited.
+ *  - EIP-7702 delegated owners, contract owners, ERC-1271 / ERC-6492 / wrapped signatures are never accepted.
+ *  - Both eligible owners' standard 65-byte ECDSA (v 27/28) signatures over the exact safeTxHash are required.
  * No wallet, RPC, DB or signing here.
  */
 import { concat, hashTypedData, keccak256, recoverAddress, stringToHex, toEventSelector, type Hex } from "viem";
@@ -42,6 +43,18 @@ export function classifyOwnerCode(code: string | null | undefined): OwnerCodeKin
   if (/^0xef0100[0-9a-f]{40}$/.test(c)) return "EIP7702_DELEGATED";
   return "CONTRACT";
 }
+
+// ------------------------------------------------------------ Option 1 eligible signer set (live-derived)
+export type EligibleSigners = { ok: true; signers: [string, string] } | { ok: false; reason: "OWNER_CODE_UNKNOWN" | "ELIGIBLE_SIGNER_SET_CHANGED" };
+/** Exactly two canonical owners with empty code; anything else (unknown read, 1 or 3 plain owners) fails closed. */
+export function eligibleSigners(ownerCodes: Record<string, string | null | undefined>): EligibleSigners {
+  const kinds = CANONICAL_OWNERS.map((o) => ({ o, k: classifyOwnerCode(ownerCodes[o]) }));
+  if (kinds.some((x) => x.k === "UNKNOWN")) return { ok: false, reason: "OWNER_CODE_UNKNOWN" };
+  const eoa = kinds.filter((x) => x.k === "EOA").map((x) => x.o).sort((a, b) => (BigInt(a) < BigInt(b) ? -1 : 1));
+  if (eoa.length !== 2) return { ok: false, reason: "ELIGIBLE_SIGNER_SET_CHANGED" };
+  return { ok: true, signers: [eoa[0]!, eoa[1]!] };
+}
+export const eligibleSetFingerprint = (signers: readonly string[]) => keccak256(stringToHex(`pcart-p9-3b-eligible|${[...signers].map(low).sort().join("|")}`));
 
 // ------------------------------------------------------------ exact bound SafeTx (rebuilt via P8B)
 export type BoundPreAuction = {
@@ -104,15 +117,17 @@ export function safeTypedDataV4Json(safe: `0x${string}`, tx: P8bSafeTx, chainId 
 export const typedDataParity = (safe: `0x${string}`, tx: P8bSafeTx) => safeTypedDataHash(safe, tx) === safeTxHash(safe, tx);
 
 // ------------------------------------------------------------ signature validation
-export type SigReject = "MALFORMED" | "SMART_ACCOUNT_SIGNATURE" | "ETH_SIGN_NOT_SUPPORTED" | "NOT_OWNER" | "SIGNER_MISMATCH" | "CONTRACT_OWNER_NOT_SUPPORTED" | "OWNER_CODE_UNKNOWN" | "WRONG_HASH";
-export type SigCheck = { ok: true; recovered: string; normalized: Hex; ownerKind: "EOA" | "EIP7702_DELEGATED" } | { ok: false; reason: SigReject };
+export type SigReject = "DELEGATED_OWNER_NOT_ELIGIBLE" | "SIGNER_NOT_ELIGIBLE" | "MALFORMED" | "SMART_ACCOUNT_SIGNATURE" | "ETH_SIGN_NOT_SUPPORTED" | "NOT_OWNER" | "SIGNER_MISMATCH" | "CONTRACT_OWNER_NOT_SUPPORTED" | "OWNER_CODE_UNKNOWN" | "WRONG_HASH";
+export type SigCheck = { ok: true; recovered: string; normalized: Hex; ownerKind: "EOA" } | { ok: false; reason: SigReject };
 
-export async function validateOwnerSignature(i: { safeTxHash: string; expectedSafeTxHash: string; signature: string; claimedSigner: string; ownerCode: string | null | undefined }): Promise<SigCheck> {
+export async function validateOwnerSignature(i: { safeTxHash: string; expectedSafeTxHash: string; signature: string; claimedSigner: string; ownerCode: string | null | undefined; eligible: readonly string[] }): Promise<SigCheck> {
   if (low(i.safeTxHash) !== low(i.expectedSafeTxHash) || !/^0x[0-9a-f]{64}$/.test(low(i.safeTxHash))) return { ok: false, reason: "WRONG_HASH" };
   if (!isCanonicalOwner(i.claimedSigner)) return { ok: false, reason: "NOT_OWNER" };
   const kind = classifyOwnerCode(i.ownerCode);
   if (kind === "UNKNOWN") return { ok: false, reason: "OWNER_CODE_UNKNOWN" };
   if (kind === "CONTRACT") return { ok: false, reason: "CONTRACT_OWNER_NOT_SUPPORTED" };
+  if (kind === "EIP7702_DELEGATED") return { ok: false, reason: "DELEGATED_OWNER_NOT_ELIGIBLE" };
+  if (i.eligible.length !== 2 || !i.eligible.map(low).includes(low(i.claimedSigner))) return { ok: false, reason: "SIGNER_NOT_ELIGIBLE" };
   const s = low(i.signature);
   if (!/^0x[0-9a-f]*$/.test(s)) return { ok: false, reason: "MALFORMED" };
   // Anything that is not exactly r(32)‖s(32)‖v(1) is a wrapped/contract-style (ERC-1271 / ERC-6492 / smart account) signature.
@@ -131,11 +146,13 @@ export async function validateOwnerSignature(i: { safeTxHash: string; expectedSa
 export type StoredSig = { signerAddress: string; signature: string; safeTxHash: string; status: string; controlRevision: number; ownerKind: string };
 
 /** Safe requires signatures concatenated in strictly ascending owner-address order. Exactly 2 distinct owners. */
-export function assembleSafeSignatures(sigs: Pick<StoredSig, "signerAddress" | "signature">[]): { ok: true; signatures: Hex; signers: string[] } | { ok: false; reason: "NEED_TWO" | "DUPLICATE_SIGNER" | "NOT_OWNER" } {
+export function assembleSafeSignatures(sigs: Pick<StoredSig, "signerAddress" | "signature">[], eligible: readonly string[]): { ok: true; signatures: Hex; signers: string[] } | { ok: false; reason: "NEED_TWO" | "DUPLICATE_SIGNER" | "NOT_OWNER" | "SIGNER_NOT_ELIGIBLE" } {
   if (sigs.length !== 2) return { ok: false, reason: "NEED_TWO" };
   const s = [...sigs].map((x) => ({ a: low(x.signerAddress), sig: low(x.signature) as Hex })).sort((x, y) => (BigInt(x.a) < BigInt(y.a) ? -1 : 1));
-  if (s[0].a === s[1].a) return { ok: false, reason: "DUPLICATE_SIGNER" };
+  if (s[0]!.a === s[1]!.a) return { ok: false, reason: "DUPLICATE_SIGNER" };
   if (!s.every((x) => isCanonicalOwner(x.a))) return { ok: false, reason: "NOT_OWNER" };
+  const el = eligible.map(low);
+  if (el.length !== 2 || !s.every((x) => el.includes(x.a))) return { ok: false, reason: "SIGNER_NOT_ELIGIBLE" };
   return { ok: true, signatures: concat(s.map((x) => x.sig)), signers: s.map((x) => x.a) };
 }
 export const signatureSetFingerprint = (sigs: Pick<StoredSig, "signerAddress" | "signature">[]) =>
@@ -152,11 +169,13 @@ export type P93bLive = {
   nowMs: number; headBlock: bigint | null; msPerBlock: number | null;
   control: { executionEnabled: boolean; emergencyStopEngaged: boolean; revision: number } | null;
   safeNonce: number | null; staleReasons: string[]; uncertainTransaction: boolean;
+  /** Option 1: live-derived eligible plain-EOA signers; null = set not exactly two plain owners → fail closed. */
+  eligible: readonly string[] | null;
 };
 export type P93bGateBlock =
   | "ACTION_NOT_SIGNABLE" | "ACTION_NOT_READY" | "ACTION_STALE" | "CONTROLS_NOT_PROTECTED" | "CONTROL_REVISION_CHANGED" | "SAFE_NONCE_CHANGED"
   | "START_BLOCK_TOO_CLOSE" | "NO_FRESH_HEAD" | "UNCERTAIN_TRANSACTION" | "SIGNATURES_INCOMPLETE" | "SAFE_VALIDATION_FAILED" | "TX_ALREADY_EXISTS"
-  | "NO_PERMIT" | "PERMIT_EXPIRED" | "PERMIT_USED";
+  | "NO_PERMIT" | "PERMIT_EXPIRED" | "PERMIT_USED" | "ELIGIBLE_SIGNER_SET_CHANGED" | "SIGNATURE_FROM_INELIGIBLE_OWNER";
 
 export function startSafelyInFuture(startBlock: string, headBlock: bigint | null, msPerBlock: number | null): boolean {
   if (headBlock == null || !msPerBlock || msPerBlock <= 0) return false;
@@ -170,6 +189,7 @@ function common(a: { status: string; safeNonce: number; authoritativeStartBlock:
   if (l.staleReasons.length) b.push("ACTION_STALE");
   if (l.safeNonce === null || l.safeNonce !== a.safeNonce) b.push("SAFE_NONCE_CHANGED");
   if (l.uncertainTransaction) b.push("UNCERTAIN_TRANSACTION");
+  if (!l.eligible || l.eligible.length !== 2) b.push("ELIGIBLE_SIGNER_SET_CHANGED");
   if (l.headBlock == null || !l.msPerBlock) b.push("NO_FRESH_HEAD");
   else if (!startSafelyInFuture(a.authoritativeStartBlock, l.headBlock, l.msPerBlock)) b.push("START_BLOCK_TOO_CLOSE");
   return b;
@@ -177,6 +197,7 @@ function common(a: { status: string; safeNonce: number; authoritativeStartBlock:
 export function signingGate(a: { status: string; safeNonce: number; authoritativeStartBlock: string }, l: P93bLive, usable: StoredSig[]): P93bGateBlock[] {
   const b = common(a, l, usable[0]?.controlRevision ?? null);
   if (a.status !== "PREPARED" && a.status !== "AWAITING_SIGNATURES") b.push("ACTION_NOT_SIGNABLE");
+  if (l.eligible && usable.some((x) => !l.eligible!.map(low).includes(low(x.signerAddress)))) b.push("SIGNATURE_FROM_INELIGIBLE_OWNER");
   return [...new Set(b)];
 }
 export function executionGate(
@@ -187,7 +208,7 @@ export function executionGate(
   const b = common(a, l, usable[0]?.controlRevision ?? null);
   if (a.status !== "READY") b.push("ACTION_NOT_READY");
   if (a.executionTxHash) b.push("TX_ALREADY_EXISTS");
-  if (usable.length !== 2 || !assembleSafeSignatures(usable).ok) b.push("SIGNATURES_INCOMPLETE");
+  if (usable.length !== 2 || !l.eligible || !assembleSafeSignatures(usable, l.eligible).ok) b.push("SIGNATURES_INCOMPLETE");
   if (safeValidated !== true) b.push("SAFE_VALIDATION_FAILED");
   if (!permit) b.push("NO_PERMIT");
   else {
@@ -203,7 +224,7 @@ export type P93bPermitBinding = {
   bindingVersion: typeof P9_3B_BINDING_VERSION; actionType: typeof P9_3B_ACTION_TYPE; actionId: string; launchId: string; chainId: number;
   officialTokenAddress: string; officialTokenCodeHash: string; p8aReviewId: string; p8aManifestFingerprint: string; p8bReviewId: string; p8bManifestFingerprint: string;
   dependencyAttestationFingerprint: string; safeAddress: string; safeOwnersFingerprint: string; safeThreshold: 2; safeNonce: number;
-  safeTxHash: string; callBatchFingerprint: string; signer1: string; signer2: string; signatureSetFingerprint: string; controlRevision: number;
+  safeTxHash: string; callBatchFingerprint: string; signer1: string; signer2: string; eligibleSignerSetFingerprint: string; signatureSetFingerprint: string; controlRevision: number;
 };
 export const permitBindingFingerprint = (b: P93bPermitBinding) => keccak256(stringToHex(`pcart-p9-3b-permit|${p8bCanonicalJson(b)}`));
 
@@ -236,7 +257,7 @@ export function verifyPreAuctionExecution(i: {
   if (fail) r.push("SAFE_EXECUTION_FAILURE_EVENT");
   if (i.nonceAfter === null || i.nonceAfter !== i.boundNonce + 1) r.push("SAFE_NONCE_NOT_ADVANCED_EXACTLY_ONCE");
   const created = rc.logs.filter((l) => low(l.address) === LBP_STRATEGY_ADDRESS && low(l.topics[0]) === low(LBP_INITIALIZER_CREATED_TOPIC));
-  if (created.length !== 1 || !created[0].topics[1]) r.push("AUCTION_CREATION_EVENT_MISSING");
+  if (created.length !== 1 || !created[0]!.topics[1]) r.push("AUCTION_CREATION_EVENT_MISSING");
   const auctionAddress = created[0]?.topics[1] ? `0x${low(created[0].topics[1]).slice(26)}` : "";
   const a = i.auction;
   if (!a || !a.ok) r.push("AUCTION_UNREADABLE");
