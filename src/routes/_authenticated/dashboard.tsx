@@ -61,6 +61,7 @@ import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { CreateWorkspaceDialog } from "@/components/cartel/WorkspaceSwitcher";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useWorkspaceGoal } from "@/lib/workspace-goal";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
@@ -156,6 +157,7 @@ function HqDashboard() {
   const { workspace, workspaceId, loading: workspaceLoading } = useWorkspace();
   const [createOpen, setCreateOpen] = useState(false);
   const journeyQuery = useProjectJourney(workspaceId);
+  const goalQuery = useWorkspaceGoal(workspaceId);
 
   const packsQuery = useQuery({
     queryKey: ["recent-packs", workspaceId],
@@ -244,6 +246,9 @@ function HqDashboard() {
   const contractRegistered = Boolean(primaryLaunch?.official_contract_address);
   const scheduleSet = primaryLaunch ? hasSchedule(primaryLaunch) : false;
   const journey = journeyQuery.data ?? null;
+  // Display-only: community goal with no real launch uses community wording; any
+  // real primary launch, unset goal, or unavailable goal keeps legacy launch copy.
+  const communityOnly = goalQuery.data === "community" && !!journey && !journey.primaryLaunchId;
   const nextStage = journey?.nextAction.stage ?? null;
   const blockedStage = journey?.stages.find((stage) => stage.status !== "complete") ?? null;
   const dominantStage = nextStage ?? blockedStage;
@@ -447,7 +452,7 @@ function HqDashboard() {
                 </div>
                 <div className="border-t border-gold/25 bg-surface-raised/55 p-5 sm:p-6 lg:border-l lg:border-t-0">
                   <div className="flex items-center gap-2 text-gold"><CircleDot className="size-4" aria-hidden="true" /><p className="type-meta">Next required action</p></div>
-                   {journeyQuery.isPending ? <p className="mt-4 text-sm text-muted-foreground">Checking project journey…</p> : journeyQuery.isError ? <div className="mt-4"><p className="text-sm text-muted-foreground">The next action is unavailable right now.</p><Button size="sm" variant="outline" className="mt-3 min-h-11" onClick={() => void journeyQuery.refetch()}><RefreshCw className="size-4" aria-hidden="true" />Retry</Button></div> : journey ? <><h3 className="mt-4 text-xl font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">{journeyBlocked && blockedStage ? blockedStage.title : journey.nextAction.headline}</h3><p className="mt-2 text-xs leading-relaxed text-muted-foreground">{journeyBlocked && blockedStage ? journeyStageGuidance(blockedStage) : journey.nextAction.explanation}</p>{dominantStage ? <JourneyLink stage={dominantStage} primaryLaunchId={journey.primaryLaunchId} label={journeyBlocked ? (dominantStage.reviewLabel ?? `Review ${dominantStage.title}`) : dominantStage.actionLabel} linkClassName={cn(buttonVariants({ variant: journeyBlocked ? "outline" : "default" }), "mt-5 h-auto min-h-11 w-full min-w-0 whitespace-normal text-center")} /> : journey.allComplete ? <Button asChild variant="outline" className="mt-5 min-h-11 w-full"><Link to="/launch-control">Review Launch Control<ArrowRight className="size-4" aria-hidden="true" /></Link></Button> : null}</> : null}
+                   {journeyQuery.isPending ? <p className="mt-4 text-sm text-muted-foreground">Checking project journey…</p> : journeyQuery.isError ? <div className="mt-4"><p className="text-sm text-muted-foreground">The next action is unavailable right now.</p><Button size="sm" variant="outline" className="mt-3 min-h-11" onClick={() => void journeyQuery.refetch()}><RefreshCw className="size-4" aria-hidden="true" />Retry</Button></div> : journey ? <><h3 className="mt-4 text-xl font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">{journeyBlocked && blockedStage ? blockedStage.title : journey.nextAction.headline}</h3><p className="mt-2 text-xs leading-relaxed text-muted-foreground">{journeyBlocked && blockedStage ? journeyStageGuidance(blockedStage) : journey.nextAction.explanation}</p>{dominantStage ? <JourneyLink stage={dominantStage} primaryLaunchId={journey.primaryLaunchId} label={journeyBlocked ? (dominantStage.reviewLabel ?? `Review ${dominantStage.title}`) : dominantStage.actionLabel} linkClassName={cn(buttonVariants({ variant: journeyBlocked ? "outline" : "default" }), "mt-5 h-auto min-h-11 w-full min-w-0 whitespace-normal text-center")} /> : journey.allComplete ? <Button asChild variant="outline" className="mt-5 min-h-11 w-full"><Link to={communityOnly ? "/telegram" : "/launch-control"}>{communityOnly ? "Open Community Command" : "Review Launch Control"}<ArrowRight className="size-4" aria-hidden="true" /></Link></Button> : null}</> : null}
                 </div>
               </div>
             )}
@@ -460,12 +465,12 @@ function HqDashboard() {
           </section>
 
           <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
-             <Section variant="surface" title="Launch readiness" description="The full checklist, in dependency order — the prioritized next action above is what matters most right now." actions={journey ? <StatusBadge tone={journey.allComplete ? "green" : "gold"}>{journey.completedCount}/{journey.totalCount}</StatusBadge> : undefined} className="min-w-0" contentClassName="min-w-0">
+             <Section variant="surface" title={communityOnly ? "Community readiness" : "Launch readiness"} description={communityOnly ? "Your project setup checklist, in order — the prioritized next action above is what matters most right now." : "The full checklist, in dependency order — the prioritized next action above is what matters most right now."} actions={journey ? <StatusBadge tone={journey.allComplete ? "green" : "gold"}>{journey.completedCount}/{journey.totalCount}</StatusBadge> : undefined} className="min-w-0" contentClassName="min-w-0">
               <ProjectJourneyPanel workspaceId={workspaceId} />
             </Section>
             <div className="grid content-start gap-4">
               <Section variant="surface" title="Operator focus" leading={<Activity className="size-4" aria-hidden="true" />} contentClassName="space-y-3">
-                <p className="text-sm font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">{criticalCount > 0 ? `${criticalCount} critical ${criticalCount === 1 ? "item needs" : "items need"} immediate action.` : attention.length > 0 ? `${attention.length} operational ${attention.length === 1 ? "item needs" : "items need"} review.` : journey?.allComplete ? "Launch foundation is ready." : dominantStage ? dominantStage.title : "Keep the project journey moving."}</p>
+                <p className="text-sm font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">{criticalCount > 0 ? `${criticalCount} critical ${criticalCount === 1 ? "item needs" : "items need"} immediate action.` : attention.length > 0 ? `${attention.length} operational ${attention.length === 1 ? "item needs" : "items need"} review.` : journey?.allComplete ? (communityOnly ? "Community foundation is ready." : "Launch foundation is ready.") : dominantStage ? dominantStage.title : "Keep the project journey moving."}</p>
                  <p className="text-xs leading-relaxed text-muted-foreground">{criticalCount > 0 ? "Critical items affect your watchers or live operations — resolve them first, then follow the prioritized next action." : attention.length > 0 ? "Resolve operational warnings before routine work. The prioritized action is the authoritative next project step." : journeyBlocked && blockedStage ? journeyStageGuidance(blockedStage) : journey?.nextAction.explanation ?? "Live project state will guide the next action when available."}</p>
               </Section>
               <Section variant="surface" title="Live operations" leading={<Clock3 className="size-4" aria-hidden="true" />} contentClassName="divide-y divide-border-subtle">
