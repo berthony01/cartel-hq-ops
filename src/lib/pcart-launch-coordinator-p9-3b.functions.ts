@@ -12,7 +12,7 @@ import { P8B_REAL_TREASURY_SAFE } from "@/lib/pcart-auction-execution-p8b";
 import { dependencyFingerprintP93, effectiveActionStatus, ownersFingerprint, type P93CurrentFacts } from "@/lib/pcart-launch-coordinator-p9-3";
 import { loadFacts, mapAction } from "@/lib/pcart-launch-coordinator-p9-3.functions";
 import {
-  assembleSafeSignatures, CANONICAL_OWNERS, classifyOwnerCode, executionGate, permitBindingFingerprint, rebuildBoundPreAuction, safeTypedDataV4Json,
+  assembleSafeSignatures, CANONICAL_OWNERS, classifyOwnerCode, eligibleSetFingerprint, eligibleSigners, executionGate, permitBindingFingerprint, rebuildBoundPreAuction, safeTypedDataV4Json,
   signatureSetFingerprint, signingGate, usableSignatures, validateOwnerSignature, verifyPreAuctionExecution, P9_3B_ACTION_TYPE, P9_3B_BINDING_VERSION,
   P9_3B_SMART_ACCOUNT_COPY, type P93bLive, type P93bPermitBinding, type StoredSig,
 } from "@/lib/pcart-launch-coordinator-p9-3b";
@@ -27,6 +27,8 @@ const SAFE_EXEC_ABI = parseAbi(["function execTransaction(address to, uint256 va
 const REJECT_COPY: Record<string, string> = {
   SMART_ACCOUNT_SIGNATURE: P9_3B_SMART_ACCOUNT_COPY,
   ETH_SIGN_NOT_SUPPORTED: "This wallet signed a plain message instead of the Safe transaction. Use another Treasury signer.",
+  DELEGATED_OWNER_NOT_ELIGIBLE: "This Treasury owner uses a delegated (EIP-7702) account. It stays a Safe owner but cannot sign launch transactions in Cartel HQ. Use one of the two eligible plain-wallet signers.",
+  SIGNER_NOT_ELIGIBLE: "This wallet is not one of the two eligible launch signers.",
   CONTRACT_OWNER_NOT_SUPPORTED: "This Treasury owner is a contract account. P9.3B cannot accept its signature.",
   NOT_OWNER: "This wallet is not one of the three Treasury Safe owners.",
   SIGNER_MISMATCH: "The signature does not belong to the connected wallet.",
@@ -58,24 +60,27 @@ async function attest(ctx: Ctx, actionId: string) {
   const eff = effectiveActionStatus(action, current);
   const control = ctl.data ? { executionEnabled: ctl.data.execution_enabled === true, emergencyStopEngaged: ctl.data.emergency_stop_engaged !== false, revision: Number(ctl.data.revision) } : null;
   const sigs: StoredSig[] = ((sigRows.data ?? []) as any[]).map((s) => ({ signerAddress: s.signer_address, signature: s.signature, safeTxHash: s.safe_tx_hash, status: s.status, controlRevision: Number(s.control_revision), ownerKind: s.owner_account_kind }));
+  const el = eligibleSigners(ownerCodes);
+  const eligible = el.ok ? el.signers : null;
   const usable = usableSignatures(sigs, { safeTxHash: action.safeTxHash, controlRevision: control?.revision ?? null });
   const liveGate: P93bLive = {
     nowMs: Date.now(), headBlock: live.head?.block ?? null, msPerBlock: live.head?.msPerBlock ?? null, control,
-    safeNonce: live.safe?.nonce ?? null, staleReasons: eff.reasons, uncertainTransaction: f.uncertain,
+    safeNonce: live.safe?.nonce ?? null, staleReasons: eff.reasons, uncertainTransaction: f.uncertain, eligible,
   };
   const rebuilt = rebuildBoundPreAuction({ ...action, authoritativeStartBlock: action.authoritativeStartBlock!, endBlock: action.endBlock!, permit2Expiration: String(row.permit2_expiration),
     promotionStartAt: action.promotionStartAt!, intendedAuctionStartAt: action.intendedAuctionStartAt!, callBatchFingerprint: row.call_batch_fingerprint, safeTxDataKeccak: row.safe_tx_data_keccak,
     safeTxTarget: row.safe_tx_target, safeTxOperation: Number(row.safe_tx_operation) });
   const p = (permitRows.data ?? [])[0];
   const permit = p ? { id: String(p.id), expiresAtMs: Date.parse(p.expires_at), consumed: !!p.consumed_at, cancelled: !!p.cancelled_at, controlRevision: Number(p.control_revision) } : null;
-  return { row, action, eff, control, sigs, usable, liveGate, rebuilt, ownerCodes, permit, f, depFp, live };
+  return { row, action, eff, control, sigs, usable, eligible, liveGate, rebuilt, ownerCodes, permit, f, depFp, live };
 }
 type Att = NonNullable<Awaited<ReturnType<typeof attest>>>;
 const statusOf = (a: Att) => (a.eff.status === "STALE" ? "STALE" : a.action.status);
 const gateAction = (a: Att) => ({ status: statusOf(a), safeNonce: a.action.safeNonce, authoritativeStartBlock: a.action.authoritativeStartBlock!, executionTxHash: a.row.execution_tx_hash ?? null });
 
 async function safeValidation(a: Att): Promise<boolean | null> {
-  const asm = assembleSafeSignatures(a.usable);
+  if (!a.eligible) return null;
+  const asm = assembleSafeSignatures(a.usable, a.eligible);
   if (!asm.ok) return null;
   const { safeAcceptsSignatures } = await import("@/lib/pcart-launch-coordinator-p9-readers.server");
   return safeAcceptsSignatures(a.action.safeTxHash as `0x${string}`, asm.signatures);
@@ -97,7 +102,8 @@ export const getPcartP9_3bSafeStatus = createServerFn({ method: "POST" })
       .filter((b) => b !== "NO_PERMIT");
     return {
       ok: true as const, status: statusOf(a), staleReasons: a.eff.reasons, safeTxHash: a.action.safeTxHash, txHash: a.row.execution_tx_hash ?? null, auctionAddress: a.row.auction_address ?? null,
-      owners: CANONICAL_OWNERS.map((o) => ({ address: o, kind: classifyOwnerCode(a.ownerCodes[o]), signed: a.usable.some((s) => s.signerAddress === o) })),
+      eligibleSigners: a.eligible ?? [],
+      owners: CANONICAL_OWNERS.map((o) => ({ address: o, kind: classifyOwnerCode(a.ownerCodes[o]), eligible: !!a.eligible?.includes(o), signed: a.usable.some((s) => s.signerAddress === o) })),
       approvals: a.usable.length, safeValidated: validated,
       canSign: signBlocks.length === 0 && a.usable.length < 2, signBlocks: [...new Set(signBlocks)],
       canExecute: execBlocks.length === 0 && a.usable.length === 2, execBlocks,
@@ -123,17 +129,16 @@ export const submitPcartSafeSignature = createServerFn({ method: "POST" })
     const blocks = signingGate(gateAction(a), a.liveGate, a.usable);
     if (!a.rebuilt.ok) blocks.push("ACTION_STALE");
     if (blocks.length) return { ok: false as const, reason: blocks.join(", "), message: "Signing is not allowed right now." };
+    if (!a.eligible) return { ok: false as const, reason: "ELIGIBLE_SIGNER_SET_CHANGED", message: "The eligible launch signer set changed on chain. Signing is blocked until re-audited." };
     if (a.usable.some((s) => s.signerAddress === data.signer)) return { ok: false as const, reason: "DUPLICATE_SIGNER", message: "This owner already signed. Use a different Treasury signer." };
-    const v = await validateOwnerSignature({ safeTxHash: a.rebuilt.ok ? a.rebuilt.safeTxHash : "", expectedSafeTxHash: a.action.safeTxHash, signature: data.signature, claimedSigner: data.signer, ownerCode: a.ownerCodes[data.signer] });
+    const v = await validateOwnerSignature({ safeTxHash: a.rebuilt.ok ? a.rebuilt.safeTxHash : "", expectedSafeTxHash: a.action.safeTxHash, signature: data.signature, claimedSigner: data.signer, ownerCode: a.ownerCodes[data.signer], eligible: a.eligible });
     if (!v.ok) return { ok: false as const, reason: v.reason, message: REJECT_COPY[v.reason] ?? "Signature rejected." };
-    // For a delegated (EIP-7702) owner, or as the second signature, the Safe itself must accept the set before storing.
+    // As the second signature, the Safe itself must accept the exact set (read-only checkSignatures) before storing.
     const prospective = [...a.usable, { signerAddress: v.recovered, signature: v.normalized, safeTxHash: a.action.safeTxHash, status: "VALID", controlRevision: a.control!.revision, ownerKind: v.ownerKind }];
-    if (prospective.length === 2 || v.ownerKind === "EIP7702_DELEGATED") {
+    if (prospective.length === 2) {
       const { safeAcceptsSignatures } = await import("@/lib/pcart-launch-coordinator-p9-readers.server");
-      if (prospective.length === 2) {
-        const asm = assembleSafeSignatures(prospective);
-        if (!asm.ok || (await safeAcceptsSignatures(a.action.safeTxHash as `0x${string}`, asm.signatures)) !== true) return { ok: false as const, reason: "SAFE_VALIDATION_FAILED", message: "The Treasury Safe did not accept this signature set. Use another Treasury signer." };
-      }
+      const asm = assembleSafeSignatures(prospective, a.eligible);
+      if (!asm.ok || (await safeAcceptsSignatures(a.action.safeTxHash as `0x${string}`, asm.signatures)) !== true) return { ok: false as const, reason: "SAFE_VALIDATION_FAILED", message: "The Treasury Safe did not accept this signature set." };
     }
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const { data: res, error } = await (supabaseAdmin as any).rpc("record_canonical_pcart_safe_signature", {
@@ -144,7 +149,8 @@ export const submitPcartSafeSignature = createServerFn({ method: "POST" })
   });
 
 function bindingFor(a: Att): { binding: P93bPermitBinding; sigsetFp: string } | null {
-  const asm = assembleSafeSignatures(a.usable);
+  if (!a.eligible) return null;
+  const asm = assembleSafeSignatures(a.usable, a.eligible);
   if (!asm.ok || !a.control) return null;
   const r = a.row;
   const sigsetFp = signatureSetFingerprint(a.usable);
@@ -153,7 +159,7 @@ function bindingFor(a: Att): { binding: P93bPermitBinding; sigsetFp: string } | 
     officialTokenAddress: r.official_token_address, officialTokenCodeHash: r.official_token_code_hash, p8aReviewId: r.p8a_review_id, p8aManifestFingerprint: r.p8a_manifest_fingerprint,
     p8bReviewId: r.p8b_review_id, p8bManifestFingerprint: r.p8b_manifest_fingerprint, dependencyAttestationFingerprint: r.dependency_attestation_fingerprint,
     safeAddress: r.safe_address, safeOwnersFingerprint: r.safe_owners_fingerprint, safeThreshold: 2, safeNonce: Number(r.safe_nonce), safeTxHash: r.safe_tx_hash,
-    callBatchFingerprint: r.call_batch_fingerprint, signer1: asm.signers[0], signer2: asm.signers[1], signatureSetFingerprint: sigsetFp, controlRevision: a.control.revision,
+    callBatchFingerprint: r.call_batch_fingerprint, signer1: asm.signers[0]!, signer2: asm.signers[1]!, eligibleSignerSetFingerprint: eligibleSetFingerprint(a.eligible), signatureSetFingerprint: sigsetFp, controlRevision: a.control.revision,
   } };
 }
 const liveMatchesBinding = (a: Att, b: P93bPermitBinding) =>
@@ -198,7 +204,7 @@ export const claimPcartPreAuctionExecution = createServerFn({ method: "POST" })
     const b = actionInput(i);
     if (!UUID.test(String(i.permitId)) || !HASH.test(String(i.bindingFingerprint).toLowerCase()) || !HASH.test(String(i.signatureSetFingerprint).toLowerCase())) throw new Error("Invalid permit");
     const executor = String(i.executor ?? "").toLowerCase();
-    if (!CANONICAL_OWNERS.includes(executor)) throw new Error("Executor must be a Treasury Safe owner");
+    if (!/^0x[0-9a-f]{40}$/.test(executor)) throw new Error("Invalid executor");
     return { ...b, permitId: i.permitId.toLowerCase(), bindingFingerprint: i.bindingFingerprint.toLowerCase(), signatureSetFingerprint: i.signatureSetFingerprint.toLowerCase(), executor };
   })
   .handler(async ({ data, context }) => {
@@ -208,6 +214,8 @@ export const claimPcartPreAuctionExecution = createServerFn({ method: "POST" })
     if (!a || !a.rebuilt.ok) return { ok: false as const, reason: "ACTION_NOT_VALID" };
     const validated = await safeValidation(a);
     const blocks = executionGate(gateAction(a), a.liveGate, a.usable, validated, a.permit && a.permit.id === data.permitId ? a.permit : null);
+    // Option 1: only one of the two live-eligible plain-EOA owners may submit execTransaction.
+    if (!a.eligible || !a.eligible.includes(data.executor)) blocks.push("SIGNER_NOT_ELIGIBLE" as any);
     const bf = bindingFor(a);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     if (blocks.length || !bf || !liveMatchesBinding(a, bf.binding) || permitBindingFingerprint(bf.binding) !== data.bindingFingerprint || bf.sigsetFp !== data.signatureSetFingerprint) {
@@ -218,7 +226,7 @@ export const claimPcartPreAuctionExecution = createServerFn({ method: "POST" })
     }
     const { data: res, error } = await (supabaseAdmin as any).rpc("claim_canonical_pcart_action_permit", { _actor: ctx.userId, _permit_id: data.permitId, _binding_fingerprint: data.bindingFingerprint, _signature_set_fingerprint: data.signatureSetFingerprint });
     if (error || !res?.ok) return { ok: false as const, reason: String(error?.message ?? res?.reason ?? "CLAIM_FAILED") };
-    const asm = assembleSafeSignatures(a.usable);
+    const asm = assembleSafeSignatures(a.usable, a.eligible!);
     if (!asm.ok) return { ok: false as const, reason: "SIGNATURES_INCOMPLETE" };
     const t = a.rebuilt.tx;
     const calldata = encodeFunctionData({ abi: SAFE_EXEC_ABI, functionName: "execTransaction", args: [t.to, t.value, t.data, t.operation, t.safeTxGas, t.baseGas, t.gasPrice, t.gasToken, t.refundReceiver, asm.signatures] });

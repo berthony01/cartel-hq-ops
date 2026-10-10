@@ -4,15 +4,16 @@
  * no window.ethereum fallback, no Safe Transaction Service. Called only from explicit button clicks.
  */
 import { getActiveAccount, getActiveProvider } from "@/lib/wallet-connector";
-import { CANONICAL_OWNERS, classifyHandoff, type HandoffOutcome } from "@/lib/pcart-launch-coordinator-p9-3b";
+import { classifyHandoff, type HandoffOutcome } from "@/lib/pcart-launch-coordinator-p9-3b";
 
 export type WalletCheck = { ok: true; account: string } | { ok: false; reason: "NO_WALLET" | "WRONG_WALLET" | "WRONG_CHAIN" | "READ_FAILED" };
 
-export async function checkTreasuryOwnerWallet(): Promise<WalletCheck> {
+/** `eligible` = the server-derived Option 1 signer set (two plain-EOA owners). */
+export async function checkTreasuryOwnerWallet(eligible: readonly string[]): Promise<WalletCheck> {
   const p = getActiveProvider();
   const acct = getActiveAccount()?.toLowerCase() ?? null;
   if (!p || !acct) return { ok: false, reason: "NO_WALLET" };
-  if (!CANONICAL_OWNERS.includes(acct)) return { ok: false, reason: "WRONG_WALLET" };
+  if (eligible.length !== 2 || !eligible.map((e) => e.toLowerCase()).includes(acct)) return { ok: false, reason: "WRONG_WALLET" };
   try {
     const chain = (await p.request({ method: "eth_chainId" })) as string;
     if (typeof chain !== "string" || Number(BigInt(chain)) !== 4663) return { ok: false, reason: "WRONG_CHAIN" };

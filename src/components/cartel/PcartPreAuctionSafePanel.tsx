@@ -13,7 +13,7 @@ import { checkTreasuryOwnerWallet, sendSafeExecutionOnce, signSafeTypedData } fr
 
 const WALLET_COPY: Record<string, string> = {
   NO_WALLET: "Connect a Treasury Safe owner wallet first.",
-  WRONG_WALLET: "This wallet is not a Treasury Safe owner. Choose another wallet.",
+  WRONG_WALLET: "This wallet is not one of the two eligible launch signers. Choose another wallet.",
   WRONG_CHAIN: "Switch the wallet to Robinhood Chain.",
   READ_FAILED: "Could not read the wallet. Try again.",
 };
@@ -42,8 +42,8 @@ export function PcartPreAuctionSafePanel({ actionId, launchKey }: { actionId: st
       setMsg(null);
       const s = q.data && q.data.ok ? q.data : null;
       if (!s?.canSign || !s.typedData) return "Signing is not available right now.";
-      const w = await checkTreasuryOwnerWallet();
-      if (!w.ok) return WALLET_COPY[w.reason];
+      const w = await checkTreasuryOwnerWallet(s.eligibleSigners);
+      if (!w.ok) return WALLET_COPY[w.reason] ?? "Wallet check failed.";
       if (s.owners.find((o) => o.address === w.account)?.signed) return "This owner already signed. Choose another wallet.";
       const r = await signSafeTypedData(w.account, s.typedData);
       if (!r.signature) return "Wallet closed — nothing was signed. You can try again.";
@@ -56,8 +56,10 @@ export function PcartPreAuctionSafePanel({ actionId, launchKey }: { actionId: st
   const execM = useMutation({
     mutationFn: async () => {
       setMsg(null);
-      const w = await checkTreasuryOwnerWallet();
-      if (!w.ok) return WALLET_COPY[w.reason];
+      const s = q.data && q.data.ok ? q.data : null;
+      if (!s?.canExecute) return "Execution is not available right now.";
+      const w = await checkTreasuryOwnerWallet(s.eligibleSigners);
+      if (!w.ok) return WALLET_COPY[w.reason] ?? "Wallet check failed.";
       const permit = await permitFn({ data: { actionId } });
       if (!permit.ok) return `Execution blocked: ${permit.reason}`;
       const claim = await claimFn({ data: { actionId, permitId: permit.permitId, bindingFingerprint: permit.bindingFingerprint, signatureSetFingerprint: permit.signatureSetFingerprint, executor: w.account } });
@@ -93,10 +95,11 @@ export function PcartPreAuctionSafePanel({ actionId, launchKey }: { actionId: st
   return (
     <div className="space-y-2 rounded border border-border/60 p-3 text-xs" aria-label="Pre-auction Safe">
       <div className="text-sm font-medium">Pre-auction Safe · {s.approvals} of 2 approvals</div>
+      {s.eligibleSigners.length !== 2 ? <p className="text-destructive">The eligible signer set changed on chain. Signing is blocked until re-audited.</p> : null}
       <ul className="space-y-0.5">
         {s.owners.map((o) => (
           <li key={o.address} className="font-mono break-all">
-            {o.signed ? "✓ " : "○ "}{o.address}{o.kind === "EIP7702_DELEGATED" ? " (delegated EOA — standard signature only)" : o.kind === "CONTRACT" ? " (contract — cannot sign)" : ""}
+            {o.signed ? "✓ " : "○ "}{o.address}{o.eligible ? " (eligible signer)" : o.kind === "EIP7702_DELEGATED" ? " (delegated account — Safe owner, not a Cartel HQ launch signer)" : o.kind === "CONTRACT" ? " (contract — not a launch signer)" : " (not eligible)"}
           </li>
         ))}
       </ul>
