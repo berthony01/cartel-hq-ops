@@ -51,5 +51,5 @@ await t("execution blocked with only one signature", () => executionGate({ ...A,
 const fn = readFileSync("src/lib/pcart-launch-coordinator-p9-3b.functions.ts", "utf8");
 await t("executor must be in live eligible set", () => fn.includes("!a.eligible.includes(data.executor)"));
 await t("no Safe Transaction Service dependency", () => !/safe-transaction|tx-service|api\.safe\.global/i.test(fn + readFileSync("src/lib/pcart-p9-3b-safe-wallet.ts", "utf8")));
-await t("wallet helper uses existing connector only", () => { const w = readFileSync("src/lib/pcart-p9-3b-safe-wallet.ts", "utf8"); return w.includes("@/lib/wallet-connector") && !w.includes("window.ethereum"); });
+await t("wallet helper uses existing connector only", () => { const w = readFileSync("src/lib/pcart-p9-3b-safe-wallet.ts", "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, ""); return w.includes("@/lib/wallet-connector") && !/window\.ethereum/.test(w); });
 console.log(`\n${pass}/${pass + fail} passed`); if (fail) process.exit(1);
