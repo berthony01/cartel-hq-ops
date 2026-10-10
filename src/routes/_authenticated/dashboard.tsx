@@ -61,6 +61,7 @@ import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { CreateWorkspaceDialog } from "@/components/cartel/WorkspaceSwitcher";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { useWorkspaceGoal } from "@/lib/workspace-goal";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
@@ -156,6 +157,7 @@ function HqDashboard() {
   const { workspace, workspaceId, loading: workspaceLoading } = useWorkspace();
   const [createOpen, setCreateOpen] = useState(false);
   const journeyQuery = useProjectJourney(workspaceId);
+  const goalQuery = useWorkspaceGoal(workspaceId);
 
   const packsQuery = useQuery({
     queryKey: ["recent-packs", workspaceId],
