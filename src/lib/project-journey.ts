@@ -72,6 +72,14 @@ export type JourneyStageKey = (typeof JOURNEY_STAGE_KEYS)[number];
 
 export type JourneyStageStatus = "complete" | "action" | "waiting" | "unavailable";
 
+/**
+ * Who feels it when this stage stays undone. Prioritization metadata only: it
+ * never changes a stage's status, prerequisites or actionability — it decides
+ * which actionable stage the dashboard presents as THE next action, and how
+ * loudly an undone stage is escalated.
+ */
+export type JourneyStageImpact = "watchers" | "funds" | "routine";
+
 export type JourneyPhase =
   | "Identity"
   | "Brand & Creative"
@@ -89,6 +97,8 @@ export type JourneyStage = {
   status: JourneyStageStatus;
   /** Only actionable stages can become the next action. */
   actionable: boolean;
+  /** Prioritization metadata — see JourneyStageImpact. Never affects status. */
+  impact: JourneyStageImpact;
   to: JourneyRoute;
   actionLabel: string;
   /** Short live detail, when one can be stated honestly. */
@@ -218,6 +228,12 @@ const STAGE_COPY: Record<
     to: JourneyRoute;
     actionLabel: string;
     explanation: string;
+    /**
+     * Prioritization metadata: which actionable stage becomes THE next action
+     * (watchers > funds > routine, journey order breaks ties). Never affects
+     * status derivation, prerequisites, actionability or routing.
+     */
+    impact: JourneyStageImpact;
     /** Display-only wording used when the stage is not yet available. */
     reviewLabel?: string;
     lockedLabel?: string;
@@ -225,6 +241,7 @@ const STAGE_COPY: Record<
   }
 > = {
   project_profile: {
+    impact: "routine",
     phase: "Identity",
     title: "Project Profile",
     description: "Create the project identity for this workspace.",
@@ -234,6 +251,7 @@ const STAGE_COPY: Record<
       "Start here. Your Project Profile is the identity every other Cartel HQ feature builds on.",
   },
   profile_published: {
+    impact: "routine",
     phase: "Identity",
     title: "Profile published",
     description: "Publish the profile so Cartel HQ launch features can use it.",
@@ -243,6 +261,7 @@ const STAGE_COPY: Record<
       "Publishing makes the profile discoverable on the Cartel Network and ready for launch features.",
   },
   brand_kit: {
+    impact: "routine",
     phase: "Brand & Creative",
     title: "Brand Kit set up",
     description: "Save the Brand Kit so every creative surface uses one identity.",
@@ -252,6 +271,7 @@ const STAGE_COPY: Record<
       "Your Brand Kit holds the brand name, look and language reused across creative and community surfaces.",
   },
   creative_assets: {
+    impact: "routine",
     phase: "Brand & Creative",
     title: "Creative assets uploaded",
     description: "Add a logo, mascot or reference image for this project.",
@@ -261,6 +281,7 @@ const STAGE_COPY: Record<
       "Upload a logo, mascot or reference image so creative work has real source material to build from.",
   },
   sticker_pack: {
+    impact: "routine",
     phase: "Brand & Creative",
     title: "Sticker pack published",
     description: "Build and publish a sticker pack for your community.",
@@ -271,6 +292,7 @@ const STAGE_COPY: Record<
   },
 
   launch_created: {
+    impact: "routine",
     phase: "Launch",
     title: "Launch created",
     description: "Add the launch you want people to follow.",
@@ -279,6 +301,7 @@ const STAGE_COPY: Record<
     explanation: "Create your launch record so you can announce it and open Launch Watch.",
   },
   launch_announced: {
+    impact: "watchers",
     phase: "Launch",
     title: "Launch announced",
     description: "Move the launch out of Draft so it becomes a locked launch record.",
@@ -287,6 +310,7 @@ const STAGE_COPY: Record<
     explanation: "Announcing locks the launch identity and starts the lifecycle.",
   },
   launch_schedule: {
+    impact: "watchers",
     phase: "Launch",
     title: "Launch schedule set",
     description: "Set the launch time or launch window so countdowns and reminders work.",
@@ -296,6 +320,7 @@ const STAGE_COPY: Record<
       "A launch time or window is required before the launch can advance to Launch Approaching.",
   },
   launch_watch_open: {
+    impact: "watchers",
     phase: "Audience",
     title: "Launch Watch open",
     description: "Open Launch Watch so people can opt in for private launch alerts.",
@@ -305,6 +330,7 @@ const STAGE_COPY: Record<
       "Open Launch Watch so people can opt in for private launch alerts through the Telegram bot.",
   },
   telegram_community: {
+    impact: "routine",
     phase: "Audience",
     title: "Telegram community ready",
     description: "Connect a Telegram community with the bot as admin.",
@@ -314,6 +340,7 @@ const STAGE_COPY: Record<
       "Connect a Telegram community and make the bot an admin so it can welcome new members.",
   },
   launch_welcome: {
+    impact: "watchers",
     phase: "Audience",
     title: "Launch Watch in welcome",
     description: "Add the separate Launch Watch card to your community welcome.",
@@ -323,6 +350,7 @@ const STAGE_COPY: Record<
       "Open Welcome & onboarding on a connected community and enable the Launch Watch card for this launch.",
   },
   audience: {
+    impact: "watchers",
     phase: "Audience",
     title: "Watchers joined",
     description: "At least one person is watching this launch.",
@@ -332,6 +360,7 @@ const STAGE_COPY: Record<
       "Share the Launch Watch deep link so people can opt in before the launch goes live.",
   },
   communications: {
+    impact: "watchers",
     phase: "Audience",
     title: "Project inbox open",
     description: "Let community members reach the team through the project inbox.",
@@ -342,6 +371,7 @@ const STAGE_COPY: Record<
   },
 
   deployment: {
+    impact: "funds",
     phase: "Contract",
     title: "Mainnet deployment verified",
     description: "A production deployment for this launch has passed on-chain verification.",
@@ -353,6 +383,7 @@ const STAGE_COPY: Record<
       "Submitting a production deployment request records intent only. It does not deploy, sign or broadcast anything.",
   },
   official_contract: {
+    impact: "funds",
     phase: "Contract",
     title: "Register official contract",
     description: "Register the official contract address from verified deployment evidence.",
@@ -366,6 +397,7 @@ const STAGE_COPY: Record<
       "Unlocks after CARTEL HQ verifies the production mainnet deployment and its finality evidence.",
   },
   launch_live: {
+    impact: "watchers",
     phase: "Contract",
     title: "Launch live",
     description: "The launch lifecycle has reached Live.",
@@ -397,6 +429,7 @@ function stageOf(
     description: copy.description,
     status,
     actionable,
+    impact: copy.impact,
     to: copy.to,
     actionLabel: actionLabel ?? copy.actionLabel,
     detail,
@@ -405,6 +438,13 @@ function stageOf(
     dependency: copy.dependency,
   };
 }
+
+/** Priority order for next-action selection: watchers first, then funds. */
+const IMPACT_RANK: Record<JourneyStageImpact, number> = {
+  watchers: 0,
+  funds: 1,
+  routine: 2,
+};
 
 export function computeProjectJourney(input: JourneyInput): ProjectJourney {
   const r = input.readiness;
@@ -729,8 +769,18 @@ export function computeProjectJourney(input: JourneyInput): ProjectJourney {
   );
 
   const completedCount = stages.filter((s) => s.status === "complete").length;
+
+  // One next action: among everything currently actionable, surface the
+  // highest-impact stage first (watchers > funds > routine), keeping journey
+  // order as the tie-break so dependencies still read naturally. Only stages
+  // already marked actionable are candidates, so prerequisites are respected.
   const nextStage =
-    stages.find((s) => s.status === "action" && s.actionable) ?? null;
+    stages
+      .filter((s) => s.status === "action" && s.actionable)
+      .sort(
+        (a, b) =>
+          IMPACT_RANK[a.impact] - IMPACT_RANK[b.impact] || a.order - b.order,
+      )[0] ?? null;
 
   const nextAction: JourneyNextAction = nextStage
     ? {
