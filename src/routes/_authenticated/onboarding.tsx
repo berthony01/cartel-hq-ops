@@ -119,8 +119,8 @@ function GoalChooser({
   workspaceId: string;
   isOwner: boolean;
   current: ProjectGoal | null;
-  onCancel?: () => void;
-  onUseStandard?: () => void;
+  onCancel?: (() => void) | undefined;
+  onUseStandard?: (() => void) | undefined;
 }) {
   const setGoal = useSetWorkspaceGoal(workspaceId);
   return (
