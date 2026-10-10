@@ -24,6 +24,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { listWorkspaceAssets } from "@/lib/media";
 import { listWorkspacePacks } from "@/lib/sticker-packs";
 import { getProjectInboxSettings, getProjectInboxSummary } from "@/lib/project-inbox";
+import { fetchWorkspaceGoal, type ProjectGoal } from "@/lib/workspace-goal";
 
 /**
  * P1-A — one unified, read-only project journey model.
@@ -212,7 +213,22 @@ export type JourneyInput = {
   stickerPacksUnavailable: boolean;
   inbox: JourneyInboxFacts | null;
   inboxUnavailable: boolean;
+  /** Owner presentation preference; null/undefined = legacy full journey. */
+  goal?: ProjectGoal | null;
 };
+
+/** Stages hidden only for a community-only project with no launch on record. */
+const LAUNCH_ONLY_STAGES: ReadonlySet<JourneyStageKey> = new Set<JourneyStageKey>([
+  "launch_created",
+  "launch_announced",
+  "launch_schedule",
+  "launch_watch_open",
+  "launch_welcome",
+  "audience",
+  "deployment",
+  "official_contract",
+  "launch_live",
+]);
 
 
 // ---------------------------------------------------------------------------
@@ -757,7 +773,17 @@ export function computeProjectJourney(input: JourneyInput): ProjectJourney {
     },
   ];
 
-  const stages = raw.map((entry, index) =>
+  // G1 — presentation filtering only. A community-only project with NO launch
+  // on record does not see launch stages (and so is never pushed to create a
+  // token). Once any real launch exists every stage stays visible, whatever
+  // the goal, so real launch/watcher obligations are never hidden. Status
+  // derivation above is unchanged.
+  const communityOnly = input.goal === "community" && !launch;
+  const visible = communityOnly
+    ? raw.filter((entry) => !LAUNCH_ONLY_STAGES.has(entry.key))
+    : raw;
+
+  const stages = visible.map((entry, index) =>
     stageOf(
       entry.key,
       index + 1,
@@ -794,7 +820,21 @@ export function computeProjectJourney(input: JourneyInput): ProjectJourney {
             ? "Ask the CARTEL platform to deploy your token contract. Submitting records a request only — nothing is deployed or signed by it."
             : ""),
       }
-    : {
+    : communityOnly
+      ? {
+          stage: null,
+          label: "Open Community Command",
+          to: "/telegram",
+          headline:
+            completedCount === stages.length
+              ? "Community setup on record"
+              : "Nothing to action right now",
+          explanation:
+            completedCount === stages.length
+              ? "Every community setup stage for this project is on record."
+              : "The remaining stages depend on information that is not available right now.",
+        }
+      : {
         stage: null,
         label: "Review Launch Control",
         to: "/launch-control",
@@ -1017,6 +1057,10 @@ export async function fetchProjectJourney(workspaceId: string): Promise<ProjectJ
     };
   }
 
+  // Presentation preference only. A failed read falls back to the legacy
+  // (full) journey so nothing is ever hidden because of a transport error.
+  const goal = await fetchWorkspaceGoal(workspaceId).catch(() => null);
+
   return computeProjectJourney({
     readiness,
     launch,
@@ -1034,6 +1078,7 @@ export async function fetchProjectJourney(workspaceId: string): Promise<ProjectJ
     stickerPacksUnavailable,
     inbox,
     inboxUnavailable,
+    goal,
   });
 }
 
