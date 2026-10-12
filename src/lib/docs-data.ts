@@ -165,9 +165,9 @@ export default {
     {
       "id": "first-session",
       "category": "getting-started",
-      "title": "Your first session: from account to connected community",
+      "title": "Your first session: from account to project foundation",
       "summary": "Follow this sequence to establish the project foundation before using paid tools.",
-      "audience": "New community owners",
+      "audience": "New project owners (community, token launch, or both)",
       "location": "Start Free on the public homepage; then HQ",
       "prerequisites": [],
       "sections": [
@@ -193,7 +193,7 @@ export default {
         {
           "title": "Expected result",
           "body": [
-            "You have your own selected project, saved official identity and a verified connected Telegram community. The setup guide reports your actual progress. You do not need to finish token deployment to establish this foundation."
+            "You have your own selected project and saved official identity, plus the steps for your goal: a connected Telegram community for Manage My Community or Both, and a launch with its date or window for Prepare a Token Launch or Both. Telegram is not required for Prepare a Token Launch. The setup guide reports your actual progress. Setup never deploys a token automatically, and you do not need to finish token deployment to establish this foundation."
           ]
         },
         {
@@ -205,7 +205,7 @@ export default {
         {
           "title": "Next step",
           "body": [
-            "Configure welcome onboarding, then choose missions, stickers, broadcasts or launch communications according to your plan."
+            "Follow the next incomplete step for your goal. Community projects can configure welcome onboarding, then missions, stickers or broadcasts; launch projects continue in Launch Control and launch communications, according to your plan."
           ]
         }
       ],
