@@ -1,4 +1,4 @@
-import type { OnboardingStepKey } from "@/lib/onboarding";
+import type { OnboardingStepDef, OnboardingStepKey } from "@/lib/onboarding";
 import type { ProjectGoal } from "@/lib/workspace-goal";
 
 /**
@@ -59,12 +59,12 @@ export type HelpStepView = {
   status: "done" | "todo";
 };
 
-export type HelpNextStep = { key: OnboardingStepKey; title: string; to: string; ctaLabel: string };
+export type HelpNextStep = { key: OnboardingStepKey; title: string; to: OnboardingStepDef["to"]; ctaLabel: string };
 
 export type ProgressInput = {
   isPending: boolean;
   isError: boolean;
-  stepDefs: { key: OnboardingStepKey; title: string; to: string; ctaLabel: string }[];
+  stepDefs: { key: OnboardingStepKey; title: string; to: OnboardingStepDef["to"]; ctaLabel: string }[];
   steps: { key: OnboardingStepKey; complete: boolean }[];
   currentIndex: number;
   allComplete: boolean;
