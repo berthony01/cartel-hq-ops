@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 // Content (docs bundle + setup queries) loads only when help is opened.
 const SetupHelpPanel = lazy(() => import("@/components/cartel/SetupHelpPanel"));
 
-type SetupHelpContextValue = { openHelp: (topic?: HelpTopic | null) => void };
+type SetupHelpContextValue = { openHelp: (topic?: HelpTopic | null, trigger?: HTMLElement | null) => void };
 
 const SetupHelpContext = createContext<SetupHelpContextValue | null>(null);
 
@@ -24,16 +24,20 @@ export function SetupHelpProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [topic, setTopic] = useState<HelpTopic | null>(null);
   const lastWorkspace = useRef(workspaceId);
+  // Exact button that opened help; focus returns here on close (Escape or X).
+  const triggerRef = useRef<HTMLElement | null>(null);
 
   useEffect(() => {
     if (shouldResetHelp(lastWorkspace.current, workspaceId)) {
       lastWorkspace.current = workspaceId;
       setOpen(false);
       setTopic(null);
+      triggerRef.current = null;
     }
   }, [workspaceId]);
 
-  const openHelp = useCallback((next?: HelpTopic | null) => {
+  const openHelp = useCallback((next?: HelpTopic | null, trigger?: HTMLElement | null) => {
+    triggerRef.current = trigger ?? null;
     setTopic(next ?? null);
     setOpen(true);
   }, []);
@@ -50,7 +54,16 @@ export function SetupHelpProvider({ children }: { children: ReactNode }) {
           if (!next) setTopic(null);
         }}
       >
-        <SheetContent side="right" className="safe-bottom w-[min(26rem,92vw)] overflow-y-auto sm:max-w-md">
+        <SheetContent side="right" className="safe-bottom w-[min(26rem,92vw)] overflow-y-auto sm:max-w-md"
+          onCloseAutoFocus={(event) => {
+            const trigger = triggerRef.current;
+            triggerRef.current = null;
+            if (trigger && trigger.isConnected) {
+              event.preventDefault();
+              trigger.focus({ preventScroll: true });
+            }
+          }}
+        >
           <SheetTitle>Setup Help</SheetTitle>
           <SheetDescription className="text-xs">
             Guidance from your current setup progress and the Help Center. Not an AI assistant.
@@ -83,7 +96,7 @@ export function SetupHelpHeaderButton() {
       className="touch-target size-11"
       aria-label="Help with this page"
       title="Help with this page"
-      onClick={() => openHelp(null)}
+      onClick={(e) => openHelp(null, e.currentTarget)}
     >
       <CircleHelp className="size-5" aria-hidden="true" />
     </Button>
