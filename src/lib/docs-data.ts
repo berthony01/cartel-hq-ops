@@ -183,10 +183,11 @@ export default {
           "steps": [
             "Choose Start Free on the homepage and create your own account. No payment card is needed for Free. If email confirmation is requested, confirm the email before signing in.",
             "In HQ, use the Project selector and Add project. Enter the project name and add it. The new project becomes selected.",
+            "Open Guided setup (/onboarding) and choose your goal: Manage My Community, Prepare a Token Launch, or Both. Only the project owner can save the goal; a managed Service Partner cannot. The goal changes which setup steps are shown and can be changed later. It does not unlock or launch anything.",
             "Open Project Profile. Complete the identity and official links, select a logo if you have one, and press Save changes. The saved profile becomes the identity used by relevant project tools.",
-            "Open Community Command Center, then Telegram. Connect your personal Telegram account if prompted, then connect the group you administer.",
-            "Check that the group is Ready. Open Welcome & onboarding for that group, configure the welcome and save it. A test sends a real message to the chosen group.",
-            "Return to HQ and follow the next incomplete setup step relevant to your goals. Upgrade only when you want Pro tools and the project identity is complete."
+            "Community or Both: open Community Command Center, then Telegram. Connect your personal Telegram account if prompted, then connect the group you administer. Check that the group is Ready, then open Welcome & onboarding for that group, configure the welcome and save it. A test sends a real message to the chosen group.",
+            "Launch or Both: open Launch Control and create your launch with its date or window. Prepare a Token Launch does not require Telegram; Manage My Community has no launch requirement.",
+            "Return to Guided setup or HQ and follow the next incomplete step for your goal. Upgrade only when you want Pro tools and the project identity is complete."
           ]
         },
         {
@@ -282,7 +283,8 @@ export default {
             "Open the Project selector at the top of the app.",
             "Choose Add project. The dialog explains that each project separates its profile, Brand Kit, assets, packs, launches and Telegram communities.",
             "Enter Project name and press Add project.",
-            "Wait for the success message and the selected project name to change. You become the owner of the new project."
+            "Wait for the success message and the selected project name to change. You become the owner of the new project.",
+            "Open Guided setup (/onboarding) and choose Manage My Community, Prepare a Token Launch, or Both, then follow the matching steps. As owner you can change the goal later; a managed Service Partner cannot set it."
           ]
         },
         {

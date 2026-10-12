@@ -40,7 +40,7 @@ export const ONBOARDING_STEPS: OnboardingStepDef[] = [
     key: "community",
     title: "Connect your community",
     description:
-      "Add the Cartel HQ bot to your Telegram group and make it an admin. Welcome messages and Launch Watch invites switch on from there.",
+      "Add the Cartel HQ bot to your Telegram group and make it an admin. Welcome messages and Launch Watch invites are configured separately afterwards and only appear when their own settings and eligibility are met.",
     to: "/telegram",
     ctaLabel: "Connect Telegram",
   },
@@ -48,7 +48,7 @@ export const ONBOARDING_STEPS: OnboardingStepDef[] = [
     key: "launch",
     title: "Launch basics",
     description:
-      "Create your launch and set its date or window. Countdowns and watcher reminders are armed from this alone — nothing else is required yet.",
+      "Create your launch and set its date or window. Reminders reach only people who opted in to Launch Watch, and depend on the launch's lifecycle stage.",
     to: "/launch-control",
     ctaLabel: "Set up launch",
   },
