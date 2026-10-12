@@ -471,7 +471,7 @@ function OnboardingWizard({
                   </Button>
                 </>
               )}
-              <Button variant="ghost" className="min-h-11" onClick={() => openHelp(stepDef.key)}>
+              <Button variant="ghost" className="min-h-11" onClick={(e) => openHelp(stepDef.key, e.currentTarget)}>
                 <CircleHelp className="size-4" aria-hidden="true" />
                 Help with this step
               </Button>

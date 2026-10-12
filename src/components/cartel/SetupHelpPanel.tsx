@@ -34,7 +34,7 @@ function ArticleLinks({ ids }: { ids: readonly string[] }) {
             rel="noopener"
             className="flex min-h-11 items-center justify-between gap-2 border border-border-subtle px-3 py-2 text-sm text-foreground hover:border-gold/40"
           >
-            <span className="min-w-0 truncate">{articleById[id]!.title}</span>
+            <span className="min-w-0 break-words">{articleById[id]!.title}</span>
             <ArrowRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           </a>
         </li>
