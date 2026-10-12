@@ -11,6 +11,7 @@ import { MobileTabBar } from "@/components/cartel/MobileTabBar";
 import { LegalFooter } from "@/components/cartel/LegalFooter";
 import { PolicyAcceptancePrompt } from "@/components/cartel/PolicyAcceptancePrompt";
 import { ManagedAccessGuard } from "@/components/cartel/ManagedAccessGuard";
+import { SetupHelpHeaderButton, SetupHelpProvider } from "@/components/cartel/SetupHelp";
 
 function TopBar({ onOpenMobileNav, dashboard }: { onOpenMobileNav: () => void; dashboard: boolean }) {
   return (
@@ -34,6 +35,7 @@ function TopBar({ onOpenMobileNav, dashboard }: { onOpenMobileNav: () => void; d
       </div>
 
       <div className="flex shrink-0 items-center gap-1 sm:gap-2 lg:col-start-2 lg:justify-self-end">
+        <SetupHelpHeaderButton />
         <UserMenu />
       </div>
     </header>
