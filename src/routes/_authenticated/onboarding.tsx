@@ -4,12 +4,14 @@ import {
   ArrowRight,
   Check,
   ChevronLeft,
+  CircleHelp,
   Loader2,
   RefreshCw,
   Rocket,
 } from "lucide-react";
 
 import { useWorkspace } from "@/lib/workspace-context";
+import { useSetupHelp } from "@/components/cartel/SetupHelp";
 import { useSession } from "@/hooks/useSession";
 import {
   useOnboardingProgress,
@@ -277,6 +279,7 @@ function OnboardingWizard({
   onChangeGoal: () => void;
 }) {
   const progress = useOnboardingProgress(workspaceId, goal);
+  const { openHelp } = useSetupHelp();
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 
   useEffect(() => {
@@ -468,6 +471,10 @@ function OnboardingWizard({
                   </Button>
                 </>
               )}
+              <Button variant="ghost" className="min-h-11" onClick={() => openHelp(stepDef.key)}>
+                <CircleHelp className="size-4" aria-hidden="true" />
+                Help with this step
+              </Button>
             </div>
           </div>
         )}

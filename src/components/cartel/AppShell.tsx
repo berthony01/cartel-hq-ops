@@ -11,6 +11,7 @@ import { MobileTabBar } from "@/components/cartel/MobileTabBar";
 import { LegalFooter } from "@/components/cartel/LegalFooter";
 import { PolicyAcceptancePrompt } from "@/components/cartel/PolicyAcceptancePrompt";
 import { ManagedAccessGuard } from "@/components/cartel/ManagedAccessGuard";
+import { SetupHelpHeaderButton, SetupHelpProvider } from "@/components/cartel/SetupHelp";
 
 function TopBar({ onOpenMobileNav, dashboard }: { onOpenMobileNav: () => void; dashboard: boolean }) {
   return (
@@ -34,6 +35,7 @@ function TopBar({ onOpenMobileNav, dashboard }: { onOpenMobileNav: () => void; d
       </div>
 
       <div className="flex shrink-0 items-center gap-1 sm:gap-2 lg:col-start-2 lg:justify-self-end">
+        <SetupHelpHeaderButton />
         <UserMenu />
       </div>
     </header>
@@ -62,6 +64,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const dashboard = pathname === "/dashboard";
 
   return (
+    <SetupHelpProvider>
     <div className="min-h-screen bg-background/75">
       <aside className="fixed inset-y-0 left-0 z-40 hidden w-64 flex-col border-r border-sidebar-border bg-sidebar/96 px-3 py-4 shadow-[16px_0_44px_-38px_var(--gold)] backdrop-blur lg:flex">
         <div className="border-b border-sidebar-border px-1 pb-4">
@@ -112,5 +115,6 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <MobileTabBar onOpenMore={() => setMobileOpen(true)} />
     </div>
+    </SetupHelpProvider>
   );
 }
