@@ -94,7 +94,8 @@ check(await page.locator("img").count()===0,"foreign workspace image leakage");
 }else{
 await page.getByText("12 total").waitFor({timeout:20000});
 await page.locator("img").first().waitFor({timeout:20000});
-check(await page.locator("img").count()===12,"real route must initially render 12 cards");
+const initialRendered=await page.locator("img").count();
+check(scenario==="both-one-missing" ? (initialRendered===11||initialRendered===12) : initialRendered===12,"real route must render twelve cards, allowing the failed-image placeholder to replace one");
 for(let i=0;i<12;i++){
 const img=page.locator("img").nth(i<3||scenario!=="both-one-missing"?i:i-1);
 await img.scrollIntoViewIfNeeded();
