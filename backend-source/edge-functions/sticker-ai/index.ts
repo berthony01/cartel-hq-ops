@@ -1257,7 +1257,18 @@ Deno.serve(async (req: Request) => {
                 const validWebp = !!webp && webp.byteLength >= 20 && webp.byteLength <= 250_000 &&
                   String.fromCharCode(...webp.subarray(0, 4)) === "RIFF" &&
                   String.fromCharCode(...webp.subarray(8, 12)) === "WEBP";
+                // Check alpha after encoding, not only on the PNG input.
+                // A codec failure must never yield an opaque sticker preview.
+                let encodedAlphaOk = false;
                 if (webp && validWebp) {
+                  ImageMagick.read(webp, (decoded) => {
+                    encodedAlphaOk = decoded.hasAlpha === true &&
+                      decoded.isOpaque === false &&
+                      decoded.width === thumbWidth &&
+                      decoded.height === thumbHeight;
+                  });
+                }
+                if (webp && validWebp && encodedAlphaOk) {
                   const { error: thumbnailUploadError } = await admin.storage.from(BUCKET)
                     .upload(thumbnailPath, webp, {
                       contentType: "image/webp",
