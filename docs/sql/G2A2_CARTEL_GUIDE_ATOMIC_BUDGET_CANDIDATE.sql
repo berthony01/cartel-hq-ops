@@ -21,6 +21,21 @@ CREATE TABLE public.cartel_guide_model_quotes (
 COMMENT ON TABLE public.cartel_guide_model_quotes IS
   'Review-controlled immutable price snapshots. Add new version; never edit or delete a used quote. No seed rows.';
 
+-- Database-enforced price immutability: new prices require a NEW version row.
+-- A historical quote cannot be silently repriced, even by an admin script.
+CREATE FUNCTION public.cartel_guide_prevent_quote_mutation()
+RETURNS trigger LANGUAGE plpgsql SET search_path = pg_catalog, public
+AS $function$
+BEGIN
+  RAISE EXCEPTION 'GUIDE_QUOTE_IMMUTABLE';
+END;
+$function$;
+CREATE TRIGGER cartel_guide_quote_no_edits
+BEFORE UPDATE OR DELETE ON public.cartel_guide_model_quotes
+FOR EACH ROW EXECUTE FUNCTION public.cartel_guide_prevent_quote_mutation();
+REVOKE ALL ON FUNCTION public.cartel_guide_prevent_quote_mutation()
+  FROM PUBLIC, anon, authenticated;
+
 CREATE TABLE public.cartel_guide_budget_controls (
   singleton boolean PRIMARY KEY DEFAULT true CHECK (singleton),
   enabled boolean NOT NULL DEFAULT false,
@@ -44,6 +59,8 @@ CREATE TABLE public.cartel_guide_budget_reservations (
   user_id uuid NOT NULL,
   workspace_id uuid NOT NULL,
   request_id uuid NOT NULL,
+  -- Snapshot the server-authoritative owner exemption at reservation time.
+  owner_quota_exempt boolean NOT NULL DEFAULT false,
   quote_id uuid NOT NULL REFERENCES public.cartel_guide_model_quotes(id),
   provider text NOT NULL,
   model text NOT NULL,
@@ -207,6 +224,7 @@ BEGIN
        WHEN state = 'settled' THEN actual_micro_usd ELSE 0 END),0)
       INTO v_workspace_month FROM public.cartel_guide_budget_reservations
     WHERE workspace_id = _workspace_id
+      AND owner_quota_exempt = false
       AND (state IN ('held','in_flight') OR (state = 'settled' AND reserved_at >= v_month));
 
     SELECT COALESCE(SUM(CASE WHEN state IN ('held','in_flight') THEN reserved_micro_usd
@@ -224,11 +242,11 @@ BEGIN
   END IF;
 
   INSERT INTO public.cartel_guide_budget_reservations (
-    user_id, workspace_id, request_id, quote_id, provider, model, price_version,
+    user_id, workspace_id, request_id, owner_quota_exempt, quote_id, provider, model, price_version,
     max_input_tokens, max_output_tokens, input_micro_usd_per_million,
     output_micro_usd_per_million, reserved_micro_usd
   ) VALUES (
-    _user_id, _workspace_id, _request_id, v_quote.id, v_quote.provider,
+    _user_id, _workspace_id, _request_id, v_owner, v_quote.id, v_quote.provider,
     v_quote.model, v_quote.price_version, v_quote.max_input_tokens,
     v_quote.max_output_tokens, v_quote.input_micro_usd_per_million,
     v_quote.output_micro_usd_per_million, v_cost
