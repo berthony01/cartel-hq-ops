@@ -34,7 +34,7 @@ async function tests() {
   check("bad token scheme", (await run(deps(), body(), "POST", "Basic abc.def.ghi")).status === 401);
   check("invalid authenticated user", (await run(deps({ verifyUser: async () => null }))).status === 401);
   check("invalid authenticated id", (await run(deps({ verifyUser: async () => "not-uuid" }))).status === 401);
-  check("auth exception denies", (await run(deps({ verifyUser: async () => { throw Error("secret"); } })).status === 503);
+  check("auth exception denies", (await run(deps({ verifyUser: async () => { throw Error("secret"); } }))).status === 503);
   check("invalid JSON", (await run(deps(), "{")).body.code === "INVALID_JSON");
   check("array rejected", (await run(deps(), "[]")).status === 400);
   check("no question", (await run(deps(), JSON.stringify({selectedWorkspaceId:workspace}))).status === 400);
