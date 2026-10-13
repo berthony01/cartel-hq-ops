@@ -2366,6 +2366,8 @@ function StickerLabBuilder() {
                               src={url}
                               alt={asset.asset_type}
                               className="max-h-full max-w-full object-contain"
+                              loading="lazy"
+                              decoding="async"
                             />
                           ) : (
                             <span className="text-[10px] text-muted-foreground">No preview</span>
@@ -3587,6 +3589,8 @@ function StickerLabBuilder() {
                         src={preview.url}
                         alt={`Generated sticker ${c.label}`}
                         className="max-h-full max-w-full object-contain"
+                        loading="lazy"
+                        decoding="async"
                       />
                     ) : busy(stage) ? (
                       <Loader2 className="size-6 animate-spin text-gold" aria-hidden="true" />
@@ -3647,6 +3651,8 @@ function StickerLabBuilder() {
                                     src={v.previewUrl}
                                     alt={`${c.label} version ${v.versionNumber}`}
                                     className="max-h-full max-w-full object-contain"
+                                    loading="lazy"
+                                    decoding="async"
                                   />
                                 ) : null}
                               </span>
@@ -3724,6 +3730,8 @@ function StickerLabBuilder() {
                                 src={preview.url}
                                 alt={`${c.label} current live sticker`}
                                 className="max-h-full max-w-full object-contain"
+                                loading="lazy"
+                                decoding="async"
                               />
                             ) : (
                               <span className="px-2 text-center text-[10px] text-muted-foreground">
@@ -3745,6 +3753,8 @@ function StickerLabBuilder() {
                                 src={pendingCandidate.previewUrl}
                                 alt={`${c.label} candidate version ${pendingCandidate.versionNumber}`}
                                 className="max-h-full max-w-full object-contain"
+                                loading="lazy"
+                                decoding="async"
                               />
                             ) : (
                               <span className="px-2 text-center text-[10px] text-muted-foreground">
@@ -3848,6 +3858,8 @@ function StickerLabBuilder() {
                               src={preview.url}
                               alt={`${c.label} current image`}
                               className="max-h-full max-w-full object-contain"
+                              loading="lazy"
+                              decoding="async"
                             />
                           </div>
                         </li>
@@ -3870,6 +3882,8 @@ function StickerLabBuilder() {
                                   src={take.version.previewUrl}
                                   alt={`${c.label} variation ${take.label}`}
                                   className="max-h-full max-w-full object-contain"
+                                  loading="lazy"
+                                  decoding="async"
                                 />
                               ) : varRound.currentLabel === take.label ? (
                                 <Loader2
@@ -4170,6 +4184,8 @@ function StickerLabBuilder() {
                               src={mPreview.url}
                               alt={`${mc.label} current static sticker`}
                               className="max-h-full max-w-full object-contain"
+                              loading="lazy"
+                              decoding="async"
                             />
                           ) : null}
                         </span>
@@ -4803,6 +4819,7 @@ function StickerLabBuilder() {
                                   alt={`${concept.label} static sticker`}
                                   className="max-h-full max-w-full object-contain"
                                   loading="lazy"
+                                  decoding="async"
                                 />
                               ) : (
                                 <span className="text-[10px] text-muted-foreground">
@@ -4957,6 +4974,8 @@ function StickerLabBuilder() {
                           src={preview.url}
                           alt={`Generated sticker ${c.label}`}
                           className="max-h-full max-w-full object-contain"
+                          loading="lazy"
+                          decoding="async"
                         />
                       ) : (
                         <span aria-hidden="true" className="text-xl">
