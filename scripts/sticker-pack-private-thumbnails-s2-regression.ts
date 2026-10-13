@@ -64,5 +64,17 @@ check("thumb errors do not block sticker finalization", producer.includes("Thumb
 check("no new API route exposed", !page.includes("https://api.kie.ai") && !page.includes("service_role"));
 check("not public unsigned storage", !page.includes("getPublicUrl("));
 check("no persistent signed URLs added", !/localStorage\.setItem\([^)]*signed|sessionStorage\.setItem\([^)]*signed/.test(page));
+// Deleting an eligible pack must not orphan private derivatives or allow an
+// absent thumbnail to prevent original PNG cleanup.
+const originalPack = readFileSync("src/lib/sticker-packs.ts", "utf8");
+check("delete uses authoritative pack lifecycle RPC", originalPack.includes('supabase.rpc("delete_sticker_pack_if_eligible"'));
+check("delete derives thumbnails from returned paths", originalPack.includes(".map(expectedStickerThumbnailPath)"));
+check("delete always tries original files first", originalPack.indexOf(".remove(paths)") < originalPack.indexOf(".remove(derived)"));
+check("delete only touches authorized original paths", originalPack.includes("result.storage_paths ?? []"));
+check("delete reports derivative cleanup failure", originalPack.includes("if (derivativeError) storageCleanupPending = true"));
+check("deleted-image count stays original-only", originalPack.includes("removedImages: paths.length"));
+check("broken image yields harmless placeholder", page.includes("setUnavailable(true)") && page.includes("setUnavailable(false)"));
+check("WebP encoder verifies alpha after encode", producer.includes("encodedAlphaOk = decoded.hasAlpha === true") && producer.includes("decoded.isOpaque === false"));
+
 console.log(`S2 thumbnail pure/source QA: ${passed} PASS, ${failed} FAIL — full build, WebP WASM, real browser and Storage QA pending`);
 if (failed) process.exitCode = 1;
