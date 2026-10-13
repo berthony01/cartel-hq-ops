@@ -23,7 +23,7 @@ check("RLS on three tables",count(/ALTER TABLE public\.cartel_guide_\w+ ENABLE R
 check("no browser table privileges",count(/REVOKE ALL ON public\.cartel_guide_\w+ FROM PUBLIC, anon, authenticated/g)===3);
 check("four RPCs plus one immutable-quote trigger",count(/CREATE FUNCTION public\.cartel_guide_/g)===5);
 check("fixed definer path",count(/SECURITY DEFINER SET search_path = pg_catalog, public/g)===4);
-check("no browser RPC grants",count(/REVOKE ALL ON FUNCTION public\.cartel_guide_/g)===4);
+check("browser EXECUTE revoked from all five Guide functions",count(/REVOKE ALL ON FUNCTION public\.cartel_guide_/g)===5);
 check("service role only RPCs",count(/GRANT EXECUTE ON FUNCTION public\.cartel_guide_/g)===4);
 check("all RPCs globally serialized",count(/pg_advisory_xact_lock\(4127, 2202\)/g)===4);
 check("membership cross-tenant checks",has(/FROM public\.workspace_members m/) && has(/w\.owner_id = _user_id/));
