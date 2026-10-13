@@ -6,6 +6,7 @@ on:
     paths:
       - ".github/workflows/sticker-s2-draft-qa.yml"
       - "scripts/sticker-s2-magick-wasm-smoke.ts"
+      - "scripts/sticker-s2-real-component-browser-qa.mjs"
       - "scripts/sticker-pack-private-thumbnails-s2-regression.ts"
       - "scripts/sticker-s2-backfill-plan-regression.ts"
       - "src/lib/sticker-thumbnails.ts"
@@ -27,7 +28,7 @@ jobs:
     # Only the owner's isolated PR #8 branch; no PCART or deploy workflows.
     if: github.head_ref == 'feature/sticker-pack-private-thumbnails-s2-20261013'
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 18
     env:
       DENO_NO_PROMPT: "1"
     steps:
@@ -60,6 +61,17 @@ jobs:
 
       - name: Validate bounded legacy conversion plan with synthetic inventory
         run: bun run scripts/sticker-s2-backfill-plan-regression.ts
+
+      - name: Prepare Node 22 for isolated browser QA
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install headless browser driver in temporary directory only
+        run: npm install --prefix /tmp/cartel-s2-playwright --no-save --package-lock=false playwright@1.55.1
+
+      - name: Browser QA of the real published-pack thumbnail component (synthetic, loopback only)
+        run: node scripts/sticker-s2-real-component-browser-qa.mjs
 
       - name: Check TypeScript
         run: bunx tsc --noEmit
