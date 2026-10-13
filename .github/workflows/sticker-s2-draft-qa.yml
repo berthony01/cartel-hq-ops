@@ -1,0 +1,57 @@
+name: "Cartel HQ S2 draft checks"
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/sticker-s2-draft-qa.yml"
+      - "scripts/sticker-s2-magick-wasm-smoke.ts"
+      - "scripts/sticker-pack-private-thumbnails-s2-regression.ts"
+      - "src/lib/sticker-thumbnails.ts"
+      - "src/lib/sticker-packs.ts"
+      - "src/routes/_authenticated/sticker-lab.$packId.tsx"
+      - "backend-source/edge-functions/sticker-ai/index.ts"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sticker-s2-qa-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  s2-qa:
+    # Only the owner's isolated PR #8 branch; no PCART or deploy workflows.
+    if: github.head_ref == 'feature/sticker-pack-private-thumbnails-s2-20261013'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      DENO_NO_PROMPT: "1"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare isolated Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Verify real magick-wasm WebP encode/decode with synthetic fixture
+        run: deno run --allow-read --allow-net=registry.npmjs.org scripts/sticker-s2-magick-wasm-smoke.ts
+
+      - name: Prepare Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install locked app dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Execute S2 source and pure regression tests
+        run: bun run scripts/sticker-pack-private-thumbnails-s2-regression.ts
+
+      - name: Check TypeScript
+        run: bunx tsc --noEmit
+
+      - name: Build app (no deployment)
+        run: bun run build
