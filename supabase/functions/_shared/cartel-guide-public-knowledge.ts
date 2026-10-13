@@ -376,8 +376,12 @@ export function findGuidePublicEvidence(question: string, maxArticles = 3): Guid
     return { doc, score, matchCount: matches.length };
   }).filter(x => x.score > 0 && x.matchCount >= Math.min(2, terms.length))
     .sort((a,b) => b.score - a.score || a.doc.id.localeCompare(b.doc.id));
+  const exactTitleMatches = terms.length >= 2
+    ? ranked.filter(x => terms.every(term => x.doc.title.toLowerCase().includes(term)))
+    : [];
+  const grounded = exactTitleMatches.length > 0 ? exactTitleMatches : ranked;
   const bounded = Number.isFinite(maxArticles) ? Math.min(4, Math.max(1, Math.floor(maxArticles))) : 3;
-  return ranked.slice(0, bounded).map(({doc}) => {
+  return grounded.slice(0, bounded).map(({doc}) => {
     // Public help article content only. No accounts, messages, wallets or project records.
     const sectionText = doc.sections.map(s => [
       s.title, ...s.body, ...(s.steps ?? []),
