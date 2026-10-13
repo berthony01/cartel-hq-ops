@@ -55,8 +55,13 @@ function PackStickerThumbnail({
   label: string;
 }) {
   const [useOriginal, setUseOriginal] = useState(false);
-  useEffect(() => setUseOriginal(false), [preferredUrl, fallbackUrl]);
-  const imageUrl = useOriginal ? fallbackUrl : (preferredUrl ?? fallbackUrl);
+  const [unavailable, setUnavailable] = useState(false);
+  useEffect(() => {
+    setUseOriginal(false);
+    setUnavailable(false);
+  }, [preferredUrl, fallbackUrl]);
+  const imageUrl = unavailable ? undefined
+    : (useOriginal ? fallbackUrl : (preferredUrl ?? fallbackUrl));
   return imageUrl ? (
     <img
       src={imageUrl}
@@ -67,6 +72,9 @@ function PackStickerThumbnail({
       onError={() => {
         if (!useOriginal && preferredUrl && fallbackUrl && preferredUrl !== fallbackUrl) {
           setUseOriginal(true);
+        } else {
+          // A broken or expired original must not leave a broken image icon.
+          setUnavailable(true);
         }
       }}
     />
