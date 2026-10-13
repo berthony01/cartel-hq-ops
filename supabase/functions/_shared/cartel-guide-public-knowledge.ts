@@ -374,7 +374,7 @@ export function findGuidePublicEvidence(question: string, maxArticles = 3): Guid
       acc + (title.includes(term) ? 6 : 0) + (summary.includes(term) ? 3 : 0) +
       (sections.includes(term) ? 1 : 0), 0);
     return { doc, score, matchCount: matches.length };
-  }).filter(x => x.score > 0 && x.matchCount > 0)
+  }).filter(x => x.score > 0 && x.matchCount >= Math.min(2, terms.length))
     .sort((a,b) => b.score - a.score || a.doc.id.localeCompare(b.doc.id));
   const bounded = Number.isFinite(maxArticles) ? Math.min(4, Math.max(1, Math.floor(maxArticles))) : 3;
   return ranked.slice(0, bounded).map(({doc}) => {
