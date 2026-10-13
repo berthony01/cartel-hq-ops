@@ -39,17 +39,17 @@ export function chooseStickerPackImagePaths(
   const fallback = { originalPath, displayPath: originalPath, usingThumbnail: false };
   const expected = expectedStickerThumbnailPath(originalPath);
   const metadata = record(rawMetadata);
-  const thumb = record(metadata?.thumbnail);
+  const thumb = record(metadata?.["thumbnail"]);
   if (
     !expected || !thumb ||
-    thumb.version !== STICKER_THUMBNAIL_VERSION ||
-    thumb.path !== expected ||
-    thumb.source_path !== originalPath ||
-    thumb.mime_type !== "image/webp" ||
-    !Number.isInteger(thumb.width) || !(Number(thumb.width) > 0 && Number(thumb.width) <= STICKER_THUMBNAIL_EDGE) ||
-    !Number.isInteger(thumb.height) || !(Number(thumb.height) > 0 && Number(thumb.height) <= STICKER_THUMBNAIL_EDGE) ||
-    !Number.isInteger(thumb.file_size_bytes) ||
-    !(Number(thumb.file_size_bytes) > 0 && Number(thumb.file_size_bytes) <= STICKER_THUMBNAIL_MAX_BYTES)
+    thumb["version"] !== STICKER_THUMBNAIL_VERSION ||
+    thumb["path"] !== expected ||
+    thumb["source_path"] !== originalPath ||
+    thumb["mime_type"] !== "image/webp" ||
+    !Number.isInteger(thumb["width"]) || !(Number(thumb["width"]) > 0 && Number(thumb["width"]) <= STICKER_THUMBNAIL_EDGE) ||
+    !Number.isInteger(thumb["height"]) || !(Number(thumb["height"]) > 0 && Number(thumb["height"]) <= STICKER_THUMBNAIL_EDGE) ||
+    !Number.isInteger(thumb["file_size_bytes"]) ||
+    !(Number(thumb["file_size_bytes"]) > 0 && Number(thumb["file_size_bytes"]) <= STICKER_THUMBNAIL_MAX_BYTES)
   ) return fallback;
   return { originalPath, displayPath: expected, usingThumbnail: true };
 }
