@@ -1226,9 +1226,9 @@ Deno.serve(async (req: Request) => {
         if (assetId && finalPng) {
           try {
             const baseName = path.split("/").pop() ?? "";
-            const safeName = /^[a-z0-9-]{1,110}\\.png$/i.test(baseName);
+            const safeName = /^[a-z0-9-]{1,110}\.png$/i.test(baseName);
             if (safeName) {
-              const thumbnailPath = `${job.workspace_id}/generated_sticker_thumbnails/${baseName.replace(/\\.png$/i, ".webp")}`;
+              const thumbnailPath = `${job.workspace_id}/generated_sticker_thumbnails/${baseName.replace(/\.png$/i, ".webp")}`;
               const { data: currentAsset } = await admin.from("media_assets")
                 .select("metadata").eq("id", assetId).eq("workspace_id", job.workspace_id).maybeSingle();
               const oldMeta = currentAsset?.metadata && typeof currentAsset.metadata === "object" && !Array.isArray(currentAsset.metadata)
