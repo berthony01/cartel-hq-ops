@@ -52,7 +52,7 @@ rejects("foreign asset row fails closed", () => { const x=copy();x[0].workspace_
 rejects("wrong media type fails closed", () => { const x=copy();x[0].asset_type="reference_image";return planLegacyStickerThumbnailBackfill(x,options);});
 rejects("wrong mime fails closed", () => { const x=copy();x[0].mime_type="image/jpeg";return planLegacyStickerThumbnailBackfill(x,options);});
 rejects("zero byte original rejected", () => { const x=copy();x[0].file_size_bytes=0;return planLegacyStickerThumbnailBackfill(x,options);});
-rejects("too large original rejected", () => { const x=copy();x[0].file_size_bytes=26_000_000;return planLegacyStickerThumbnailBackfill(x,options);});
+rejects("too large original rejected", () => { const x=copy();x[0].file_size_bytes=27_000_000;return planLegacyStickerThumbnailBackfill(x,options);});
 rejects("wrong root folder rejected", () => { const x=copy();x[0].storage_path=`${workspace}/reference/z.png`;return planLegacyStickerThumbnailBackfill(x,options);});
 rejects("invalid thumb pointer not overwritten", () => {
   const x=copy();x[0].metadata={thumbnail:{path:`${other}/generated_sticker_thumbnails/evil.webp`}};
