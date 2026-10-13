@@ -64,7 +64,7 @@ try{
    for(const item of readdirSync(dir)){
      const full=join(dir,item),entry=statSync(full);
      if(entry.isDirectory())visit(full);
-     else if(/\\.(?:ts|tsx|js|mjs|json)$/.test(item)&&entry.size<2_000_000 &&
+     else if(/\.(?:ts|tsx|js|mjs|json)$/.test(item)&&entry.size<2_000_000 &&
              readFileSync(full,"utf8").includes(PROD)) unresolved.push(full);
    }
  }
