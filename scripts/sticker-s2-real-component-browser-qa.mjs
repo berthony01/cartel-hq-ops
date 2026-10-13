@@ -102,11 +102,15 @@ try {
             await route.fulfill({status:200,contentType:isWebp?"image/webp":"image/png",body:isWebp?webp:png});
           }
         });
-        page.on("request", async request => {
-          const url = request.url();
+        // Catch-all route is installed after mock routes; fallback invokes the
+        // earlier synthetic handlers. Any non-loopback request is blocked.
+        await page.route("**/*", async route => {
+          const url = route.request().url();
           if (!(url.startsWith("http://127.0.0.1:") || url.startsWith("data:") || url.startsWith("about:"))) {
             external.push(url.split("?")[0]);
-            try { await request.abort(); } catch { /* best effort */ }
+            await route.abort();
+          } else {
+            await route.fallback();
           }
         });
         await page.goto("http://127.0.0.1:" + port + "/?case=" + testCase, {waitUntil:"domcontentloaded"});
