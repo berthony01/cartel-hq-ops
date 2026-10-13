@@ -28,6 +28,8 @@ To invoke the deployed endpoint without accessing any private customer account, 
 
 **Result: 8/8 executed HTTP cases passed; a ninth Origin-header test could not run through the available tool.** Direct staging logs corroborated the request responses; a GET to staging Auth `/auth/v1/user` produced 403 for the public anon JWT, and the Guide returned 401, as designed.
 
+**Cleanup:** After HTTP QA, the temporary PostgreSQL `http` extension was **removed from STAGING** through a staging-only migration; it is not needed at runtime. No SQL HTTP testing capability was left installed by this QA phase.
+
 ## What this does NOT prove
 1. A real user JWT, matching `auth.users`, successfully passes `auth.getUser` and resolves the member/owner records. Staging currently has zero real Auth users.
 2. Complete browser CORS/preflight behavior from the actual Cartel HQ UI origin. The staging origin allowlist intentionally remains unset, and no UI invokes the new function.
