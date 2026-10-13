@@ -19,8 +19,10 @@ const file=resolve("src/integrations/supabase/client.ts");
 const mcpFile=resolve("src/lib/mcp/supabase.ts");
 const envFile=resolve(".env");
 const networkFile=resolve("src/lib/cartel-network.ts");
+const mcpIndexFile=resolve("src/lib/mcp/index.ts");
+const tgFile=resolve("src/routes/tg.tsx");
 const configFile=resolve("supabase/config.toml");
-const originals=new Map([[file,readFileSync(file,"utf8")],[mcpFile,readFileSync(mcpFile,"utf8")],[envFile,readFileSync(envFile,"utf8")],[networkFile,readFileSync(networkFile,"utf8")],[configFile,readFileSync(configFile,"utf8")]]);
+const originals=new Map([[file,readFileSync(file,"utf8")],[mcpFile,readFileSync(mcpFile,"utf8")],[envFile,readFileSync(envFile,"utf8")],[networkFile,readFileSync(networkFile,"utf8")],[mcpIndexFile,readFileSync(mcpIndexFile,"utf8")],[tgFile,readFileSync(tgFile,"utf8")],[configFile,readFileSync(configFile,"utf8")]]);
 const before=originals.get(file);
 const urlMatch=before.match(/const SUPABASE_URL = "([^"]+)";/);
 const keyMatch=before.match(/const SUPABASE_PUBLISHABLE_KEY = "([^"]+)";/);
@@ -39,11 +41,13 @@ function *files(dir){if(!existsSync(dir))return;for(const name of readdirSync(di
  else if(/\.(?:js|mjs|cjs|html|json|css|map|txt)$/.test(name)&&stat.size<10_000_000)yield full;
 }}
 try{
- const oldMcp=originals.get(mcpFile), oldEnv=originals.get(envFile), oldConfig=originals.get(configFile),oldNetwork=originals.get(networkFile);
+ const oldMcp=originals.get(mcpFile), oldEnv=originals.get(envFile), oldConfig=originals.get(configFile),oldNetwork=originals.get(networkFile),oldMcpIndex=originals.get(mcpIndexFile),oldTg=originals.get(tgFile);
  if(!oldMcp.includes("https://"+PROD+".supabase.co") ||
     !oldEnv.includes('SUPABASE_PROJECT_ID="'+PROD+'"') ||
     !oldConfig.includes('project_id = "'+PROD+'"') ||
-    !oldNetwork.includes('const SUPABASE_URL = "https://'+PROD+'.supabase.co";')) throw Error("REFUSED: backend stage substitution source drift");
+    !oldNetwork.includes('const SUPABASE_URL = "https://'+PROD+'.supabase.co";') ||
+    !oldMcpIndex.includes(PROD) || !oldTg.includes('const SUPABASE_ORIGIN = "https://'+PROD+'.supabase.co";') ||
+    !oldTg.includes('const SUPABASE_WS_ORIGIN = "wss://'+PROD+'.supabase.co";')) throw Error("REFUSED: backend stage substitution source drift");
  const stagedMcp=oldMcp
    .replace('const SUPABASE_URL = "https://'+PROD+'.supabase.co";','const SUPABASE_URL = "'+stageURL+'";')
    .replace(/(const SUPABASE_PUBLISHABLE_KEY =\s*)"[^"]+";/,'$1"'+key+'";');
@@ -51,12 +55,16 @@ try{
    .replace(/^(VITE_)?SUPABASE_PUBLISHABLE_KEY=.*$/gm,(_line,vite)=>((vite||"")+"SUPABASE_PUBLISHABLE_KEY=\""+key+"\""));
  const stagedConfig=oldConfig.replace('project_id = "'+PROD+'"','project_id = "'+STAGE+'"');
  const stagedNetwork=oldNetwork.replace('const SUPABASE_URL = "https://'+PROD+'.supabase.co";','const SUPABASE_URL = "'+stageURL+'";');
- if(stagedMcp.includes(PROD)||stagedEnv.includes(PROD)||stagedConfig.includes(PROD)||stagedNetwork.includes(PROD)) throw Error("REFUSED: backend ref in generated stage config");
+ const stagedMcpIndex=oldMcpIndex.replaceAll(PROD,STAGE);
+ const stagedTg=oldTg.replaceAll(PROD,STAGE);
+ if(stagedMcp.includes(PROD)||stagedEnv.includes(PROD)||stagedConfig.includes(PROD)||stagedNetwork.includes(PROD)||stagedMcpIndex.includes(PROD)||stagedTg.includes(PROD)) throw Error("REFUSED: backend ref in generated stage config");
  writeFileSync(file,preview);
  writeFileSync(mcpFile,stagedMcp);
  writeFileSync(envFile,stagedEnv);
  writeFileSync(configFile,stagedConfig);
  writeFileSync(networkFile,stagedNetwork);
+ writeFileSync(mcpIndexFile,stagedMcpIndex);
+ writeFileSync(tgFile,stagedTg);
  // Fail before a second costly build if any unrewired hardcoded production
  // reference remains in runtime src files. Paths only, no secrets in logs.
  const unresolved=[];
