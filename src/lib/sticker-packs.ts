@@ -206,18 +206,24 @@ export async function deletePackPermanently(packId: string): Promise<PackDeleteR
   const paths = (result.storage_paths ?? []).filter((p) => typeof p === "string" && p.length > 0);
   let storageCleanupPending = false;
   if (paths.length > 0) {
-    // Only original paths returned by the authorized, successful deletion RPC
-    // may determine associated private derived paths. No user-supplied paths,
-    // separate workspace asset lookups, or extra DB writes are introduced.
-    const derived = paths
-      .map(expectedStickerThumbnailPath)
-      .filter((p): p is string => p !== null);
-    // Supabase Storage delete is idempotent for absent objects. Continue to
-    // report the ORIGINAL removal count so caller semantics stay unchanged.
-    const filesToRemove = [...new Set([...paths, ...derived])];
+    // Preserve the established original-image deletion behavior. Derived
+    // cleanup is separate: missing thumbnails must never prevent originals
+    // being deleted. The RPC is the only authority for original paths.
     const { error: storageError } = await supabase.storage
-      .from(ASSETS_BUCKET).remove(filesToRemove);
+      .from(ASSETS_BUCKET).remove(paths);
     if (storageError) storageCleanupPending = true;
+
+    // An authorized original PNG uniquely determines its private derivative.
+    // Keep this best effort: any failure is reported by the existing
+    // storageCleanupPending flag without altering the completed database RPC.
+    const derived = [...new Set(paths
+      .map(expectedStickerThumbnailPath)
+      .filter((p): p is string => p !== null))];
+    if (derived.length > 0) {
+      const { error: derivativeError } = await supabase.storage
+        .from(ASSETS_BUCKET).remove(derived);
+      if (derivativeError) storageCleanupPending = true;
+    }
   }
 
   return {
