@@ -37,7 +37,7 @@ jobs:
           deno-version: v2.x
 
       - name: Verify real magick-wasm WebP encode/decode with synthetic fixture
-        run: deno run --allow-read --allow-net=registry.npmjs.org scripts/sticker-s2-magick-wasm-smoke.ts
+        run: deno run --node-modules-dir=auto --allow-read --allow-net=registry.npmjs.org scripts/sticker-s2-magick-wasm-smoke.ts
 
       - name: Prepare Bun
         uses: oven-sh/setup-bun@v2
