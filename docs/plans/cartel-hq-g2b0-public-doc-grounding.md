@@ -13,6 +13,11 @@ A small, deterministic, **read-only public Help Center knowledge pack** staged f
 - Bounds input to 500 chars, max 14 unique meaningful query words, max 4 matching articles, and 1,350 chars per excerpt. Prefers exact Help Center title-term matches, then deterministic conservative relevance. Cites canonical local `/docs?article=<id>` links with the source review date.
 - **This is evidence retrieval, not model-generated answers.** Retrieved docs are untrusted data to any future model and must never be promoted to system/tool instructions.
 
+## Initial source-to-product consistency check
+- Verified that the public `first-session` and `create-project` help text names the same three project goals as `src/lib/workspace-goal.ts`: Manage My Community, Prepare a Token Launch and Both.
+- Verified that `src/lib/onboarding.ts` uses matching goal-specific setup steps (project identity, optional community for launch-only, launch basics for launch/both, and review).
+- Verified that this is **only a source-code consistency check**, not authenticated visual QA or proof that all live labels/screens remain current.
+
 ## Tests
 - 19/19 offline retrieval assertions passed in V8 with temporary in-memory TypeScript annotation removal (not a Bun/tsc checkout run). Cases: source allowlist, source freshness, Telegram account/group, account, identity, no-match behavior, input/citation limits, injection cannot become evidence, deterministic repeats.
 - Canonical title query results: `create account -> create-account`; `connect Telegram group -> connect-group`; `set project identity -> project-identity`; `connect Telegram account -> connect-telegram-account`.
