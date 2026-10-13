@@ -18,8 +18,9 @@ if(!/^sb_publishable_[a-zA-Z0-9_-]{15,120}$/.test(key))throw Error("REFUSED: val
 const file=resolve("src/integrations/supabase/client.ts");
 const mcpFile=resolve("src/lib/mcp/supabase.ts");
 const envFile=resolve(".env");
+const networkFile=resolve("src/lib/cartel-network.ts");
 const configFile=resolve("supabase/config.toml");
-const originals=new Map([[file,readFileSync(file,"utf8")],[mcpFile,readFileSync(mcpFile,"utf8")],[envFile,readFileSync(envFile,"utf8")],[configFile,readFileSync(configFile,"utf8")]]);
+const originals=new Map([[file,readFileSync(file,"utf8")],[mcpFile,readFileSync(mcpFile,"utf8")],[envFile,readFileSync(envFile,"utf8")],[networkFile,readFileSync(networkFile,"utf8")],[configFile,readFileSync(configFile,"utf8")]]);
 const before=originals.get(file);
 const urlMatch=before.match(/const SUPABASE_URL = "([^"]+)";/);
 const keyMatch=before.match(/const SUPABASE_PUBLISHABLE_KEY = "([^"]+)";/);
@@ -38,21 +39,24 @@ function *files(dir){if(!existsSync(dir))return;for(const name of readdirSync(di
  else if(/\.(?:js|mjs|cjs|html|json|css|map|txt)$/.test(name)&&stat.size<10_000_000)yield full;
 }}
 try{
- const oldMcp=originals.get(mcpFile), oldEnv=originals.get(envFile), oldConfig=originals.get(configFile);
+ const oldMcp=originals.get(mcpFile), oldEnv=originals.get(envFile), oldConfig=originals.get(configFile),oldNetwork=originals.get(networkFile);
  if(!oldMcp.includes("https://"+PROD+".supabase.co") ||
     !oldEnv.includes('SUPABASE_PROJECT_ID="'+PROD+'"') ||
-    !oldConfig.includes('project_id = "'+PROD+'"')) throw Error("REFUSED: backend stage substitution source drift");
+    !oldConfig.includes('project_id = "'+PROD+'"') ||
+    !oldNetwork.includes('const SUPABASE_URL = "https://'+PROD+'.supabase.co";')) throw Error("REFUSED: backend stage substitution source drift");
  const stagedMcp=oldMcp
    .replace('const SUPABASE_URL = "https://'+PROD+'.supabase.co";','const SUPABASE_URL = "'+stageURL+'";')
    .replace(/(const SUPABASE_PUBLISHABLE_KEY =\s*)"[^"]+";/,'$1"'+key+'";');
  const stagedEnv=oldEnv.replaceAll(PROD,STAGE)
    .replace(/^(VITE_)?SUPABASE_PUBLISHABLE_KEY=.*$/gm,(_line,vite)=>((vite||"")+"SUPABASE_PUBLISHABLE_KEY=\""+key+"\""));
  const stagedConfig=oldConfig.replace('project_id = "'+PROD+'"','project_id = "'+STAGE+'"');
- if(stagedMcp.includes(PROD)||stagedEnv.includes(PROD)||stagedConfig.includes(PROD)) throw Error("REFUSED: backend ref in generated stage config");
+ const stagedNetwork=oldNetwork.replace('const SUPABASE_URL = "https://'+PROD+'.supabase.co";','const SUPABASE_URL = "'+stageURL+'";');
+ if(stagedMcp.includes(PROD)||stagedEnv.includes(PROD)||stagedConfig.includes(PROD)||stagedNetwork.includes(PROD)) throw Error("REFUSED: backend ref in generated stage config");
  writeFileSync(file,preview);
  writeFileSync(mcpFile,stagedMcp);
  writeFileSync(envFile,stagedEnv);
  writeFileSync(configFile,stagedConfig);
+ writeFileSync(networkFile,stagedNetwork);
  const run=spawnSync("bun",["run","build"],{stdio:"inherit",timeout:600_000,env:{...process.env}});
  if(run.error)throw run.error;
  if(run.status!==0)throw Error("STAGING PREVIEW BUILD failed status "+run.status);
