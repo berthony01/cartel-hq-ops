@@ -1234,9 +1234,9 @@ Deno.serve(async (req: Request) => {
               const oldMeta = currentAsset?.metadata && typeof currentAsset.metadata === "object" && !Array.isArray(currentAsset.metadata)
                 ? currentAsset.metadata as Record<string, unknown>
                 : {};
-              const oldThumb = oldMeta.thumbnail && typeof oldMeta.thumbnail === "object" && !Array.isArray(oldMeta.thumbnail)
-                ? oldMeta.thumbnail as Record<string, unknown> : null;
-              if (oldThumb?.path !== thumbnailPath) {
+              const oldThumb = oldMeta["thumbnail"] && typeof oldMeta["thumbnail"] === "object" && !Array.isArray(oldMeta["thumbnail"])
+                ? oldMeta["thumbnail"] as Record<string, unknown> : null;
+              if (oldThumb?.["path"] !== thumbnailPath) {
                 let thumbnailBytes: Uint8Array | null = null;
                 let thumbWidth = 0;
                 let thumbHeight = 0;
