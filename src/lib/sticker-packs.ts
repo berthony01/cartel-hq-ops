@@ -551,7 +551,7 @@ export type GeneratedAsset = {
   transparency_valid: boolean | null;
   width: number | null;
   height: number | null;
-  metadata: unknown;
+  metadata?: unknown;
 };
 
 export async function loadAssets(ids: string[]): Promise<Record<string, GeneratedAsset>> {
