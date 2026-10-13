@@ -7,7 +7,9 @@ on:
       - ".github/workflows/sticker-s2-draft-qa.yml"
       - "scripts/sticker-s2-magick-wasm-smoke.ts"
       - "scripts/sticker-pack-private-thumbnails-s2-regression.ts"
+      - "scripts/sticker-s2-backfill-plan-regression.ts"
       - "src/lib/sticker-thumbnails.ts"
+      - "src/lib/sticker-s2-backfill-plan.ts"
       - "src/lib/sticker-packs.ts"
       - "src/routes/_authenticated/sticker-lab.$packId.tsx"
       - "backend-source/edge-functions/sticker-ai/index.ts"
@@ -55,6 +57,9 @@ jobs:
 
       - name: Execute S2 source and pure regression tests
         run: bun run scripts/sticker-pack-private-thumbnails-s2-regression.ts
+
+      - name: Validate bounded legacy conversion plan with synthetic inventory
+        run: bun run scripts/sticker-s2-backfill-plan-regression.ts
 
       - name: Check TypeScript
         run: bunx tsc --noEmit
