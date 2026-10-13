@@ -6,7 +6,7 @@
 - **GitHub** maintains reviewed, auditable source with branches and draft PRs. New Supabase Edge Function source may be staged here, then deployed through the already connected Supabase service *only after separate owner approval*.
 - **ChatGPT** coordinates architecture, source review, direct read-only Supabase audits, security QA, and authorized implementation. No assumption that GitHub staging deploys to Supabase.
 - PCART mainnet, treasury, emergency stop, wallets, launch state, Telegram, live billing, and existing Setup Help remain untouched by the Guide budget effort.
-- Owner retains unrestricted customer entitlements and quotas via `public.has_platform_unrestricted_access`. However, **all AI provider use, including owner pilots**, is subject to platform-wide emergency stop and hard spend ceilings.
+- Owner retains unrestricted customer entitlements and quotas via `public.has_platform_unrestricted_access`. **All conversational Guide provider calls, including owner pilots**, must respect the Guide-wide emergency stop and hard spending ceilings. Existing Sticker AI calls are not covered by this Guide-only candidate; a cross-feature cap would require separate, explicitly approved integration.
 
 ## Live baseline verified via Supabase (read-only)
 - CARTEL HQ Supabase connection status: `ACTIVE_HEALTHY` (PostgreSQL 17).
@@ -27,6 +27,11 @@ Its intended database contract:
 5. Transition `held -> in_flight` **before** any future provider request, rechecking global stop; release ONLY while `held`, before dispatch. After dispatch/ambiguous outcome, keep hold unresolved pending manual review; never blindly expire or release it.
 6. Settlement is idempotent. Missing token usage settles at worst-case reservation. Reported usage in excess of cap triggers emergency stop and requires operator investigation.
 7. Tables have RLS enabled and browser roles have no direct grants; the four SECURITY DEFINER RPCs are explicit **service_role-only** with fixed search paths. No provider model/secrets or network calls in this candidate.
+
+## Known candidate gaps (review gate)
+- The quote price version is unique and recorded per reservation, but this candidate does **not yet enforce quote-row immutability using a database trigger**; admin-only quote edits must be prohibited or a separate price-version mutation guard added before deployment.
+- Global hard ceilings are **Guide-only**: this proposal does not modify pre-existing Sticker AI or other provider services. Do not claim it stops those costs.
+- The SQL has **not been parsed or transaction-tested** in disposable Postgres, and its SECURITY DEFINER permissions have not been verified under impersonated roles. Do not apply until those checks pass.
 
 ## Required *pre-deployment* validation (NOT completed)
 - Independent review of SQL parser/syntax, schema, grants, SECURITY DEFINER privilege context, role-specific RLS, and existing commercial RPC behavior in a **disposable non-production Postgres/Supabase environment**.
