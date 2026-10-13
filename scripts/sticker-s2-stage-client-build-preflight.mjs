@@ -57,6 +57,19 @@ try{
  writeFileSync(envFile,stagedEnv);
  writeFileSync(configFile,stagedConfig);
  writeFileSync(networkFile,stagedNetwork);
+ // Fail before a second costly build if any unrewired hardcoded production
+ // reference remains in runtime src files. Paths only, no secrets in logs.
+ const unresolved=[];
+ function visit(dir){
+   for(const item of readdirSync(dir)){
+     const full=join(dir,item),entry=statSync(full);
+     if(entry.isDirectory())visit(full);
+     else if(/\\.(?:ts|tsx|js|mjs|json)$/.test(item)&&entry.size<2_000_000 &&
+             readFileSync(full,"utf8").includes(PROD)) unresolved.push(full);
+   }
+ }
+ visit("src");
+ if(unresolved.length)throw Error("REFUSED: staging source still contains production project ref in "+unresolved.join(", "));
  const run=spawnSync("bun",["run","build"],{stdio:"inherit",timeout:600_000,env:{...process.env}});
  if(run.error)throw run.error;
  if(run.status!==0)throw Error("STAGING PREVIEW BUILD failed status "+run.status);
