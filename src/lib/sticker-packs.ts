@@ -1,6 +1,7 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { ASSETS_BUCKET } from "@/lib/media";
+import { expectedStickerThumbnailPath } from "@/lib/sticker-thumbnails";
 
 import {
   PACK_SIZES,
@@ -205,7 +206,17 @@ export async function deletePackPermanently(packId: string): Promise<PackDeleteR
   const paths = (result.storage_paths ?? []).filter((p) => typeof p === "string" && p.length > 0);
   let storageCleanupPending = false;
   if (paths.length > 0) {
-    const { error: storageError } = await supabase.storage.from(ASSETS_BUCKET).remove(paths);
+    // Only original paths returned by the authorized, successful deletion RPC
+    // may determine associated private derived paths. No user-supplied paths,
+    // separate workspace asset lookups, or extra DB writes are introduced.
+    const derived = paths
+      .map(expectedStickerThumbnailPath)
+      .filter((p): p is string => p !== null);
+    // Supabase Storage delete is idempotent for absent objects. Continue to
+    // report the ORIGINAL removal count so caller semantics stay unchanged.
+    const filesToRemove = [...new Set([...paths, ...derived])];
+    const { error: storageError } = await supabase.storage
+      .from(ASSETS_BUCKET).remove(filesToRemove);
     if (storageError) storageCleanupPending = true;
   }
 
