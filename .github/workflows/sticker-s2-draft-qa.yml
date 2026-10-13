@@ -7,6 +7,7 @@ on:
       - ".github/workflows/sticker-s2-draft-qa.yml"
       - "scripts/sticker-s2-magick-wasm-smoke.ts"
       - "scripts/sticker-s2-real-component-browser-qa.mjs"
+      - "scripts/sticker-s2-pack-route-browser-qa.mjs"
       - "scripts/sticker-pack-private-thumbnails-s2-regression.ts"
       - "scripts/sticker-s2-backfill-plan-regression.ts"
       - "src/lib/sticker-thumbnails.ts"
@@ -72,6 +73,9 @@ jobs:
 
       - name: Browser QA of the real published-pack thumbnail component (synthetic, loopback only)
         run: node scripts/sticker-s2-real-component-browser-qa.mjs
+
+      - name: Browser QA actual Sticker Lab pack route with synthetic data
+        run: node scripts/sticker-s2-pack-route-browser-qa.mjs
 
       - name: Check TypeScript
         run: bunx tsc --noEmit
