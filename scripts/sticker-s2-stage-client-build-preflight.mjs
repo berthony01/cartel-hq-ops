@@ -16,7 +16,11 @@ const ok=process.env.GITHUB_ACTIONS==="true" && process.env.GITHUB_EVENT_NAME===
 if(!ok)throw Error("REFUSED: this checker is CI-only on the authorized draft PR branch");
 if(!/^sb_publishable_[a-zA-Z0-9_-]{15,120}$/.test(key))throw Error("REFUSED: valid staging-only PUBLIC key required");
 const file=resolve("src/integrations/supabase/client.ts");
-const before=readFileSync(file,"utf8");
+const mcpFile=resolve("src/lib/mcp/supabase.ts");
+const envFile=resolve(".env");
+const configFile=resolve("supabase/config.toml");
+const originals=new Map([[file,readFileSync(file,"utf8")],[mcpFile,readFileSync(mcpFile,"utf8")],[envFile,readFileSync(envFile,"utf8")],[configFile,readFileSync(configFile,"utf8")]]);
+const before=originals.get(file);
 const urlMatch=before.match(/const SUPABASE_URL = "([^"]+)";/);
 const keyMatch=before.match(/const SUPABASE_PUBLISHABLE_KEY = "([^"]+)";/);
 if(urlMatch?.[1]!=="https://"+PROD+".supabase.co" ||
@@ -34,7 +38,21 @@ function *files(dir){if(!existsSync(dir))return;for(const name of readdirSync(di
  else if(/\.(?:js|mjs|cjs|html|json|css|map|txt)$/.test(name)&&stat.size<10_000_000)yield full;
 }}
 try{
+ const oldMcp=originals.get(mcpFile), oldEnv=originals.get(envFile), oldConfig=originals.get(configFile);
+ if(!oldMcp.includes("https://"+PROD+".supabase.co") ||
+    !oldEnv.includes('SUPABASE_PROJECT_ID="'+PROD+'"') ||
+    !oldConfig.includes('project_id = "'+PROD+'"')) throw Error("REFUSED: backend stage substitution source drift");
+ const stagedMcp=oldMcp
+   .replace('const SUPABASE_URL = "https://'+PROD+'.supabase.co";','const SUPABASE_URL = "'+stageURL+'";')
+   .replace(/(const SUPABASE_PUBLISHABLE_KEY =\s*)"[^"]+";/,'$1"'+key+'";');
+ const stagedEnv=oldEnv.replaceAll(PROD,STAGE)
+   .replace(/^(VITE_)?SUPABASE_PUBLISHABLE_KEY=.*$/gm,(_line,vite)=>((vite||"")+"SUPABASE_PUBLISHABLE_KEY=\""+key+"\""));
+ const stagedConfig=oldConfig.replace('project_id = "'+PROD+'"','project_id = "'+STAGE+'"');
+ if(stagedMcp.includes(PROD)||stagedEnv.includes(PROD)||stagedConfig.includes(PROD)) throw Error("REFUSED: backend ref in generated stage config");
  writeFileSync(file,preview);
+ writeFileSync(mcpFile,stagedMcp);
+ writeFileSync(envFile,stagedEnv);
+ writeFileSync(configFile,stagedConfig);
  const run=spawnSync("bun",["run","build"],{stdio:"inherit",timeout:600_000,env:{...process.env}});
  if(run.error)throw run.error;
  if(run.status!==0)throw Error("STAGING PREVIEW BUILD failed status "+run.status);
@@ -48,12 +66,14 @@ try{
   }
  }
  if(!stageFound)throw Error("REFUSED: compiled app has no expected staging endpoint: cannot confirm preview target");
- if(prodLeak.length)throw Error("REFUSED: production project ref remains in compiled preview output (files: "+prodLeak.length+")");
+ if(prodLeak.length)throw Error("REFUSED: production project ref remains in compiled preview output: "+prodLeak.slice(0,20).join(", "));
  console.log(JSON.stringify({test:"S2_STAGING_PREVIEW_BUILD_PREFLIGHT",status:"PASS",stageProject:STAGE,
    originalProductionClientUnmodified:true,compiledFilesScanned:scanned,
    prodProjectStrings:0,disabledLovableSessionBrokerInTemporaryBuild:true,
    stagingDBRequests:0,productionDBRequests:0,hosting:false}));
 }finally{
- writeFileSync(file,before);
- if(readFileSync(file,"utf8")!==before)throw Error("FAILED to restore original generated client");
+ for(const [originalPath,originalContent] of originals){
+   writeFileSync(originalPath,originalContent);
+   if(readFileSync(originalPath,"utf8")!==originalContent)throw Error("FAILED to restore temporary staging substitution");
+ }
 }
