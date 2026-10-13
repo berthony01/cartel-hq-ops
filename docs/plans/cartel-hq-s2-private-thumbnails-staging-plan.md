@@ -76,3 +76,35 @@
 - Verified latest draft CI job **GitHub run 38415724577, job 115359499058, conclusion SUCCESS**. Earlier failed runs isolated the Deno npm configuration and S2 strict-index typing issues; those have been corrected. Follow-up GitHub run is a synthetic local-runner QA, not authenticated hosted Supabase staging QA.
 - **Release gates still NOT CLEARED**: actual function invocation inside hosted Supabase STAGING with synthetic content and tenant-safe access, authorized private Storage RLS/browser QA, 12-image legacy PEPECARTEL backfill planning and explicit owner release approval. The staging test endpoint was previously retired to 410 (JWT enabled). Keep unchanged.
 - No existing customer assets, production database rows, Sticker Drops, Telegram publishing, or PCART mainnet state changed by this QA.
+
+
+## 2026-10-13 — Bounded LEGACY IMAGE CONVERSION PREPARATION (SOURCE ONLY)
+
+### What the production database actually contains — READ-ONLY SELECT only
+- `public.media_assets` includes exactly **12 generated_sticker PNG objects**, and all 12 original paths match the strict deterministic thumbnail path format.
+- Original total according to `file_size_bytes`: **14,597,494 bytes** across **one workspace**. All twelve have **no `metadata.thumbnail` pointer**.
+- `storage.objects` includes **ZERO** `generated_sticker_thumbnails` objects in the existing private bucket.
+- This is consistent with the browser report of 14.6 MB of full-size PNGs being transferred on every full pack load. Does not mean existing Sticker Drops fetch those PNGs.
+- Only aggregate counts/bytes were read and recorded; do **NOT** put IDs, signed URLs, or customer image bytes into tickets, docs, logs or CI.
+
+### Critical STAGING limitation: cannot truthfully certify full app/tenant integration yet
+- STAGING Supabase `llicojkxpzwylghptmkf` has **no `public.media_assets` or `public.sticker_packs` application tables** and previously confirmed zero real authenticated users.
+- The disconnected STAGING backend is not a cloned CARTEL HQ frontend, not the live website, and cannot test existing Production Auth sessions or Storage RLS for Sticker Lab without a separately approved minimal isolated app-schema/Auth fixture.
+- The prior synthetic codec test endpoint has been safely retired to inert `410`; do not disable JWT for convenience.
+- Therefore CI verification + pure planning tests **do not clear hosted STAGING Storage/Auth/tenant boundaries**.
+
+### New strictly read-only legacy planner
+- `src/lib/sticker-s2-backfill-plan.ts` provides `planLegacyStickerThumbnailBackfill(assets, { workspaceId,expectedCount,maxCount })`; maximum count hard-limited to **12**; no SDK/network/filesystem access or credential inputs.
+- Scope must exactly match one workspace and the expected complete inventory. Require unique asset IDs and paths, verified `image/png` originals, <=25 MB each, deterministic workspace-safe thumbnail destinations.
+- Full valid existing thumbnail metadata means skip/idempotent replay; malformed/stale pointers, unexpected inventory, unsupported source formats, cross-workspace rows or duplicates FAIL CLOSED. Output summarized without revealing sensitive paths.
+- `scripts/sticker-s2-backfill-plan-regression.ts` exercises this planner using **only fabricated UUIDs and metadata**. This is **not yet a runnable production conversion script**, deliberately. It cannot alter files, rows, or media until a separately reviewed/approved authenticated executor is built.
+- Keep the original full PNGs and Telegram file IDs unchanged. Conversion must NEVER trigger sticker generation/paid provider APIs.
+
+### Proposed RELEASE BLOCKS — require explicit operator approval in a separate step
+1. **Reconcile state**: read-only fresh counts for the specific workspace immediately before any release. Abort if more/fewer than expected, if a pack/image changed, if cross-workspace content, or if thumbnail metadata differs.
+2. **Hosted isolated integration**: provision only minimal synthetic STAGING schema + private bucket + authorized Auth test principal once the owner agrees; test authenticated membership, denied foreign workspace, signed URL expiry, missing/corrupt thumbnail fallback, WebP alpha, and rollback. Do not clone private production imagery.
+3. **Bounded one-time backfill executor**: implement as separate owner-authorized server-side action with strict workspace+asset allowlist, hard maximum 12, dry-run default, explicit confirmation, serial upload/update, retry idempotence, no public URLs and error/partial progress audit. Credential handling must not introduce secrets into GitHub, frontend, generated logs or documentation.
+4. **Deployment parity + measurement**: apply audited backend/pack page only after passing isolated browser build and tests. Execute the 12-file backfill only under separate release approval. Compare actual full-page GET count, image bytes (baseline **14,597,494**), visible thumbnails, and full-resolution download/Telegram behavior, on authenticated desktop+mobile. Signed URLs may still refresh; success is substantially smaller **bytes**, not necessarily cache hits.
+5. **STOP**: Any missing permissions, partial image pipeline, wrong tenancy, quality/transparency changes, inaccessible existing PNG, quota warning escalation, or build/CI failure means no production merge, function redeploy or backfill.
+
+**STAGING execution and customer production writes remain intentionally blocked.** A pure plan and synthetic tests are steps toward readiness, not a completed conversion.
