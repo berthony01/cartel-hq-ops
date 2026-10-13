@@ -1219,6 +1219,78 @@ Deno.serve(async (req: Request) => {
           }
         }
 
+        // S2: pre-generate a small private gallery derivative ONCE when the
+        // finished original is first persisted. Never replace the original PNG,
+        // alter Telegram publishing, or make a billable generation request.
+        // All failures degrade to the original signed image (no broken stickers).
+        if (assetId && finalPng) {
+          try {
+            const baseName = path.split("/").pop() ?? "";
+            const safeName = /^[a-z0-9-]{1,110}\\.png$/i.test(baseName);
+            if (safeName) {
+              const thumbnailPath = `${job.workspace_id}/generated_sticker_thumbnails/${baseName.replace(/\\.png$/i, ".webp")}`;
+              const { data: currentAsset } = await admin.from("media_assets")
+                .select("metadata").eq("id", assetId).eq("workspace_id", job.workspace_id).maybeSingle();
+              const oldMeta = currentAsset?.metadata && typeof currentAsset.metadata === "object" && !Array.isArray(currentAsset.metadata)
+                ? currentAsset.metadata as Record<string, unknown>
+                : {};
+              const oldThumb = oldMeta.thumbnail && typeof oldMeta.thumbnail === "object" && !Array.isArray(oldMeta.thumbnail)
+                ? oldMeta.thumbnail as Record<string, unknown> : null;
+              if (oldThumb?.path !== thumbnailPath) {
+                let thumbnailBytes: Uint8Array | null = null;
+                let thumbWidth = 0;
+                let thumbHeight = 0;
+                ImageMagick.read(finalPng, (image) => {
+                  image.resize(256, 256);
+                  image.quality = 76;
+                  thumbWidth = image.width;
+                  thumbHeight = image.height;
+                  if (thumbWidth > 0 && thumbHeight > 0 &&
+                    thumbWidth <= 256 && thumbHeight <= 256 &&
+                    image.hasAlpha === true && image.isOpaque === false) {
+                    image.write(MagickFormat.WebP, (bytes) => {
+                      thumbnailBytes = Uint8Array.from(bytes);
+                    });
+                  }
+                });
+                const webp = thumbnailBytes as Uint8Array | null;
+                const validWebp = !!webp && webp.byteLength >= 20 && webp.byteLength <= 250_000 &&
+                  String.fromCharCode(...webp.subarray(0, 4)) === "RIFF" &&
+                  String.fromCharCode(...webp.subarray(8, 12)) === "WEBP";
+                if (webp && validWebp) {
+                  const { error: thumbnailUploadError } = await admin.storage.from(BUCKET)
+                    .upload(thumbnailPath, webp, {
+                      contentType: "image/webp",
+                      cacheControl: "3600",
+                      upsert: false,
+                    });
+                  if (!thumbnailUploadError) {
+                    const nextMeta = {
+                      ...oldMeta,
+                      thumbnail: {
+                        version: 1, path: thumbnailPath, source_path: path,
+                        mime_type: "image/webp", width: thumbWidth,
+                        height: thumbHeight, file_size_bytes: webp.byteLength,
+                      },
+                    };
+                    const { error: metadataError } = await admin.from("media_assets")
+                      .update({ metadata: nextMeta })
+                      .eq("id", assetId).eq("workspace_id", job.workspace_id);
+                    // If the metadata pointer could not be saved, the private
+                    // derivative is not used; clean up our NEW object best-effort.
+                    if (metadataError) {
+                      await admin.storage.from(BUCKET).remove([thumbnailPath]);
+                    }
+                  }
+                }
+              }
+            }
+          } catch {
+            // Thumbnail work is best effort and never blocks paid generation
+            // reconciliation, transparency checks, or publication state.
+          }
+        }
+
         if (jobIsReviewOnly) {
           // Durable review-only record ONLY. The current pointer, sticker status,
           // Telegram fields and pack status are deliberately never written here.
