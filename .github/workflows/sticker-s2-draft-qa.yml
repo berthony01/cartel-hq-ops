@@ -8,6 +8,7 @@ on:
       - "scripts/sticker-s2-magick-wasm-smoke.ts"
       - "scripts/sticker-s2-real-component-browser-qa.mjs"
       - "scripts/sticker-s2-pack-route-browser-qa.mjs"
+      - "scripts/sticker-s2-stage-client-build-preflight.mjs"
       - "scripts/sticker-pack-private-thumbnails-s2-regression.ts"
       - "scripts/sticker-s2-backfill-plan-regression.ts"
       - "src/lib/sticker-thumbnails.ts"
@@ -82,3 +83,7 @@ jobs:
 
       - name: Build app (no deployment)
         run: bun run build
+      - name: Build S2 against staging in ephemeral CI checkout, verify NO production Supabase URLs
+        env:
+          S2_STAGING_PUBLISHABLE_KEY: "sb_publishable_d-5F8v3yLIho-PLEelR4Pw_0HMfnuhO"
+        run: node scripts/sticker-s2-stage-client-build-preflight.mjs
