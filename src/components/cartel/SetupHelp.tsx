@@ -13,10 +13,12 @@ type SetupHelpContextValue = { openHelp: (topic?: HelpTopic | null, trigger?: HT
 
 const SetupHelpContext = createContext<SetupHelpContextValue | null>(null);
 
+// Fallback keeps the page usable if the provider is missing (e.g. after a hot
+// reload recreates this context); help simply does not open instead of crashing.
+const NO_HELP: SetupHelpContextValue = { openHelp: () => {} };
+
 export function useSetupHelp(): SetupHelpContextValue {
-  const ctx = useContext(SetupHelpContext);
-  if (!ctx) throw new Error("useSetupHelp must be used inside SetupHelpProvider");
-  return ctx;
+  return useContext(SetupHelpContext) ?? NO_HELP;
 }
 
 export function SetupHelpProvider({ children }: { children: ReactNode }) {
