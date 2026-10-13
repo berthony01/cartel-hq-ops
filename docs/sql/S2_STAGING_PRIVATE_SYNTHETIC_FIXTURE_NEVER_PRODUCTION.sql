@@ -35,6 +35,7 @@ CREATE TABLE s2_fixture.sticker_assets (
  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
  CONSTRAINT s2_assets_synthetic_only CHECK (original_path LIKE '%/generated_sticker/%')
 );
+CREATE INDEX sticker_assets_workspace_id_idx ON s2_fixture.sticker_assets(workspace_id);
 ALTER TABLE s2_fixture.workspaces ENABLE ROW LEVEL SECURITY;
 ALTER TABLE s2_fixture.memberships ENABLE ROW LEVEL SECURITY;
 ALTER TABLE s2_fixture.sticker_assets ENABLE ROW LEVEL SECURITY;
