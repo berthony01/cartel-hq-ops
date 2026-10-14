@@ -19,6 +19,7 @@ export interface CommercialAccessClient {
 }
 
 export const COMMERCIAL_FEATURE_KEYS = [
+  "guide_conversation",
   "static_ai_generations",
   "motion_ai_generations",
   "x_missions",
