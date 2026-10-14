@@ -197,8 +197,8 @@ BEGIN
     END IF;
 
     SELECT COALESCE(SUM(CASE WHEN state IN ('held','in_flight') THEN reserved_micro_usd
-       WHEN state = 'settled' THEN actual_micro_usd ELSE 0 END),0)
-      INTO v_workspace_month, v_workspace_requests FROM public.cartel_guide_budget_reservations
+       WHEN state = 'settled' THEN actual_micro_usd ELSE 0 END),0),
+      COUNT(*) INTO v_workspace_month, v_workspace_requests FROM public.cartel_guide_budget_reservations
     WHERE workspace_id = _workspace_id
       AND owner_quota_exempt = false
       AND (state IN ('held','in_flight') OR (state = 'settled' AND reserved_at >= v_month));
