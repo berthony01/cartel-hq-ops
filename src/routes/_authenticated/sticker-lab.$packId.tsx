@@ -12,6 +12,7 @@ import { loadAssets, loadPack, loadPackStickers } from "@/lib/sticker-packs";
 import { PackLifecycleMenu } from "@/routes/_authenticated/sticker-lab.index";
 import { loadPackTelegramState } from "@/lib/telegram-stickers";
 import { signedUrlMap } from "@/lib/media";
+import { chooseStickerPackImagePaths } from "@/lib/sticker-thumbnails";
 import { countStickerVersions } from "@/lib/sticker-versions";
 import { fetchPackGroupDistribution } from "@/lib/telegram-group";
 import { fetchDropStatus, scheduleState, SCHEDULE_STATE_LABEL } from "@/lib/sticker-drops";
@@ -39,6 +40,49 @@ export const Route = createFileRoute("/_authenticated/sticker-lab/$packId")({
 });
 
 
+/**
+ * The private thumbnail is preferred only after Supabase signed both sources.
+ * A missing/corrupt derivative falls back to the signed original without
+ * ever publishing either asset or retaining tokens in browser storage.
+ */
+function PackStickerThumbnail({
+  preferredUrl,
+  fallbackUrl,
+  label,
+}: {
+  preferredUrl: string | undefined;
+  fallbackUrl: string | undefined;
+  label: string;
+}) {
+  const [useOriginal, setUseOriginal] = useState(false);
+  const [unavailable, setUnavailable] = useState(false);
+  useEffect(() => {
+    setUseOriginal(false);
+    setUnavailable(false);
+  }, [preferredUrl, fallbackUrl]);
+  const imageUrl = unavailable ? undefined
+    : (useOriginal ? fallbackUrl : (preferredUrl ?? fallbackUrl));
+  return imageUrl ? (
+    <img
+      src={imageUrl}
+      alt={label}
+      loading="lazy"
+      decoding="async"
+      className="size-full object-contain"
+      onError={() => {
+        if (!useOriginal && preferredUrl && fallbackUrl && preferredUrl !== fallbackUrl) {
+          setUseOriginal(true);
+        } else {
+          // A broken or expired original must not leave a broken image icon.
+          setUnavailable(true);
+        }
+      }}
+    />
+  ) : (
+    <ImageOff className="size-5 text-muted-foreground" aria-hidden="true" />
+  );
+}
+
 function PackManagerPage() {
   const { packId } = Route.useParams();
   const { workspaceId } = useWorkspace();
@@ -46,7 +90,8 @@ function PackManagerPage() {
   const [urls, setUrls] = useState<Record<string, string>>({});
 
   const packQuery = useQuery({
-    queryKey: ["pack-manager", packId],
+    queryKey: ["pack-manager", workspaceId, packId],
+    enabled: !!workspaceId,
     queryFn: async () => {
       const [pack, stickers, telegram] = await Promise.all([
         loadPack(packId),
@@ -64,28 +109,34 @@ function PackManagerPage() {
   const pack = data?.pack ?? null;
   const stickers = useMemo(() => data?.stickers ?? [], [data]);
   const assets = useMemo(() => data?.assets ?? {}, [data]);
+  const sameWorkspace = !!pack && !!workspaceId && pack.workspace_id === workspaceId;
 
   useEffect(() => {
     let cancelled = false;
-    const paths = Object.values(assets)
-      .map((a) => a.storage_path)
-      .filter(Boolean);
-    if (paths.length === 0) {
-      setUrls({});
-      return;
-    }
+    // Do not sign assets while the workspace check is unresolved or denied.
+    setUrls({});
+    if (!sameWorkspace) return;
+    const paths = [...new Set(Object.values(assets).flatMap((asset) => {
+      const choice = chooseStickerPackImagePaths(asset.storage_path, asset.metadata);
+      // Signing the original is a cheap fallback; it does NOT download its
+      // image bytes unless the thumbnail is absent or its GET fails.
+      return choice.usingThumbnail
+        ? [choice.displayPath, choice.originalPath]
+        : [choice.originalPath];
+    }))];
+    if (paths.length === 0) return;
     void signedUrlMap(paths, 300).then((map) => {
       if (!cancelled) setUrls(map);
+    }).catch(() => {
+      if (!cancelled) setUrls({});
     });
     return () => {
       cancelled = true;
     };
-  }, [assets]);
+  }, [assets, sameWorkspace]);
 
 
   const stickerIds = useMemo(() => stickers.map((s) => s.id), [stickers]);
-  const sameWorkspace = !!pack && !!workspaceId && pack.workspace_id === workspaceId;
-
   const versionsQuery = useQuery({
     queryKey: ["pack-summary-versions", packId, stickerIds],
     queryFn: () => countStickerVersions(stickerIds),
@@ -531,7 +582,11 @@ function PackManagerPage() {
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 [&>*]:min-w-0">
             {stickers.map((sticker) => {
               const asset = sticker.image_asset_id ? assets[sticker.image_asset_id] : undefined;
-              const url = asset ? urls[asset.storage_path] : undefined;
+              const choice = asset
+                ? chooseStickerPackImagePaths(asset.storage_path, asset.metadata)
+                : null;
+              const originalUrl = choice ? urls[choice.originalPath] : undefined;
+              const preferredUrl = choice?.usingThumbnail ? urls[choice.displayPath] : undefined;
               const telegramState = data?.telegram.stickers[sticker.id];
               const isPublished = !!telegramState?.telegram_file_id;
               return (
@@ -540,22 +595,17 @@ function PackManagerPage() {
                   className="surface-elevated hover-lift min-w-0 rounded-lg p-2.5"
                 >
                   <div className="flex aspect-square items-center justify-center overflow-hidden rounded-md border border-border-subtle bg-background/60 p-1">
-                    {url ? (
-                      <img
-                        src={url}
-                        alt={sticker.label}
-                        loading="lazy"
-                        className="size-full object-contain"
-                      />
-                    ) : (
-                      <ImageOff className="size-5 text-muted-foreground" aria-hidden="true" />
-                    )}
+                    <PackStickerThumbnail
+                      preferredUrl={preferredUrl}
+                      fallbackUrl={originalUrl}
+                      label={sticker.label}
+                    />
                   </div>
                   <p className="mt-2 truncate text-xs font-medium text-foreground">
                     {sticker.label}
                   </p>
                   <div className="mt-1 flex min-w-0">
-                    <StatusBadge tone={isPublished ? "green" : url ? "gold" : "muted"}>
+                    <StatusBadge tone={isPublished ? "green" : originalUrl ? "gold" : "muted"}>
                       {isPublished ? "on telegram" : (sticker.status ?? "draft")}
                     </StatusBadge>
                   </div>
