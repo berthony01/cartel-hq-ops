@@ -28,6 +28,21 @@ check("new workspace request column checked", /ADD COLUMN IF NOT EXISTS customer
 check("workspace 100 cap configured only disabled", /SET customer_workspace_month_requests = 100[\s\S]{0,200}WHERE singleton = true AND enabled = false/.test(sql));
 check("workspace count variable declared", /v_workspace_requests bigint;/.test(sql));
 check("workspace count uses same reservation query", /INTO v_workspace_month, v_workspace_requests FROM public\.cartel_guide_budget_reservations/.test(sql));
+// Protect the actual SQL SELECT output, not merely the INTO variable names.
+// Without COUNT(*), the 100/workspace cap had no calculated request count.
+function hasCorrectWorkspaceAggregate(candidate) {
+  return /SELECT\s+COALESCE\(SUM\(CASE WHEN state IN \('held','in_flight'\) THEN reserved_micro_usd\s+WHEN state = 'settled' THEN actual_micro_usd ELSE 0 END\),0\)\s*,\s*COUNT\(\*\)\s+INTO\s+v_workspace_month\s*,\s*v_workspace_requests\s+FROM\s+public\.cartel_guide_budget_reservations\s+WHERE\s+workspace_id\s*=\s*_workspace_id\b/.test(candidate);
+}
+check("workspace SELECT calculates spend and COUNT(*)", hasCorrectWorkspaceAggregate(sql));
+// Negative mutation: remove COUNT(*) to recreate the original defect;
+// the semantic aggregate check MUST fail on this mutated source.
+const missingCountMutation = sql.replace(
+  /(END\),0\)),\s*COUNT\(\*\)(\s+INTO v_workspace_month, v_workspace_requests FROM public\.cartel_guide_budget_reservations)/,
+  "$1$2",
+);
+check("test detects omitted COUNT(*) regression",
+  missingCountMutation !== sql && !hasCorrectWorkspaceAggregate(missingCountMutation));
+
 check("100 checked before budget insert", sql.indexOf("v_workspace_requests >= v_cfg.customer_workspace_month_requests") <
   sql.indexOf("INSERT INTO public.cartel_guide_budget_reservations"));
 check("workspace cap fail-closed when absent", /v_cfg.customer_workspace_month_requests IS NULL/.test(sql));
