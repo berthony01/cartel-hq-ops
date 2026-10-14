@@ -30,8 +30,7 @@ const QUESTION_SUGGESTIONS: Record<HelpTopic, string> = {
   general: "How do I create my project?",
   identity: "How do I set my project identity?",
   community: "How do I connect my Telegram group?",
-  // No launch-specific article is in the audited eight-article pack yet.
-  launch: "How do I set my project identity?",
+  launch: "How do I set my launch schedule?",
   review: "How do I create my project?",
 };
 
