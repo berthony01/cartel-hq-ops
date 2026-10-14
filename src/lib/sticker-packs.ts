@@ -1,7 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import type { Json } from "@/integrations/supabase/types";
 import { ASSETS_BUCKET } from "@/lib/media";
-import { expectedStickerThumbnailPath } from "@/lib/sticker-thumbnails";
 
 import {
   PACK_SIZES,
@@ -206,24 +205,8 @@ export async function deletePackPermanently(packId: string): Promise<PackDeleteR
   const paths = (result.storage_paths ?? []).filter((p) => typeof p === "string" && p.length > 0);
   let storageCleanupPending = false;
   if (paths.length > 0) {
-    // Preserve the established original-image deletion behavior. Derived
-    // cleanup is separate: missing thumbnails must never prevent originals
-    // being deleted. The RPC is the only authority for original paths.
-    const { error: storageError } = await supabase.storage
-      .from(ASSETS_BUCKET).remove(paths);
+    const { error: storageError } = await supabase.storage.from(ASSETS_BUCKET).remove(paths);
     if (storageError) storageCleanupPending = true;
-
-    // An authorized original PNG uniquely determines its private derivative.
-    // Keep this best effort: any failure is reported by the existing
-    // storageCleanupPending flag without altering the completed database RPC.
-    const derived = [...new Set(paths
-      .map(expectedStickerThumbnailPath)
-      .filter((p): p is string => p !== null))];
-    if (derived.length > 0) {
-      const { error: derivativeError } = await supabase.storage
-        .from(ASSETS_BUCKET).remove(derived);
-      if (derivativeError) storageCleanupPending = true;
-    }
   }
 
   return {
