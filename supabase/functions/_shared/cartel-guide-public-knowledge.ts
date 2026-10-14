@@ -345,6 +345,181 @@ const HELP_ARTICLES: readonly HelpArticle[] = [
         ]
       }
     ]
+  },
+  {
+    "id": "create-launch",
+    "title": "Create a draft launch and edit its details",
+    "summary": "Prepare a launch record without deploying a contract or publishing immediately.",
+    "sections": [
+      {
+        "title": "Create the draft",
+        "body": [],
+        "steps": [
+          "Open Launch Control and confirm the selected project.",
+          "Choose New launch. The dialog prefills values from Project Profile without modifying that profile.",
+          "Review Token name, Ticker, Chain and Public launch slug. Use a unique valid slug for this launch page.",
+          "Read the timezone recorded from this device.",
+          "Choose Create draft launch. The new launch starts in Draft. Nothing is saved merely by opening the dialog.",
+          "Select the launch and open Details to edit supported launch information. Use Save launch details after changes."
+        ]
+      },
+      {
+        "title": "Expected result",
+        "body": [
+          "The launch appears under Project launches and can be selected independently of other launches belonging to the same project. A draft is a launch record, not a deployed token. A public launch page requires the project profile to be published and the launch to leave Draft."
+        ]
+      },
+      {
+        "title": "Common mistakes",
+        "body": [
+          "Do not reuse an existing launch slug, confuse the launch slug with the project slug, or expect creation to execute a transaction. Multiple launches under one project still share that project’s official identity."
+        ]
+      }
+    ]
+  },
+  {
+    "id": "launch-schedule",
+    "title": "Set an exact launch time or launch window",
+    "summary": "Save the schedule and review reminder arming and communication separately.",
+    "sections": [
+      {
+        "title": "Set the schedule",
+        "body": [],
+        "steps": [
+          "Select the correct launch and open Schedule.",
+          "Read the device timezone displayed by the form. Inputs are local to this device and stored as absolute timestamps.",
+          "Choose Schedule mode. Use the offered exact-time mode for a single time or Launch window for a start and end.",
+          "Enter the required time or Window start and Window end. Ensure the end is later than the start.",
+          "Press Save launch details and read Saved schedule.",
+          "Check Reminder state. Countdown reminders remain unarmed until the launch advances to Launch approaching.",
+          "If a previously saved schedule changed, review the separate watcher notification decision in Broadcasts."
+        ]
+      },
+      {
+        "title": "Timezone and reminder limits",
+        "body": [
+          "A recorded timezone label can differ from the device timezone in which you are editing. The current form states that arbitrary timezone conversion is not provided. A window’s countdown uses its start. Read the displayed absolute result after saving."
+        ]
+      },
+      {
+        "title": "Common mistakes",
+        "body": [
+          "Saving the date does not automatically arm countdowns or notify watchers of a change. Advance the lifecycle before the reminder due time and make the communication decision explicitly."
+        ]
+      }
+    ]
+  },
+  {
+    "id": "launch-lifecycle",
+    "title": "Understand the launch lifecycle and next action",
+    "summary": "Follow the available action and its prerequisite instead of skipping stages.",
+    "sections": [
+      {
+        "title": "Current lifecycle",
+        "body": [],
+        "rows": [
+          [
+            "Draft",
+            "A saved launch preparation record."
+          ],
+          [
+            "Announced",
+            "Launch announcement stage after leaving Draft."
+          ],
+          [
+            "Watchlist open",
+            "Eligible members can opt in; countdown delivery can still be unarmed."
+          ],
+          [
+            "Launch approaching",
+            "Countdown delivery becomes armed according to schedule and eligibility."
+          ],
+          [
+            "Contract pending",
+            "Official registration can be offered only when required deployment evidence is verified."
+          ],
+          [
+            "Official contract registered",
+            "The launch has an evidence-bound official contract record. This alone sends no messages."
+          ],
+          [
+            "Live",
+            "The eligible live transition has completed. Do not equate an editable label with a trade or liquidity transaction."
+          ],
+          [
+            "Completed",
+            "The launch lifecycle has reached its completion state."
+          ]
+        ]
+      },
+      {
+        "title": "Advance carefully",
+        "body": [],
+        "steps": [
+          "Open Overview and read the current stage and next action.",
+          "If an action is blocked, read the specific missing prerequisite and use the linked control to address it.",
+          "Review the action’s effects before confirming. The lifecycle rail is informational rather than a set of unrestricted stage buttons.",
+          "Verify the new state and then decide whether a separate communication action is needed."
+        ]
+      },
+      {
+        "title": "Scope",
+        "body": [
+          "Preparing schedules and watcher communications does not bypass verified contract or mainnet gates. Owner-only test and deployment tools are not public customer launch features. Cartel AI Operator and liquidity operations are not documented as available public tools."
+        ]
+      }
+    ]
+  },
+  {
+    "id": "watch-delivery",
+    "title": "Countdowns, confirmation health and delivery states",
+    "summary": "Read notification states literally and understand when countdowns become armed.",
+    "sections": [
+      {
+        "title": "Arm countdowns",
+        "body": [],
+        "steps": [
+          "Save an exact launch time or launch window in Schedule. A launch window counts down to its start.",
+          "Read the reminder state. Watchlist open can accept opt-ins while countdown delivery remains Not armed yet.",
+          "Advance the launch to Launch approaching through its available next action before the reminder’s due time.",
+          "Check the 24-hour and 1-hour reminder entries. A reminder missed because countdowns were not armed is not promised a retroactive send."
+        ]
+      },
+      {
+        "title": "Read confirmation health",
+        "body": [],
+        "rows": [
+          [
+            "Confirmations delivered",
+            "Telegram confirmed the tracked private confirmation send."
+          ],
+          [
+            "Confirmation failed",
+            "The tracked confirmation has a known failure. Read the reason."
+          ],
+          [
+            "Outcome unconfirmed",
+            "No clear result was returned. It may or may not have arrived and is not automatically resent."
+          ],
+          [
+            "Pre-tracking opt-ins",
+            "The opt-in predates confirmation diagnostics. Delivery cannot be reconstructed; this is not a failure."
+          ]
+        ]
+      },
+      {
+        "title": "Different notifications need different actions",
+        "body": [
+          "Countdowns depend on schedule, lifecycle and member preferences. Manual project updates use Communications. Official contract registration does not send a watcher notice or a community post by itself; those are separate explicit actions in Deploy & Contract. A launch-live alert depends on the eligible live transition and delivery processing."
+        ]
+      },
+      {
+        "title": "Troubleshooting",
+        "body": [
+          "Check schedule, device timezone, lifecycle, opt-in and member countdown preferences before blaming the bot. A queued update is not a delivered update. Avoid repeatedly sending when the outcome is unconfirmed."
+        ]
+      }
+    ]
   }
 ];
 
