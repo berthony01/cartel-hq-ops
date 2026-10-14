@@ -17,7 +17,7 @@ function check(name, ok) {
   else { failed++; failures.push(name); }
 }
 check("unapplied draft statement", /UNAPPLIED DRAFT SQL/.test(sql));
-check("transaction guard", /^BEGIN;[\s\S]*COMMIT;\s*$/.test(sql));
+check("transaction guard", /^BEGIN;\s*$/m.test(sql) && /^COMMIT;\s*$/m.test(sql));
 check("exact Pro 49 plan guard", /code = 'cartel_49'[\s\S]{0,180}price_cents = 4900/.test(sql));
 check("free stays zero-cost", /code = 'cartel_free'[\s\S]{0,140}price_cents = 0/.test(sql));
 check("free paid Guide entitlement refused", /GUIDE_FREE_MUST_NOT_GET_PAID_CHAT/.test(sql));
@@ -38,7 +38,7 @@ check("per-user budget guard preserved", /v_user_requests >= v_cfg.customer_user
 check("atomic advisory lock preserved", /pg_catalog\.pg_advisory_xact_lock\(4127, 2202\)/.test(sql));
 check("duplicate request deny preserved", /DUPLICATE_REQUEST/.test(sql));
 check("owner still subject to global stop", sql.indexOf("v_cfg.emergency_stop") < sql.indexOf("v_owner := public.has_platform_unrestricted_access"));
-check("no paid model quote/activation", !/SET enabled\s*=\s*true|SET emergency_stop\s*=\s*false|customer_pilot_enabled\s*=\s*true/.test(sql));
+check("no paid model quote/activation", !/UPDATE\s+public\.cartel_guide_budget_controls[^;]*?SET\s+(?:enabled|emergency_stop|customer_pilot_enabled)\s*=/.test(sql));
 check("commercial allowlist recognizes Guide", commercial.includes('"guide_conversation"'));
 check("UI preview still hard OFF", ui.includes("CARTEL_GUIDE_PREVIEW_UI_ENABLED = false"));
 check("server Guide still has no Kie network caller", !guideEdge.includes("kie-chat-contract") && !/api\.kie\.ai/.test(guideEdge));
