@@ -88,6 +88,9 @@ BEGIN
     WHERE table_schema='public' AND table_name='cartel_guide_budget_controls'
       AND column_name='customer_workspace_month_requests')
  THEN RAISE EXCEPTION 'G2D_WORKSPACE_QUOTA_ALREADY_INSTALLED'; END IF;
+ IF md5(pg_get_functiondef('public.cartel_guide_reserve_budget(uuid,uuid,uuid)'::regprocedure))
+      <> 'c4c3d33069006ecd021d49497dadee4d'
+ THEN RAISE EXCEPTION 'STAGING_RESERVATION_FUNCTION_CHANGED'; END IF;
  RAISE NOTICE 'Preflight passed: exact staging fixtures, emergency stop, and fake provider quote.';
 END;
 $preflight$;
@@ -396,4 +399,33 @@ SELECT 'BEHAVIORAL_CHECKS_PASSED_IN_TRANSACTION; NEXT_STATEMENT_MUST_ROLL_BACK' 
 -- REQUIRED END: discards changed function, temporary column, fake assignment,
 -- second B membership, held reservations, and all temporarily lifted flags.
 ROLLBACK;
+
+-- POST-ROLLBACK READ-ONLY CLEANUP CHECK. Every column must return TRUE.
+-- No DDL/DML occurs here. Review exact results before marking the test passed.
+SELECT
+  NOT EXISTS (SELECT 1 FROM information_schema.columns
+    WHERE table_schema='public' AND table_name='cartel_guide_budget_controls'
+      AND column_name='customer_workspace_month_requests') AS new_column_gone,
+  md5(pg_get_functiondef('public.cartel_guide_reserve_budget(uuid,uuid,uuid)'::regprocedure))
+    = 'c4c3d33069006ecd021d49497dadee4d' AS original_function_restored,
+  (SELECT COUNT(*) FROM public.cartel_guide_budget_controls
+    WHERE singleton=true AND enabled=false AND emergency_stop=true
+      AND customer_pilot_enabled=false AND customer_user_month_requests=10
+      AND customer_workspace_month_cap_micro_usd=10000
+      AND customer_user_month_cap_micro_usd=10000) = 1 AS emergency_stop_and_caps_restored,
+  (SELECT COUNT(*) FROM public.cartel_guide_budget_reservations
+    WHERE workspace_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'::uuid)=0
+    AS synthetic_reservations_gone,
+  (SELECT COUNT(*) FROM public.workspace_commercial_assignments
+    WHERE workspace_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'::uuid)=0
+    AS synthetic_plan_assignment_gone,
+  NOT EXISTS (SELECT 1 FROM public.workspace_members
+    WHERE workspace_id='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'::uuid
+      AND user_id='9da5e296-dc49-43ce-82d5-200cbd0130c7'::uuid)
+    AS temporary_member_gone,
+  (SELECT COUNT(*) FROM public.commercial_plan_entitlements e
+     JOIN public.commercial_plans p ON p.id=e.plan_id
+     WHERE p.code='cartel_49' AND p.version=1
+       AND e.feature_key='guide_conversation' AND e.enabled=false)=1
+    AS pro_entitlement_restored;
 -- NO COMMIT. NO MODEL NETWORK REQUEST. NOT A PRODUCTION MIGRATION.
