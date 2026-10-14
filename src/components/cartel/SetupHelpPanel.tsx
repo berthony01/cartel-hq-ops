@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { ArrowRight, Check } from "lucide-react";
 
@@ -10,6 +10,10 @@ import { articleById, docs, docsHref, searchDocs } from "@/lib/docs-content";
 import { deriveSetupHelp, resolveArticleIds, TOPIC_ARTICLES, type HelpTopic } from "@/lib/setup-help";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { CARTEL_GUIDE_PREVIEW_UI_ENABLED } from "@/lib/cartel-guide-ui-gate";
+
+// G2B.1 is lazy and locked OFF; existing Setup Help is the only entry point.
+const GuideConversationPreview = lazy(() => import("@/components/cartel/GuideConversationPreview"));
 
 const TOPIC_LABEL: Record<HelpTopic, string> = {
   general: "This page",
@@ -132,6 +136,12 @@ export default function SetupHelpPanel({
           ) : null}
           <ArticleLinks ids={TOPIC_ARTICLES[effectiveTopic]} />
         </section>
+      ) : null}
+
+      {CARTEL_GUIDE_PREVIEW_UI_ENABLED && workspaceId && user && workspace?.access !== "managed" && view.kind === "ready" ? (
+        <Suspense fallback={<p role="status" className="text-xs text-muted-foreground">Loading Guide preview…</p>}>
+          <GuideConversationPreview key={workspaceId} topic={effectiveTopic} />
+        </Suspense>
       ) : null}
 
       <section className="space-y-2" aria-label="Search the Help Center">
