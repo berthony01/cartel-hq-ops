@@ -1,12 +1,14 @@
-/**
- * CARTEL HQ G2A.1 — SOURCE-ONLY, NOT DEPLOYED.
- * Authenticated Guide request boundary, intentionally returns 503 for all
- * otherwise-authorized requests. No AI call, no billing, no writes, no chat.
- * Never deploy without G2A.2 atomic budgets and security approval.
- * Future deployment must use verify_jwt=true and explicit allowed origins.
+/** G2E Cartel HQ conversational Guide — DRAFT ONLY, NOT DEPLOYED.
+ * Enabled ONLY when BOTH Guide switches and the server-only DB budget/stop
+ * permit. No deployment, paid use, new provider, or live change authorized.
  */
 import { createClient } from "npm:@supabase/supabase-js@2.112.4";
 import { evaluateGuideRequest, GUIDE_MAX_BODY_BYTES } from "../_shared/cartel-guide-contract.ts";
+import { parseGuideRequest } from "../_shared/cartel-guide-contract.ts";
+import { findGuidePublicEvidence } from "../_shared/cartel-guide-public-knowledge.ts";
+import { KIE_GUIDE_CHAT_ENDPOINT, KIE_GUIDE_CHAT_MODEL,
+  prepareKieGuideChatRequest, parseKieGuideChatResponse
+} from "../_shared/cartel-guide-kie-chat-contract.ts";
 
 const jsonHeaders = {
   "Content-Type": "application/json; charset=utf-8",
@@ -73,17 +75,20 @@ Deno.serve(async (req: Request) => {
   const secret = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!url || !anon || !secret) return respond(503, "AUTH_UNAVAILABLE");
 
+  let verifiedUserId: string | null = null;
+  // Preserve the already tested authentication and tenant isolation contract.
   const result = await evaluateGuideRequest(
     { method: req.method, authorization: req.headers.get("Authorization"), body: raw },
     {
       enabled: Deno.env.get("CARTEL_GUIDE_ENABLED"),
       verifyUser: async (jwt) => {
         const client = createClient(url, anon, {
-          global: { headers: { Authorization: `Bearer ${jwt}` } },
+          global: { headers: { Authorization: "Bearer " + jwt } },
           auth: { persistSession: false, autoRefreshToken: false },
         });
         const { data, error } = await client.auth.getUser(jwt);
-        return error || !data?.user ? null : data.user.id;
+        verifiedUserId = error || !data?.user ? null : data.user.id;
+        return verifiedUserId;
       },
       workspaceAccess: async (userId, workspaceId) => {
         const admin = createClient(url, secret, {
@@ -96,14 +101,107 @@ Deno.serve(async (req: Request) => {
             .eq("workspace_id", workspaceId).eq("user_id", userId).maybeSingle(),
         ]);
         if (project.error || membership.error) throw Error("access check unavailable");
-        // No general platform-owner cross-tenant read is introduced here.
         if (project.data?.owner_id === userId || membership.data?.user_id === userId)
           return "member";
-        // A managed Service Partner grant is NOT workspace membership.
-        // Scope-based reads need a separately audited server authority.
         return "none";
       },
     },
   );
-  return new Response(JSON.stringify(result.body), { status: result.status, headers });
+  if (result.status !== 503 || result.body.code !== "PROVIDER_NOT_CONFIGURED") {
+    return new Response(JSON.stringify(result.body), { status: result.status, headers });
+  }
+
+  // Independent pay-per-call enable switch. Both flags default OFF.
+  if (Deno.env.get("CARTEL_GUIDE_PAID_CALLS_ENABLED") !== "true")
+    return respond(503, "PAID_CALLS_DISABLED");
+
+  const parsed = parseGuideRequest(raw);
+  if (!parsed.ok || !verifiedUserId) return respond(503, "GUIDE_UNAVAILABLE");
+  const { question, selectedWorkspaceId } = parsed.value;
+  // Public documentation only, server selected; never private project data.
+  const evidence = findGuidePublicEvidence(question, 3);
+  if (!evidence.length) return respond(422, "NO_VERIFIED_HELP_ARTICLE");
+  let prepared: ReturnType<typeof prepareKieGuideChatRequest>;
+  try {
+    prepared = prepareKieGuideChatRequest(question,
+      evidence.map(({ title, excerpt, href, verifiedAt }) =>
+        ({ title, excerpt, href, verifiedAt })));
+  } catch { return respond(503, "GUIDE_EVIDENCE_UNAVAILABLE"); }
+  const kieKey = Deno.env.get("KIE_API_KEY");
+  if (!kieKey) return respond(503, "GUIDE_MODEL_UNAVAILABLE");
+
+  const admin = createClient(url, secret, {
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+  const requestId = parsed.value.requestId ?? crypto.randomUUID();
+  const { data: reserved, error: reserveError } = await admin.rpc(
+    "cartel_guide_reserve_budget",
+    { _user_id: verifiedUserId, _workspace_id: selectedWorkspaceId,
+      _request_id: requestId },
+  );
+  if (reserveError || !reserved || reserved.allowed !== true ||
+      typeof reserved.reservation_id !== "string") {
+    const reason = String(reserved?.reason ?? "");
+    const status = reason === "FORBIDDEN" || reason.startsWith("ENTITLEMENT") ? 403 :
+      reason === "CUSTOMER_BUDGET_LIMIT" || reason === "GLOBAL_BUDGET_LIMIT" ? 429 : 503;
+    return respond(status, reason || "GUIDE_BUDGET_UNAVAILABLE");
+  }
+  const reservationId = reserved.reservation_id as string;
+  const releaseUnstarted = async () => {
+    await admin.rpc("cartel_guide_release_unstarted",
+      { _reservation_id: reservationId, _user_id: verifiedUserId! });
+  };
+
+  const inputBytes = new TextEncoder().encode(JSON.stringify(prepared.body)).length;
+  // Conservative byte upper bound for input tokens; never trust client quote.
+  if (reserved.provider !== "kie.ai" || reserved.model !== KIE_GUIDE_CHAT_MODEL ||
+      !Number.isInteger(reserved.max_input_tokens) ||
+      !Number.isInteger(reserved.max_output_tokens) ||
+      reserved.max_input_tokens < inputBytes ||
+      reserved.max_output_tokens < 128 || reserved.max_output_tokens > 2048) {
+    await releaseUnstarted();
+    return respond(503, "GUIDE_QUOTE_NOT_APPROVED");
+  }
+  const { data: marked, error: markedError } = await admin.rpc(
+    "cartel_guide_mark_in_flight",
+    { _reservation_id: reservationId, _user_id: verifiedUserId },
+  );
+  if (markedError || marked !== true) {
+    await releaseUnstarted();
+    return respond(503, "GUIDE_DISPATCH_BLOCKED");
+  }
+
+  // After in-flight, a provider charge may occur: no automatic retry/release.
+  let provider: ReturnType<typeof parseKieGuideChatResponse> | null = null;
+  try {
+    const response = await fetch(KIE_GUIDE_CHAT_ENDPOINT, {
+      method: "POST",
+      headers: { Authorization: "Bearer " + kieKey, "Content-Type": "application/json" },
+      body: JSON.stringify({ ...prepared.body, max_tokens: reserved.max_output_tokens }),
+      signal: AbortSignal.timeout(20_000),
+    });
+    if (Number(response.headers.get("Content-Length") ?? "0") > 24_000)
+      throw Error("oversized provider response");
+    const bodyText = await response.text();
+    if (bodyText.length > 24_000) throw Error("oversized provider response");
+    provider = parseKieGuideChatResponse(response.status, JSON.parse(bodyText));
+  } catch {
+    provider = null;
+  }
+
+  // No metering data -> settle full reservation conservatively, not free retry.
+  const { data: settled, error: settleError } = await admin.rpc(
+    "cartel_guide_settle_budget",
+    { _reservation_id: reservationId, _user_id: verifiedUserId,
+      _input_tokens: provider?.ok ? provider.promptTokens : null,
+      _output_tokens: provider?.ok ? provider.completionTokens : null },
+  );
+  if (settleError || settled?.ok !== true)
+    return respond(503, "GUIDE_SETTLEMENT_UNAVAILABLE");
+  if (!provider?.ok) return respond(503, "GUIDE_MODEL_UNAVAILABLE");
+  if (settled.overrun_stop === true) return respond(503, "GUIDE_BUDGET_OVERRUN");
+  return new Response(JSON.stringify({
+    code: "OK", answer: provider.answer, requestId,
+    sources: evidence.map(({ title, href, verifiedAt }) => ({ title, href, verifiedAt })),
+  }), { status: 200, headers });
 });
