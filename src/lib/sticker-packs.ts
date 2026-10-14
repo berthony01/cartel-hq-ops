@@ -551,6 +551,7 @@ export type GeneratedAsset = {
   transparency_valid: boolean | null;
   width: number | null;
   height: number | null;
+  metadata?: unknown;
 };
 
 export async function loadAssets(ids: string[]): Promise<Record<string, GeneratedAsset>> {
@@ -559,7 +560,7 @@ export async function loadAssets(ids: string[]): Promise<Record<string, Generate
   if (unique.length === 0) return out;
   const { data, error } = await supabase
     .from("media_assets")
-    .select("id,storage_path,transparency_valid,width,height")
+    .select("id,storage_path,transparency_valid,width,height,metadata")
     .in("id", unique);
   if (error) throw error;
   for (const row of (data ?? []) as GeneratedAsset[]) out[row.id] = row;
