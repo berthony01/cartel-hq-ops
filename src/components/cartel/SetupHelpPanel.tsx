@@ -94,7 +94,10 @@ export default function SetupHelpPanel({
           role="tab"
           aria-selected={activeTab === t}
           onClick={() => setTab(t)}
-          className={cn("min-h-11 px-3 text-xs", activeTab === t ? "bg-gold/10 text-foreground" : "text-muted-foreground")}
+          className={cn(
+            "min-h-11 border-b-2 px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gold",
+            activeTab === t ? "border-gold bg-gold/15 text-foreground" : "border-transparent text-foreground/70 hover:text-foreground",
+          )}
         >
           {t === "help" ? "Setup Help" : "AI Guide (Preview)"}
         </button>
