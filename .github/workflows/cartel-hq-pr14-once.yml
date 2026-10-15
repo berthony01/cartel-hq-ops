@@ -4,7 +4,7 @@ on:
     branches:
       - feature/g2e-isolated-staging-harness-20261015
     paths:
-      - .github/g2e-pr14-build-run.once
+      - .github/g2e-pr14-corrected-build-run.once
 permissions:
   contents: read
 concurrency:
@@ -21,10 +21,10 @@ jobs:
       - name: Checkout exact reviewed PR14 commit
         uses: actions/checkout@v4
         with:
-          ref: 8a5ebf139ecf12e6fc3e0520da1c14c13b692453
+          ref: 495761edff4c116e138efc005e76a7e33d8452ce
           persist-credentials: false
       - name: Assert immutable source
-        run: test "$(git rev-parse HEAD)" = "8a5ebf139ecf12e6fc3e0520da1c14c13b692453"
+        run: test "$(git rev-parse HEAD)" = "495761edff4c116e138efc005e76a7e33d8452ce"
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
       - name: Install frozen dependencies
