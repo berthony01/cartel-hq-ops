@@ -59,8 +59,8 @@ const serverChunkIsolation = {
 
 // Explicitly opt-in only for the isolated, unpublished Guide staging harness.
 // Never use this switch in a published Lovable or production build.
-const guideHarness = process.env.CARTEL_GUIDE_STAGING_HARNESS === "1";
-if (guideHarness && process.env.CARTEL_GUIDE_STAGING_HARNESS_ACK !== "STAGING_ONLY") {
+const guideHarness = process.env['CARTEL_GUIDE_STAGING_HARNESS'] === "1";
+if (guideHarness && process.env['CARTEL_GUIDE_STAGING_HARNESS_ACK'] !== "STAGING_ONLY") {
   throw new Error("Staging harness requires explicit STAGING_ONLY acknowledgement");
 }
 const stagingClient = fileURLToPath(new URL("./src/integrations/supabase/staging-test-client.ts", import.meta.url));
