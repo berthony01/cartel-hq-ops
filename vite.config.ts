@@ -57,6 +57,14 @@ const serverChunkIsolation = {
 };
 
 
+// Explicitly opt-in only for the isolated, unpublished Guide staging harness.
+// Never use this switch in a published Lovable or production build.
+const guideHarness = process.env['CARTEL_GUIDE_STAGING_HARNESS'] === "1";
+if (guideHarness && process.env['CARTEL_GUIDE_STAGING_HARNESS_ACK'] !== "STAGING_ONLY") {
+  throw new Error("Staging harness requires explicit STAGING_ONLY acknowledgement");
+}
+const stagingClient = fileURLToPath(new URL("./src/integrations/supabase/staging-test-client.ts", import.meta.url));
+
 export default defineConfig({
   tanstackStart: {
     // Redirect TanStack Start's bundled server entry to src/server.ts (our SSR error wrapper).
@@ -70,7 +78,7 @@ export default defineConfig({
     // makes Vite use the JS alias plugin, which forwards the rewritten id
     // through browserEventsPlugin. This entry itself never changes resolution.
     resolve: {
-      alias: [{ find: "\0cartel-alias-js-path", replacement: "\0cartel-alias-js-path", customResolver: () => null }],
+      alias: [...(guideHarness ? [{ find: /^@\/integrations\/supabase\/client$/, replacement: stagingClient }] : []), { find: "\0cartel-alias-js-path", replacement: "\0cartel-alias-js-path", customResolver: () => null }],
     },
     environments: {
       nitro: serverChunkIsolation,
