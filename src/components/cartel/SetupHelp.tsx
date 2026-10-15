@@ -64,9 +64,9 @@ export function SetupHelpProvider({ children }: { children: ReactNode }) {
             }
           }}
         >
-          <SheetTitle>Setup Help</SheetTitle>
+          <SheetTitle>Help &amp; AI Guide</SheetTitle>
           <SheetDescription className="text-xs">
-            Guidance from your current setup progress and the Help Center. Not an AI assistant.
+            Setup Help uses your current progress and the Help Center. The AI Guide is a switched-off preview, not a live assistant.
           </SheetDescription>
           {open ? (
             <Suspense
@@ -86,19 +86,21 @@ export function SetupHelpProvider({ children }: { children: ReactNode }) {
   );
 }
 
-/** Compact header entry: same shared help view for whatever page is open. */
+/** Header entry: labelled on all sizes; same shared help view for whatever page is open. */
 export function SetupHelpHeaderButton() {
   const { openHelp } = useSetupHelp();
   return (
     <Button
-      variant="ghost"
-      size="icon"
-      className="touch-target size-11"
-      aria-label="Help with this page"
-      title="Help with this page"
+      variant="outline"
+      size="sm"
+      className="min-h-11 gap-1.5 border-gold/50 px-3 text-foreground hover:border-gold hover:bg-gold/10"
+      aria-label="Help & AI Guide for this page"
+      title="Help & AI Guide for this page"
       onClick={(e) => openHelp(null, e.currentTarget)}
     >
-      <CircleHelp className="size-5" aria-hidden="true" />
+      <CircleHelp className="size-4 text-gold" aria-hidden="true" />
+      <span className="sm:hidden">Help</span>
+      <span className="hidden sm:inline">Help &amp; AI Guide</span>
     </Button>
   );
 }
