@@ -6,4 +6,4 @@
  * The staged component contains NO network or paid model call.
  */
 // Compile-time opt-in restricted to isolated test builds; never a production flag.
-export const CARTEL_GUIDE_PREVIEW_UI_ENABLED = import.meta.env.VITE_CARTEL_GUIDE_STAGING_HARNESS === "STAGING_ONLY";
+export const CARTEL_GUIDE_PREVIEW_UI_ENABLED = import.meta.env.MODE === "guide-staging-harness" && import.meta.env.VITE_CARTEL_GUIDE_STAGING_HARNESS === "STAGING_ONLY";
