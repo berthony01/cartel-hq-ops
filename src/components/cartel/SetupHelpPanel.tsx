@@ -1,15 +1,20 @@
-import { useMemo, useState } from "react";
+import { lazy, Suspense, useMemo, useState } from "react";
 import { Link, useRouterState } from "@tanstack/react-router";
 import { ArrowRight, Check } from "lucide-react";
 
 import { useWorkspace } from "@/lib/workspace-context";
 import { useSession } from "@/hooks/useSession";
+import { usePlatformAccess } from "@/hooks/usePlatformAccess";
 import { useWorkspaceGoal } from "@/lib/workspace-goal";
 import { useOnboardingProgress } from "@/lib/onboarding";
 import { articleById, docs, docsHref, searchDocs } from "@/lib/docs-content";
 import { deriveSetupHelp, resolveArticleIds, TOPIC_ARTICLES, type HelpTopic } from "@/lib/setup-help";
+import { canSeeGuidePreview } from "@/lib/cartel-guide-contract";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+
+// Loaded only after the server confirms platform-owner access.
+const CartelGuideShell = lazy(() => import("@/components/cartel/CartelGuideShell"));
 
 const TOPIC_LABEL: Record<HelpTopic, string> = {
   general: "This page",
@@ -75,7 +80,44 @@ export default function SetupHelpPanel({
   const effectiveTopic: HelpTopic =
     view.kind === "ready" || view.kind === "unavailable" ? view.topic : (topic ?? "general");
 
+  const platformAccess = usePlatformAccess();
+  const showGuide = canSeeGuidePreview(platformAccess);
+  const [tab, setTab] = useState<"help" | "guide">("help");
+  const activeTab = showGuide ? tab : "help";
+
+  const tabs = showGuide ? (
+    <div role="tablist" aria-label="Setup Help views" className="mt-5 grid grid-cols-2 border border-border-subtle">
+      {(["help", "guide"] as const).map((t) => (
+        <button
+          key={t}
+          type="button"
+          role="tab"
+          aria-selected={activeTab === t}
+          onClick={() => setTab(t)}
+          className={cn("min-h-11 px-3 text-xs", activeTab === t ? "bg-gold/10 text-foreground" : "text-muted-foreground")}
+        >
+          {t === "help" ? "Setup Help" : "AI Guide (Preview)"}
+        </button>
+      ))}
+    </div>
+  ) : null;
+
+  if (activeTab === "guide") {
+    return (
+      <div className="text-sm">
+        {tabs}
+        <div className="mt-5">
+          <Suspense fallback={<p className="text-muted-foreground">Loading preview…</p>}>
+            <CartelGuideShell />
+          </Suspense>
+        </div>
+      </div>
+    );
+  }
+
   return (
+    <div className="text-sm">
+    {tabs}
     <div className="mt-5 space-y-6 text-sm">
       {view.kind === "no-workspace" ? (
         <section className="space-y-2">
@@ -145,6 +187,7 @@ export default function SetupHelpPanel({
         Help Center articles were last fully reviewed on {docs.verifiedAt}; some screens may have changed since.{" "}
         <a href="/docs" target="_blank" rel="noopener" className="text-gold underline-offset-4 hover:underline">Open the Help Center</a>
       </p>
+    </div>
     </div>
   );
 }
