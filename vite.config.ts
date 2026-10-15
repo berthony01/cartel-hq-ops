@@ -78,7 +78,7 @@ export default defineConfig({
     // makes Vite use the JS alias plugin, which forwards the rewritten id
     // through browserEventsPlugin. This entry itself never changes resolution.
     resolve: {
-      alias: [{ find: "\0cartel-alias-js-path", replacement: "\0cartel-alias-js-path", customResolver: () => null }],
+      alias: [...(guideHarness ? [{ find: /^@\/integrations\/supabase\/client$/, replacement: stagingClient }] : []), { find: "\0cartel-alias-js-path", replacement: "\0cartel-alias-js-path", customResolver: () => null }],
     },
     environments: {
       nitro: serverChunkIsolation,
