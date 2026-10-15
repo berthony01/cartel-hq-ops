@@ -188,5 +188,6 @@ export default function SetupHelpPanel({
         <a href="/docs" target="_blank" rel="noopener" className="text-gold underline-offset-4 hover:underline">Open the Help Center</a>
       </p>
     </div>
+    </div>
   );
 }
