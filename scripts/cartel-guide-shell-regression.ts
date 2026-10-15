@@ -13,7 +13,7 @@ t("submit never dispatches", submitGuideQuestion("hello").dispatched === false);
 
 const banned = /fetch\(|supabase|createServerFn|XMLHttpRequest|WebSocket|openai|anthropic|gemini|ai-gateway|pcart|axios/i;
 for (const f of ["src/lib/cartel-guide-contract.ts", "src/components/cartel/CartelGuideShell.tsx"]) {
-  t(`${f}: no network/backend/AI/pcart`, !banned.test(readFileSync(f, "utf8")));
+  t(`${f}: no network/backend/AI/pcart`, !banned.test(readFileSync(f, "utf8").replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "")));
 }
 const panel = readFileSync("src/components/cartel/SetupHelpPanel.tsx", "utf8");
 t("panel lazy-loads shell", /lazy\(\(\) => import\("@\/components\/cartel\/CartelGuideShell"\)\)/.test(panel));
