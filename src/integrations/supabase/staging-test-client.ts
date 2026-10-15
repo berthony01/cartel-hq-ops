@@ -4,9 +4,9 @@ import type { Database } from "./types";
 
 const STAGING_PROJECT = "llicojkxpzwylghptmkf";
 const STAGING_URL = `https://${STAGING_PROJECT}.supabase.co`;
-const publicKey = import.meta.env.VITE_CARTEL_GUIDE_STAGING_PUBLISHABLE_KEY;
+const publicKey = import.meta.env['VITE_CARTEL_GUIDE_STAGING_PUBLISHABLE_KEY'];
 const enabled = import.meta.env.MODE === "guide-staging-harness" &&
-  import.meta.env.VITE_CARTEL_GUIDE_STAGING_HARNESS === "STAGING_ONLY";
+  import.meta.env['VITE_CARTEL_GUIDE_STAGING_HARNESS'] === "STAGING_ONLY";
 if (!enabled || !publicKey) {
   throw new Error("Guide staging harness requires isolated mode and staging publishable key");
 }
