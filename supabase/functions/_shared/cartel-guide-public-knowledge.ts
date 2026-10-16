@@ -520,6 +520,37 @@ const HELP_ARTICLES: readonly HelpArticle[] = [
         ]
       }
     ]
+  },
+  {
+    "id": "share-watchlist",
+    "title": "Open and share a launch watchlist",
+    "summary": "Invite members to opt in privately using the launch-specific bot link.",
+    "sections": [
+      {
+        "title": "Prepare and share",
+        "body": [],
+        "steps": [
+          "Open Launch Control and select the intended launch. Check its lifecycle and schedule.",
+          "Follow the available next action to open the watchlist when the launch is eligible. Do not use the lifecycle rail as a set of arbitrary stage buttons.",
+          "Open Launch Watch. Check that the panel indicates it is accepting new watchers.",
+          "Use Copy link to copy this launch’s Telegram deep link. Share that link or use a saved welcome/broadcast Launch Watch invitation.",
+          "A member opens the link privately in @PepeCartelHQBot and taps Start. This is the explicit opt-in.",
+          "Review aggregate active watchers and confirmation health after opt-ins occur."
+        ]
+      },
+      {
+        "title": "What you should see",
+        "body": [
+          "The panel provides Copy link and Open Telegram, audience counts and reminder state."
+        ]
+      },
+      {
+        "title": "Limits",
+        "body": [
+          "A group join, group broadcast or welcome card does not by itself subscribe a member. A copied link is launch-specific. Operators do not get a list of individual watcher Telegram identities. Opening the watchlist does not arm countdown delivery."
+        ]
+      }
+    ]
   }
 ];
 
@@ -538,21 +569,34 @@ export function findGuidePublicEvidence(question: string, maxArticles = 3): Guid
   const terms = [...new Set((question.toLowerCase().match(/[a-z0-9]+/g) ?? [])
     .filter(w => w.length >= 3 && !STOP_WORDS.has(w)))].slice(0, 14);
   if (!terms.length) return [];
+  // Use whole topic words, not substrings: "lab" must not match "available".
+  // Require at least two topical words in an article title/summary for multi-word
+  // questions. A match buried solely in setup steps must not ground a paid answer.
+  const words = (text: string): Set<string> =>
+    new Set(text.toLowerCase().match(/[a-z0-9]+/g) ?? []);
+  const hasTerm = (tokens: ReadonlySet<string>, term: string): boolean =>
+    [...tokens].some(word => word === term || (term.length >= 4 && word.startsWith(term)));
+  const minimum = Math.min(2, terms.length);
   const ranked = HELP_ARTICLES.map((doc) => {
-    const title = doc.title.toLowerCase();
-    const summary = doc.summary.toLowerCase();
-    const sections = doc.sections.map(s =>
+    const titleWords = words(doc.title);
+    const summaryWords = words(doc.summary);
+    const sectionWords = words(doc.sections.map(s =>
       [s.title, ...s.body, ...(s.steps ?? []), ...(s.rows ?? []).flat(), s.notice ?? ""]
-      .join(" ")).join(" ").toLowerCase();
-    const matches = terms.filter(term => title.includes(term) || summary.includes(term) || sections.includes(term));
-    const score = matches.reduce((acc,term) =>
-      acc + (title.includes(term) ? 6 : 0) + (summary.includes(term) ? 3 : 0) +
-      (sections.includes(term) ? 1 : 0), 0);
-    return { doc, score, matchCount: matches.length };
-  }).filter(x => x.score > 0 && x.matchCount >= Math.min(2, terms.length))
-    .sort((a,b) => b.score - a.score || a.doc.id.localeCompare(b.doc.id));
+      .join(" ")).join(" "));
+    const topicalCount = terms.filter(term =>
+      hasTerm(titleWords, term) || hasTerm(summaryWords, term)).length;
+    const matchCount = terms.filter(term =>
+      hasTerm(titleWords, term) || hasTerm(summaryWords, term) ||
+      hasTerm(sectionWords, term)).length;
+    const score = terms.reduce((acc, term) =>
+      acc + (hasTerm(titleWords, term) ? 6 : 0) +
+      (hasTerm(summaryWords, term) ? 3 : 0) +
+      (hasTerm(sectionWords, term) ? 1 : 0), 0);
+    return { doc, score, topicalCount, matchCount };
+  }).filter(x => x.score > 0 && x.topicalCount >= minimum && x.matchCount >= minimum)
+    .sort((a, b) => b.score - a.score || a.doc.id.localeCompare(b.doc.id));
   const exactTitleMatches = terms.length >= 2
-    ? ranked.filter(x => terms.every(term => x.doc.title.toLowerCase().includes(term)))
+    ? ranked.filter(x => terms.every(term => hasTerm(words(x.doc.title), term)))
     : [];
   const grounded = exactTitleMatches.length > 0 ? exactTitleMatches : ranked;
   const bounded = Number.isFinite(maxArticles) ? Math.min(4, Math.max(1, Math.floor(maxArticles))) : 3;
