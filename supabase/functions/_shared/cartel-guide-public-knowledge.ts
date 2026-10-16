@@ -520,6 +520,37 @@ const HELP_ARTICLES: readonly HelpArticle[] = [
         ]
       }
     ]
+  },
+  {
+    "id": "share-watchlist",
+    "title": "Open and share a launch watchlist",
+    "summary": "Invite members to opt in privately using the launch-specific bot link.",
+    "sections": [
+      {
+        "title": "Prepare and share",
+        "body": [],
+        "steps": [
+          "Open Launch Control and select the intended launch. Check its lifecycle and schedule.",
+          "Follow the available next action to open the watchlist when the launch is eligible. Do not use the lifecycle rail as a set of arbitrary stage buttons.",
+          "Open Launch Watch. Check that the panel indicates it is accepting new watchers.",
+          "Use Copy link to copy this launch’s Telegram deep link. Share that link or use a saved welcome/broadcast Launch Watch invitation.",
+          "A member opens the link privately in @PepeCartelHQBot and taps Start. This is the explicit opt-in.",
+          "Review aggregate active watchers and confirmation health after opt-ins occur."
+        ]
+      },
+      {
+        "title": "What you should see",
+        "body": [
+          "The panel provides Copy link and Open Telegram, audience counts and reminder state."
+        ]
+      },
+      {
+        "title": "Limits",
+        "body": [
+          "A group join, group broadcast or welcome card does not by itself subscribe a member. A copied link is launch-specific. Operators do not get a list of individual watcher Telegram identities. Opening the watchlist does not arm countdown delivery."
+        ]
+      }
+    ]
   }
 ];
 
