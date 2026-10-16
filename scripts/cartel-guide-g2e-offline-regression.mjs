@@ -126,6 +126,41 @@ check("truncated answer rejected", () =>
     ...response, choices: [{ ...response.choices[0], finish_reason: "length" }],
   }).ok === false);
 
+// Validate actual deterministic Help Center retrieval, not just Kie parser shapes.
+// A weak substring hit must never turn an unsupported user topic into plausible
+// AI grounding. All tests run in-memory; no network, SQL or provider request.
+const knowledge = get("supabase/functions/_shared/cartel-guide-public-knowledge.ts");
+const compiledKnowledge = ts.transpileModule(knowledge, {
+  compilerOptions: { target: ts.ScriptTarget.ES2022, module: ts.ModuleKind.CommonJS },
+  reportDiagnostics: true,
+});
+check("public knowledge TS transpiles", () =>
+  (compiledKnowledge.diagnostics ?? [])
+    .filter(d => d.category === ts.DiagnosticCategory.Error).length === 0);
+const guideKnowledgeContext = { exports: {} };
+vm.runInNewContext(compiledKnowledge.outputText, guideKnowledgeContext, { timeout: 500 });
+const findEvidence = guideKnowledgeContext.exports.findGuidePublicEvidence;
+const matchedIds = question => [...findEvidence(question, 3)].map(article => article.articleId);
+check("connect Telegram group retrieves matching article", () =>
+  matchedIds("How do I connect my Telegram group to Cartel HQ?").includes("connect-group"));
+check("create project retrieves matching article", () =>
+  matchedIds("How do I create a new project?").includes("create-project"));
+check("launch schedule retrieves launch article", () =>
+  matchedIds("How do I create a launch schedule?").some(id => id === "launch-schedule" || id === "create-launch"));
+check("welcome question retrieves welcome article", () =>
+  matchedIds("How do I customize the welcome message?").includes("welcome-message"));
+check("watchlist sharing retrieves only topically matched articles", () =>
+  matchedIds("How do I share my launch watchlist link?").every(id => id === "welcome-message" || id === "watch-delivery" || id === "launch-schedule"));
+for (const [name, question] of [
+  ["Sticker Lab", "How do I use Sticker Lab?"],
+  ["Missions", "How do I run a mission?"],
+  ["Community broadcasts", "How do I send a community broadcast?"],
+  ["Service Partner", "How do I set up a Service Partner?"],
+  ["live project status", "What is the status of my current project?"],
+]) {
+  check("unsupported topic fails closed: " + name, () => matchedIds(question).length === 0);
+}
+
 console.log("Cartel HQ G2E offline:", passed, "PASS", failures.length, "FAIL");
 if (failures.length) {
   console.error(failures.join("\n"));
