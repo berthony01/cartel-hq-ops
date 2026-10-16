@@ -1,4 +1,6 @@
 import { readFileSync } from "node:fs";
+import React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
 import { canSeeGuidePreview, GUIDE_STATUS, submitGuideQuestion } from "../src/lib/cartel-guide-contract";
 
 let pass = 0, fail = 0;
@@ -58,6 +60,50 @@ t("panel has no static shell import", !/^import .*CartelGuideShell/m.test(panel)
 // Runtime: dormant module never dispatches.
 const mod = await import("../src/components/cartel/CartelGuideShell").catch(() => null);
 if (mod) t("runtime: G2E_LIVE_ENABLED === false", mod.G2E_LIVE_ENABLED === false);
+
+// Isolated rendering only: hypothetical ON is in memory, never in source or a live app.
+// Mock all session/workspace/UI dependencies; the actual dispatch body stays hard OFF.
+const rawShell = readFileSync("src/components/cartel/CartelGuideShell.tsx", "utf8");
+const renderSource = rawShell
+  .replace(/^import[\s\S]*?from "[^"]+";\n/gm, "")
+  .replace("export const G2E_LIVE_ENABLED = false as boolean;", "const G2E_LIVE_ENABLED = enabled;")
+  .replace("if (!G2E_LIVE_ENABLED) return { ok: false, code: \"GUIDE_NOT_ENABLED\" };", "return { ok: false, code: \"GUIDE_NOT_ENABLED\" };")
+  .replace("export default function CartelGuideShell", "function CartelGuideShell");
+const js = new Bun.Transpiler({ loader: "tsx", tsconfig: { compilerOptions: { jsx: "react", jsxFactory: "React.createElement" } } }).transformSync(renderSource);
+type Fixture = { enabled: boolean; text?: string; session?: boolean; workspace?: boolean; managed?: boolean; busy?: boolean; message?: string };
+function renderFixture(f: Fixture): string {
+  let stateIndex = 0;
+  const states = [f.text ?? "hello", false, [], f.message ?? "", f.busy ?? false];
+  const control = (tag: string) => ({ children, ...props }: Record<string, unknown>) => React.createElement(tag, props, children as React.ReactNode);
+  const icon = () => null;
+  const make = new Function("React", "enabled", "useState", "useWorkspace", "useSession", "Button", "Textarea", "ArrowRight", "Bot", "Lock", "Send", "GUIDE_DISABLED_MESSAGE", "GUIDE_QUESTION_MAX_LENGTH", "GUIDE_SAMPLE_QUESTION", "submitGuideQuestion", `${js}\nreturn CartelGuideShell;`);
+  const Component = make(React, f.enabled, () => [states[stateIndex++], () => {}],
+    () => ({ workspaceId: f.workspace === false ? null : "test-workspace", isManaged: f.managed ?? false }),
+    () => ({ session: f.session === false ? null : {} }), control("button"), control("textarea"), icon, icon, icon, icon,
+    "Disabled preview fixture", 1000, "Example question", submitGuideQuestion);
+  return renderToStaticMarkup(React.createElement(Component));
+}
+const offMarkup = renderFixture({ enabled: false, session: false, workspace: false, managed: true, text: "" });
+const offCopy = ["Preview · Off", "Soon you&#x27;ll be able to ask", "Sending is off in preview", "Try an example (fills the box only)", "Type a question to preview the layout", "Nothing you type is sent anywhere."];
+for (const copy of offCopy) t(`OFF render preserves: ${copy}`, offMarkup.includes(copy));
+const onMarkup = renderFixture({ enabled: true });
+for (const copy of offCopy) t(`hypothetical ON omits OFF copy: ${copy}`, !onMarkup.includes(copy));
+t("hypothetical ON ready submit is enabled", !/<button[^>]*disabled/.test(onMarkup));
+t("hypothetical ON shows Ask AI Guide", onMarkup.includes("Ask AI Guide"));
+t("hypothetical ON explains public grounding, age and privacy", onMarkup.includes("public Help Center articles") && onMarkup.includes("out of date") && onMarkup.includes("Never include secrets"));
+for (const [name, fixture, explanation] of [
+  ["busy", { busy: true }, "Checking…"],
+  ["no session", { session: false }, "Sign in"],
+  ["no workspace", { workspace: false }, "Select a project"],
+  ["managed", { managed: true }, "not available for managed projects"],
+  ["short question", { text: " a " }, "at least 2 characters"],
+] as const) {
+  const markup = renderFixture({ enabled: true, ...fixture });
+  t(`hypothetical ON ${name}: submit disabled with accessible explanation`, /<button[^>]*disabled/.test(markup) && markup.includes(explanation) && markup.includes('aria-describedby="cartel-guide-off"') && markup.includes('id="cartel-guide-off"'));
+}
+t("hypothetical ON safe error status is visible", renderFixture({ enabled: true, message: "The AI Guide is temporarily unavailable." }).includes("The AI Guide is temporarily unavailable."));
+t("hypothetical ON success status is visible", renderFixture({ enabled: true, text: "", message: "Answer received." }).includes("Answer received."));
+t("submit records success only after a valid answer", submit.indexOf('setMessage("Answer received.') > submit.indexOf("if (!r.ok)"));
 
 console.log(`\n${pass} passed, ${fail} failed`);
 if (fail) process.exit(1);
