@@ -109,6 +109,18 @@ export default function CartelGuideShell() {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
 
+  const submitDisabled = G2E_LIVE_ENABLED
+    ? busy || !session || !workspaceId || isManaged || text.trim().length < 2
+    : busy;
+  const enabledStatus = busy
+    ? "Checking public Help Center information…"
+    : !session ? "Sign in to ask the AI Guide."
+    : !workspaceId ? "Select a project to ask the AI Guide."
+    : isManaged ? "AI Guide questions are not available for managed projects."
+    : message || (text.trim().length < 2
+      ? "Enter at least 2 characters to ask a question."
+      : "Ready to ask the AI Guide.");
+
   async function onSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     if (!G2E_LIVE_ENABLED) {
@@ -132,31 +144,34 @@ export default function CartelGuideShell() {
       }
       setTurns((prev) => [...prev, { question: q, answer: r.answer, sources: r.sources }].slice(-MAX_TURNS));
       setText("");
+      setMessage("Answer received. Review the cited Help Center articles; information may be out of date.");
     } finally {
       setBusy(false);
     }
   }
 
   return (
-    <section className="space-y-4" aria-label="AI Guide preview">
+    <section className="space-y-4" aria-label={G2E_LIVE_ENABLED ? "AI Guide" : "AI Guide preview"}>
       <div className="flex items-center justify-between gap-2">
         <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
           <Bot className="size-5 text-gold" aria-hidden="true" /> AI Guide
         </p>
         <span className="inline-flex items-center gap-1 border border-gold/50 bg-gold/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wider text-gold">
-          <Lock className="size-3" aria-hidden="true" /> Preview · Off
+          {G2E_LIVE_ENABLED ? "AI Guide" : <><Lock className="size-3" aria-hidden="true" /> Preview · Off</>}
         </span>
       </div>
 
       <div className="border border-border-subtle bg-card p-3">
         <p className="text-sm leading-relaxed text-foreground">
-          Soon you'll be able to ask setup questions in plain words here. For now this is a layout preview only.
+          {G2E_LIVE_ENABLED
+            ? "Answers use public Help Center articles, which may be out of date. Never include secrets or private information."
+            : "Soon you'll be able to ask setup questions in plain words here. For now this is a layout preview only."}
         </p>
-        <p className="mt-2 text-xs leading-relaxed text-muted-foreground" role="note">{GUIDE_DISABLED_MESSAGE}</p>
+        {!G2E_LIVE_ENABLED && <p className="mt-2 text-xs leading-relaxed text-muted-foreground" role="note">{GUIDE_DISABLED_MESSAGE}</p>}
       </div>
 
       <div className="space-y-2">
-        <p className="type-eyebrow text-muted-foreground">Try an example (fills the box only)</p>
+        <p className="type-eyebrow text-muted-foreground">{G2E_LIVE_ENABLED ? "Try an example" : "Try an example (fills the box only)"}</p>
         <ul className="space-y-2">
           {EXAMPLES.map((q) => (
             <li key={q}>
@@ -196,7 +211,7 @@ export default function CartelGuideShell() {
           value={text}
           maxLength={GUIDE_QUESTION_MAX_LENGTH}
           onChange={(e) => setText(e.target.value)}
-          placeholder="Type a question to preview the layout"
+          placeholder={G2E_LIVE_ENABLED ? "Ask a Cartel HQ setup question" : "Type a question to preview the layout"}
           disabled={busy}
           className="min-h-24 border-gold/40 bg-background text-foreground placeholder:text-muted-foreground"
         />
@@ -204,15 +219,17 @@ export default function CartelGuideShell() {
           type="submit"
           variant="outline"
           aria-describedby="cartel-guide-off"
-          disabled={busy}
+          disabled={submitDisabled}
           className="min-h-11 w-full border-dashed text-muted-foreground"
         >
-          <Lock className="size-4" aria-hidden="true" /> Sending is off in preview
-          <Send className="size-4 opacity-40" aria-hidden="true" />
+          {G2E_LIVE_ENABLED
+            ? <><Send className="size-4" aria-hidden="true" />{busy ? "Checking…" : "Ask AI Guide"}</>
+            : <><Lock className="size-4" aria-hidden="true" /> Sending is off in preview
+              <Send className="size-4 opacity-40" aria-hidden="true" /></>}
         </Button>
         <p id="cartel-guide-off" className="text-xs text-muted-foreground" aria-live="polite">
-          {G2E_LIVE_ENABLED && message
-            ? message
+          {G2E_LIVE_ENABLED
+            ? enabledStatus
             : notice ? "Not sent. Nothing left this page — the AI Guide is not active yet." : "Nothing you type is sent anywhere."}
         </p>
       </form>
