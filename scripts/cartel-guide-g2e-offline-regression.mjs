@@ -149,8 +149,12 @@ check("launch schedule retrieves launch article", () =>
   matchedIds("How do I create a launch schedule?").some(id => id === "launch-schedule" || id === "create-launch"));
 check("welcome question retrieves welcome article", () =>
   matchedIds("How do I customize the welcome message?").includes("welcome-message"));
-check("watchlist sharing retrieves only topically matched articles", () =>
-  matchedIds("How do I share my launch watchlist link?").every(id => id === "welcome-message" || id === "watch-delivery" || id === "launch-schedule"));
+check("watchlist sharing retrieves the verified article, not an empty match", () => {
+  const ids = matchedIds("How do I share my launch watchlist link?");
+  return ids.length > 0 && ids.includes("share-watchlist") &&
+    ids.every(id => id === "share-watchlist" || id === "welcome-message" ||
+      id === "watch-delivery" || id === "launch-schedule");
+});
 for (const [name, question] of [
   ["Sticker Lab", "How do I use Sticker Lab?"],
   ["Missions", "How do I run a mission?"],
