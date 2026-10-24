@@ -1,0 +1,37 @@
+name: Cartel HQ PR14 isolated Guide build (one-time, AI OFF)
+on:
+  push:
+    branches:
+      - feature/g2e-isolated-staging-harness-20261015
+    paths:
+      - .github/g2e-pr14-corrected-build-run.once
+permissions:
+  contents: read
+concurrency:
+  group: cartel-hq-pr14-staging-build-once
+  cancel-in-progress: true
+jobs:
+  verify:
+    if: github.ref == 'refs/heads/feature/g2e-isolated-staging-harness-20261015'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      CARTEL_GUIDE_STAGING_HARNESS: "0"
+    steps:
+      - name: Checkout exact reviewed PR14 commit
+        uses: actions/checkout@v4
+        with:
+          ref: 495761edff4c116e138efc005e76a7e33d8452ce
+          persist-credentials: false
+      - name: Assert immutable source
+        run: test "$(git rev-parse HEAD)" = "495761edff4c116e138efc005e76a7e33d8452ce"
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+      - name: Install frozen dependencies
+        run: bun install --frozen-lockfile
+      - name: Full production-mode build (Guide stays OFF)
+        run: bun run build
+      - name: TypeScript compile validation
+        run: ./node_modules/.bin/tsc --noEmit
+      - name: Staging harness offline isolation checks
+        run: node scripts/cartel-guide-staging-harness-check.mjs
