@@ -1,0 +1,7 @@
+CARTEL HQ G2E — OWNER-REQUESTED ONE-TIME BUILD VERIFICATION
+Timestamp: 2026-10-14 CDT
+PR12 source commit: af8e72bc873a8779b7ea93ee06d2f5f71dcc4e4a
+Runner: ubuntu-24.04 standard, maximum 15 minutes
+Billing screenshot: 75 of 2000 included Actions minutes used; 1925 remain as of 2026-10-14
+Intent: one bounded included-minutes build and typecheck only; no deploy or AI model usage.
+No additional trigger file updates are authorized.
