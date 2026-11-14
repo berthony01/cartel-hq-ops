@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
@@ -532,18 +532,27 @@ function GroupRow({
   );
 }
 
-export function TelegramGroupCard({
-  setup,
-  personalConnected,
-  botConfigured,
-  selectable = true,
-}: {
+export type TelegramGroupConnectHandle = {
+  connect: () => void;
+};
+
+export const TelegramGroupCard = forwardRef<TelegramGroupConnectHandle, {
   setup: TelegramGroupSetup;
   personalConnected: boolean;
   botConfigured: boolean;
   /** Renders distribution-target checkboxes. */
   selectable?: boolean;
-}) {
+  /** The Community Command header owns the single visible connection CTA. */
+  showConnectButton?: boolean;
+  onConnectBusyChange?: (busy: boolean) => void;
+}>(function TelegramGroupCard({
+  setup,
+  personalConnected,
+  botConfigured,
+  selectable = true,
+  showConnectButton = true,
+  onConnectBusyChange,
+}, ref) {
   const queryClient = useQueryClient();
   const { isMobileDevice, launchTelegram } = useTelegramLauncher();
   const {
@@ -850,6 +859,18 @@ export function TelegramGroupCard({
 
 
   const pending = linkState === "pending";
+  const connectBusy = starting || pending || identityState === "pending";
+  useImperativeHandle(ref, () => ({
+    connect: () => {
+      if (!workspaceId || connectBusy || !botConfigured) return;
+      // Reuse the same path as the former card button, including identity linking.
+      void handlePrimary();
+    },
+  }));
+  useEffect(() => {
+    onConnectBusyChange?.(connectBusy);
+  }, [onConnectBusyChange, connectBusy]);
+
   const manualUrl = isMobileDevice()
     ? (launchUrls.app ?? launchUrls.web)
     : (launchUrls.web ?? launchUrls.app);
@@ -1155,27 +1176,29 @@ export function TelegramGroupCard({
           </div>
         ) : null}
 
-        <div className="flex flex-wrap items-center gap-3">
-          <Button
-            type="button"
-            className="min-h-11"
-            disabled={!workspaceId || starting || pending || identityState === "pending" || !botConfigured}
-            onClick={() => void handlePrimary()}
-          >
-            {starting || pending || identityState === "pending" ? (
-              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-            ) : (
-              <Users className="size-4" aria-hidden="true" />
-            )}
-            {identityState === "connected"
-              ? "Choose Telegram Community"
-              : groups.length > 0
-                ? "Connect another community"
-                : "Connect Community"}
-          </Button>
-        </div>
+        {showConnectButton ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <Button
+              type="button"
+              className="min-h-11"
+              disabled={!workspaceId || connectBusy || !botConfigured}
+              onClick={() => void handlePrimary()}
+            >
+              {connectBusy ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Users className="size-4" aria-hidden="true" />
+              )}
+              {identityState === "connected"
+                ? "Choose Telegram Community"
+                : groups.length > 0
+                  ? "Connect another community"
+                  : "Connect Community"}
+            </Button>
+          </div>
+        ) : null}
 
       </CardContent>
     </Card>
   );
-}
+});
