@@ -5,6 +5,7 @@ import { Check, FolderLock, Loader2, Palette, Save, ShieldCheck } from "lucide-r
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useWorkspace } from "@/lib/workspace-context";
+import { getProjectProfile } from "@/lib/project-profile";
 import {
   listWorkspaceAssets,
   signedUrlMap,
@@ -36,12 +37,12 @@ export const Route = createFileRoute("/_authenticated/brand-kit")({
       { title: "Brand Kit — CARTEL HQ" },
       {
         name: "description",
-        content: "Brand Kit holds the PEPECARTEL palette, type, marks, links, and AI style rules.",
+        content: "Creative identity, style rules, character references, and visuals for the selected project.",
       },
       { property: "og:title", content: "Brand Kit — CARTEL HQ" },
       {
         property: "og:description",
-        content: "Central brand system for PEPECARTEL creative output.",
+        content: "Creative guidelines for the selected Cartel HQ project.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
@@ -132,11 +133,30 @@ const nullable = (value: string): string | null => (value.trim() ? value.trim() 
 
 const BRAND_ASSET_TYPES: AssetType[] = ["logo", "mascot", "reference_image"];
 
+function IdentityValue({ label, value }: { label: string; value?: string | null }) {
+  return (
+    <div className="min-w-0">
+      <p className="text-xs font-medium text-muted-foreground">{label}</p>
+      <p className="mt-1 min-w-0 break-words rounded-md border border-border/50 bg-background/40 px-3 py-2.5 text-sm text-foreground">
+        {value?.trim() || "Not set"}
+      </p>
+    </div>
+  );
+}
+
 function BrandKitPage() {
   const { workspaceId, workspace, loading: workspaceLoading } = useWorkspace();
   const queryClient = useQueryClient();
   const [form, setForm] = useState<BrandKitForm>(EMPTY_FORM);
   const [lockForm, setLockForm] = useState<LockForm>(EMPTY_LOCK_FORM);
+
+  // Project Profile owns shared identity. Brand Kit owns creative choices.
+  const profileQuery = useQuery({
+    queryKey: ["project-profile", workspaceId],
+    enabled: !!workspaceId,
+    queryFn: () => getProjectProfile(workspaceId!),
+  });
+  const profile = profileQuery.data ?? null;
 
   const brandKitQuery = useQuery({
     queryKey: ["brand-kit", workspaceId],
@@ -179,6 +199,16 @@ function BrandKitPage() {
   }, [brandAssets]);
 
   const loaded = brandKitQuery.data;
+  const canonicalName = profile?.project_name.trim() || form.brand_name.trim();
+  const identityDiffers = !!profile && !!loaded && (
+    loaded.brand_name !== profile.project_name ||
+    (loaded.ticker ?? "") !== (profile.ticker ?? "") ||
+    (loaded.description ?? "") !== (profile.description ?? "") ||
+    (loaded.website_url ?? "") !== (profile.website_url ?? "") ||
+    (loaded.x_url ?? "") !== (profile.x_url ?? "") ||
+    (loaded.telegram_url ?? "") !== (profile.telegram_url ?? "")
+  );
+
   useEffect(() => {
     if (!loaded) {
       setForm(EMPTY_FORM);
@@ -204,14 +234,16 @@ function BrandKitPage() {
   const save = useMutation({
     mutationFn: async () => {
       if (!workspaceId) throw new Error("No active project.");
+      if (!profileQuery.isSuccess) throw new Error("Project Profile could not be checked. Retry before saving.");
+      // Mirror canonical identity only on an explicit Brand Kit save.
       const payload = {
         workspace_id: workspaceId,
-        brand_name: form.brand_name.trim(),
-        ticker: nullable(form.ticker),
-        description: nullable(form.description),
-        website_url: nullable(form.website_url),
-        x_url: nullable(form.x_url),
-        telegram_url: nullable(form.telegram_url),
+        brand_name: profile ? profile.project_name.trim() : form.brand_name.trim(),
+        ticker: profile ? profile.ticker : nullable(form.ticker),
+        description: profile ? profile.description : nullable(form.description),
+        website_url: profile ? profile.website_url : nullable(form.website_url),
+        x_url: profile ? profile.x_url : nullable(form.x_url),
+        telegram_url: profile ? profile.telegram_url : nullable(form.telegram_url),
         colors: toList(form.colors),
         fonts: toList(form.fonts),
         ai_style_notes: nullable(form.ai_style_notes),
@@ -235,6 +267,7 @@ function BrandKitPage() {
     onSuccess: () => {
       toast.success("Brand Kit saved");
       queryClient.invalidateQueries({ queryKey: ["brand-kit", workspaceId] });
+      queryClient.invalidateQueries({ queryKey: ["project-profile-brand-kit", workspaceId] });
     },
     onError: (err: unknown) => {
       toast.error(err instanceof Error ? err.message : "Could not save the Brand Kit.");
@@ -326,8 +359,10 @@ function BrandKitPage() {
             <div className="min-w-0">
               <p className="type-eyebrow text-gold">Creative source of truth</p>
               <h2 id="brand-command-title" className="mt-2 font-display text-2xl uppercase leading-none text-foreground sm:text-3xl [overflow-wrap:anywhere]">
-                {form.brand_name.trim() || workspace?.name || "Project identity"}
-                {form.ticker.trim() ? <span className="ml-2 text-gold">{form.ticker}</span> : null}
+                {canonicalName || workspace?.name || "Project identity"}
+                {(profile?.ticker ?? form.ticker).trim() ? (
+                  <span className="ml-2 text-gold">{profile?.ticker ?? form.ticker}</span>
+                ) : null}
               </h2>
               <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">
                 The identity, voice and visual rules Sticker Lab uses when creating for this project. Files remain in Asset Vault; this page defines how they should be used.
@@ -373,6 +408,74 @@ function BrandKitPage() {
             }}
             className="space-y-4 sm:space-y-6"
           >
+            {profile ? (
+              <>
+                <Section
+                  variant="primary"
+                  leading={<Palette className="size-4" aria-hidden="true" />}
+                  title="Project identity"
+                  description="Reused from Project Profile. Edit it once there instead of entering the same details again."
+                  actions={
+                    <Button type="button" asChild variant="outline" size="sm" className="min-h-10">
+                      <Link to="/project-profile">Edit Project Profile</Link>
+                    </Button>
+                  }
+                >
+                  <div className="grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
+                    <IdentityValue label="Project name" value={profile.project_name} />
+                    <IdentityValue label="Ticker" value={profile.ticker} />
+                    <div className="md:col-span-2">
+                      <IdentityValue label="Description" value={profile.description} />
+                    </div>
+                  </div>
+                  {identityDiffers ? (
+                    <p className="mt-4 text-xs leading-relaxed text-muted-foreground">
+                      The saved Brand Kit has older identity values. Saving this kit
+                      will refresh its identity from Project Profile without changing
+                      colours, style rules, Character Lock or references.
+                    </p>
+                  ) : null}
+                </Section>
+                <Section
+                  variant="surface"
+                  title="Official links"
+                  description="Read from Project Profile. Edit shared links there."
+                >
+                  <div className="grid gap-4 md:grid-cols-3 [&>*]:min-w-0">
+                    <IdentityValue label="Website" value={profile.website_url} />
+                    <IdentityValue label="X profile" value={profile.x_url} />
+                    <IdentityValue label="Telegram" value={profile.telegram_url} />
+                  </div>
+                </Section>
+              </>
+            ) : !profileQuery.isSuccess ? (
+              <Section
+                variant="surface"
+                title={profileQuery.isPending ? "Checking Project Profile" : "Project Profile unavailable"}
+                description={
+                  profileQuery.isPending
+                    ? "Loading the selected project's shared identity."
+                    : "Shared identity could not be loaded. No Brand Kit changes will be saved until this check succeeds."
+                }
+                actions={
+                  profileQuery.isError ? (
+                    <Button type="button" variant="outline" size="sm" onClick={() => void profileQuery.refetch()}>
+                      Retry
+                    </Button>
+                  ) : undefined
+                }
+              >
+                <p className="text-sm text-muted-foreground">
+                  Brand Kit creative settings will become available after the identity check.
+                </p>
+              </Section>
+            ) : (
+              <>
+                <p className="text-xs text-muted-foreground">
+                  No Project Profile exists yet. Brand Kit identity remains editable
+                  for compatibility. <Link to="/project-profile" className="underline">Create Project Profile</Link>
+                  to reuse these details across Cartel HQ.
+                </p>
             <Section
               variant="primary"
               leading={<Palette className="size-4" aria-hidden="true" />}
@@ -447,6 +550,9 @@ function BrandKitPage() {
                 </div>
               </div>
             </Section>
+
+              </>
+            )}
 
             <Section variant="surface" title="Visual system" description="Approved colour and type direction for consistent artwork.">
               <div className="grid gap-4 md:grid-cols-2 [&>*]:min-w-0">
@@ -685,7 +791,7 @@ function BrandKitPage() {
               <Button
                 type="submit"
                 className="min-h-11"
-                disabled={save.isPending || brandKitQuery.isLoading || !form.brand_name.trim()}
+                disabled={save.isPending || brandKitQuery.isLoading || profileQuery.isPending || profileQuery.isError || !canonicalName}
               >
                 {save.isPending ? (
                   <Loader2 className="size-4 animate-spin" aria-hidden="true" />
@@ -775,7 +881,7 @@ function BrandKitPage() {
                 type="submit"
                 form="brand-kit-form"
                 className="min-h-11"
-                disabled={save.isPending || brandKitQuery.isLoading || !form.brand_name.trim()}
+                disabled={save.isPending || brandKitQuery.isLoading || profileQuery.isPending || profileQuery.isError || !canonicalName}
               >
                 {save.isPending ? (
                   <Loader2 className="size-4 animate-spin" aria-hidden="true" />

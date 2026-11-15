@@ -1,8 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Building2, Check, ChevronDown, Loader2, Plus } from "lucide-react";
+import { Building2, Check, ChevronDown, Loader2, Pencil, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { createSelfServiceWorkspace } from "@/lib/self-service-workspace";
+import { supabase } from "@/integrations/supabase/client";
+import { useSession } from "@/hooks/useSession";
 import { useWorkspace, workspacesQueryKey } from "@/lib/workspace-context";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -95,9 +97,99 @@ export function CreateWorkspaceDialog({
   );
 }
 
+
+/** Owner-only label change; public slugs, profiles and connected data stay untouched. */
+function RenameWorkspaceDialog({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const { workspace } = useWorkspace();
+  const { user } = useSession();
+  const queryClient = useQueryClient();
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    if (open) setName(workspace?.name ?? "");
+  }, [open, workspace?.id]);
+
+  const normalized = name.trim().replace(/\s+/g, " ");
+  const isOwner = !!workspace && workspace.access !== "managed" && workspace.owner_id === user?.id;
+  const canSave = isOwner && !busy && normalized.length > 0 && normalized.length <= 80 && normalized !== (workspace?.name ?? "");
+
+  const submit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!canSave || !workspace || !user) return;
+    setBusy(true);
+    try {
+      const { data, error } = await supabase
+        .from("workspaces")
+        .update({ name: normalized })
+        .eq("id", workspace.id)
+        .eq("owner_id", user.id)
+        .select("id,name")
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) throw new Error("Only the project owner can rename this project.");
+      await queryClient.invalidateQueries({ queryKey: workspacesQueryKey });
+      await queryClient.refetchQueries({ queryKey: workspacesQueryKey });
+      toast.success("Project display name updated. Review Project Profile to change public identity.");
+      onOpenChange(false);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Could not rename the project.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={(next) => { if (!busy) onOpenChange(next); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Rename project</DialogTitle>
+          <DialogDescription>
+            Changes the name in Cartel HQ without creating a new project.
+            Files, Telegram connections, launches and public URLs stay unchanged.
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={submit} className="space-y-4">
+          <div>
+            <Label htmlFor="rename-workspace-name">Project display name</Label>
+            <Input
+              id="rename-workspace-name"
+              className="mt-2 min-h-11"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+              maxLength={80}
+              required
+              disabled={!isOwner || busy}
+            />
+          </div>
+          <p className="text-xs leading-relaxed text-muted-foreground">
+            Switching to a different token? Next update Project Profile name, ticker,
+            public slug and links, then review your existing Telegram group and assets.
+            Nothing is automatically removed or disconnected.
+          </p>
+          <DialogFooter>
+            <Button type="submit" className="min-h-11" disabled={!canSave}>
+              {busy ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
+              Save project name
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function WorkspaceSwitcher({ fullWidth = false }: { fullWidth?: boolean }) {
   const { workspaces, workspace, loading, selectWorkspace } = useWorkspace();
+  const { user } = useSession();
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [renameOpen, setRenameOpen] = useState(false);
+  const canRename = !!workspace && workspace.access !== "managed" && workspace.owner_id === user?.id;
   const ownWorkspaces = workspaces.filter((w) => w.access !== "managed");
   const managedWorkspaces = workspaces.filter((w) => w.access === "managed");
 
@@ -163,6 +255,12 @@ export function WorkspaceSwitcher({ fullWidth = false }: { fullWidth?: boolean }
             </>
           ) : null}
           <DropdownMenuSeparator />
+          {canRename ? (
+            <DropdownMenuItem onSelect={() => setRenameOpen(true)}>
+              <Pencil className="size-4" aria-hidden="true" />
+              Rename current project
+            </DropdownMenuItem>
+          ) : null}
           <DropdownMenuItem onSelect={() => setDialogOpen(true)}>
             <Plus className="size-4" aria-hidden="true" />
             Add project
@@ -171,6 +269,7 @@ export function WorkspaceSwitcher({ fullWidth = false }: { fullWidth?: boolean }
       </DropdownMenu>
 
       <CreateWorkspaceDialog open={dialogOpen} onOpenChange={setDialogOpen} />
+      <RenameWorkspaceDialog open={renameOpen} onOpenChange={setRenameOpen} />
     </>
   );
 }
