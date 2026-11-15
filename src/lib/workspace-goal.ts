@@ -61,7 +61,7 @@ export function isNonCartelLaunchPath(value: LaunchPath | null | undefined): boo
   return value === "external_planned" || value === "external_live" || value === "management_only";
 }
 
-export type WorkspaceSetup = { goal: ProjectGoal | null; launchPath: LaunchPath | null };
+export type WorkspaceSetup = { goal: ProjectGoal | null; launchPath: LaunchPath | null; launchPathAvailable: boolean };
 
 export function workspaceSetupQueryKey(workspaceId: string | null | undefined) {
   return ["workspace-setup", workspaceId ?? null] as const;
@@ -73,8 +73,24 @@ export async function fetchWorkspaceSetup(workspaceId: string): Promise<Workspac
     .select("project_goal,launch_path")
     .eq("id", workspaceId)
     .maybeSingle();
+  // Lovable Preview may share production schema while the reviewed migration is
+  // deliberately unapplied. Preserve legacy setup without silently broadening
+  // access or treating unrelated permission/network failures as success.
+  if (error?.code === "42703") {
+    const legacy = await supabase
+      .from("workspaces")
+      .select("project_goal")
+      .eq("id", workspaceId)
+      .maybeSingle();
+    if (legacy.error) throw legacy.error;
+    return { goal: parseProjectGoal(legacy.data?.project_goal), launchPath: null, launchPathAvailable: false };
+  }
   if (error) throw error;
-  return { goal: parseProjectGoal(data?.project_goal), launchPath: parseLaunchPath(data?.launch_path) };
+  return {
+    goal: parseProjectGoal(data?.project_goal),
+    launchPath: parseLaunchPath(data?.launch_path),
+    launchPathAvailable: true,
+  };
 }
 
 export function useWorkspaceSetup(workspaceId: string | null | undefined) {
