@@ -262,8 +262,14 @@ function OnboardingPage() {
         status="Private Beta"
       />
 
-      {workspaceId && !setupQuery.isPending && !setupQuery.isError ? (
+      {workspaceId && !setupQuery.isPending && !setupQuery.isError && setupQuery.data?.launchPathAvailable ? (
         <LaunchPathChooser workspaceId={workspaceId} isOwner={isOwner} current={launchPath} />
+      ) : null}
+      {workspaceId && !setupQuery.isPending && !setupQuery.isError && !setupQuery.data?.launchPathAvailable ? (
+        <p className="text-xs text-muted-foreground" role="status">
+          External-launch preferences are pending a reviewed database migration.
+          Existing project setup remains available; no token launch is required to use project management tools.
+        </p>
       ) : null}
 
       {!workspaceId ? (
