@@ -24,7 +24,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { listWorkspaceAssets } from "@/lib/media";
 import { listWorkspacePacks } from "@/lib/sticker-packs";
 import { getProjectInboxSettings, getProjectInboxSummary } from "@/lib/project-inbox";
-import { fetchWorkspaceGoal, type ProjectGoal } from "@/lib/workspace-goal";
+import { fetchWorkspaceSetup, isNonCartelLaunchPath, type LaunchPath, type ProjectGoal } from "@/lib/workspace-goal";
 
 /**
  * P1-A — one unified, read-only project journey model.
@@ -215,6 +215,8 @@ export type JourneyInput = {
   inboxUnavailable: boolean;
   /** Owner presentation preference; null/undefined = legacy full journey. */
   goal?: ProjectGoal | null;
+  /** User-reported external/Cartel/management path; does not change launch authority. */
+  launchPath?: LaunchPath | null;
 };
 
 /** Stages hidden only for a community-only project with no launch on record. */
@@ -778,7 +780,9 @@ export function computeProjectJourney(input: JourneyInput): ProjectJourney {
   // token). Once any real launch exists every stage stays visible, whatever
   // the goal, so real launch/watcher obligations are never hidden. Status
   // derivation above is unchanged.
-  const communityOnly = input.goal === "community" && !launch;
+  const communityOnly =
+    (input.goal === "community" || isNonCartelLaunchPath(input.launchPath)) &&
+    !launch && !r.primaryLaunchId;
   const visible = communityOnly
     ? raw.filter((entry) => !LAUNCH_ONLY_STAGES.has(entry.key))
     : raw;
@@ -1059,7 +1063,7 @@ export async function fetchProjectJourney(workspaceId: string): Promise<ProjectJ
 
   // Presentation preference only. A failed read falls back to the legacy
   // (full) journey so nothing is ever hidden because of a transport error.
-  const goal = await fetchWorkspaceGoal(workspaceId).catch(() => null);
+  const setup = await fetchWorkspaceSetup(workspaceId).catch(() => ({ goal: null, launchPath: null }));
 
   return computeProjectJourney({
     readiness,
@@ -1078,7 +1082,8 @@ export async function fetchProjectJourney(workspaceId: string): Promise<ProjectJ
     stickerPacksUnavailable,
     inbox,
     inboxUnavailable,
-    goal,
+    goal: setup.goal,
+    launchPath: setup.launchPath,
   });
 }
 
