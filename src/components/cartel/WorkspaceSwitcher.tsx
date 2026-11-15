@@ -117,7 +117,7 @@ function RenameWorkspaceDialog({
 
   const normalized = name.trim().replace(/\s+/g, " ");
   const isOwner = !!workspace && workspace.access !== "managed" && workspace.owner_id === user?.id;
-  const canSave = isOwner && !busy && normalized.length > 0 && normalized.length <= 80 && normalized !== workspace.name;
+  const canSave = isOwner && !busy && normalized.length > 0 && normalized.length <= 80 && normalized !== (workspace?.name ?? "");
 
   const submit = async (event: React.FormEvent) => {
     event.preventDefault();
