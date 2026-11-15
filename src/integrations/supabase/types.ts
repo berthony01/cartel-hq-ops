@@ -6076,6 +6076,7 @@ export type Database = {
         Row: {
           created_at: string
           id: string
+          launch_path: string | null
           name: string
           owner_id: string
           project_goal: string | null
@@ -6085,6 +6086,7 @@ export type Database = {
         Insert: {
           created_at?: string
           id?: string
+          launch_path?: string | null
           name: string
           owner_id: string
           project_goal?: string | null
@@ -6094,6 +6096,7 @@ export type Database = {
         Update: {
           created_at?: string
           id?: string
+          launch_path?: string | null
           name?: string
           owner_id?: string
           project_goal?: string | null
