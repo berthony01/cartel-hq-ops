@@ -448,6 +448,27 @@ function BrandKitPage() {
                   </div>
                 </Section>
               </>
+            ) : !profileQuery.isSuccess ? (
+              <Section
+                variant="surface"
+                title={profileQuery.isPending ? "Checking Project Profile" : "Project Profile unavailable"}
+                description={
+                  profileQuery.isPending
+                    ? "Loading the selected project's shared identity."
+                    : "Shared identity could not be loaded. No Brand Kit changes will be saved until this check succeeds."
+                }
+                actions={
+                  profileQuery.isError ? (
+                    <Button type="button" variant="outline" size="sm" onClick={() => void profileQuery.refetch()}>
+                      Retry
+                    </Button>
+                  ) : undefined
+                }
+              >
+                <p className="text-sm text-muted-foreground">
+                  Brand Kit creative settings will become available after the identity check.
+                </p>
+              </Section>
             ) : (
               <>
                 <p className="text-xs text-muted-foreground">
