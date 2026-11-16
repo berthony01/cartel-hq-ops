@@ -111,7 +111,7 @@ Deno.serve(async (req: Request) => {
   // Project Identity Gate B — user-initiated mutating/Telegram-send actions only.
   // Read-only actions (status, distribution_status, welcome_settings,
   // broadcast_launch_options) stay ungated.
-  const PROJECT_IDENTITY_GATED_ACTIONS = new Set(["assign_pack", "distribute_pack", "send_group_test", "save_welcome_settings", "send_welcome_test", "send_group_announcement", "send_official_contract_broadcast", "send_official_contract_correction_broadcast"]);
+  const PROJECT_IDENTITY_GATED_ACTIONS = new Set(["assign_pack", "distribute_pack", "send_group_test", "save_welcome_settings", "send_welcome_test", "send_group_announcement", "send_official_contract_broadcast", "send_official_contract_correction_broadcast", "member_verification_prepare_link", "member_verification_rotate_link", "member_verification_set_enabled"]);
   // Commercial Foundation B — exact action -> entitlement map, after identity.
   const COMMERCIAL_ACTION_FEATURES: Record<string, CommercialFeatureKey> = {
     assign_pack: "sticker_auto_posting",
@@ -119,6 +119,9 @@ Deno.serve(async (req: Request) => {
     send_group_test: "community_basic",
     save_welcome_settings: "community_basic",
     send_welcome_test: "community_basic",
+    member_verification_prepare_link: "community_basic",
+    member_verification_rotate_link: "community_basic",
+    member_verification_set_enabled: "community_basic",
     send_group_announcement: "official_broadcasts",
     send_official_contract_broadcast: "official_broadcasts",
     send_official_contract_correction_broadcast: "official_broadcasts",
@@ -320,6 +323,132 @@ Deno.serve(async (req: Request) => {
 
     }
   };
+
+  /**
+   * Member Verification is opt-in, OWNER-ONLY, and additionally gated by the
+   * server's explicit rollout flag. Existing group welcome settings are intact.
+   * A bot-created invite link alone never proves that every entry route is gated.
+   */
+  if (action.startsWith("member_verification_")) {
+    if (!membership || membership.role !== "owner") {
+      return respond({ error: "OWNER_ONLY", message: "Only the project owner can manage member verification." }, 403);
+    }
+    const group = await getGroup();
+    if (!group) return respond({ error: "GROUP_NOT_FOUND", message: "Connect a Telegram community first." }, 404);
+    const rolloutReady = Deno.env.get("CARTEL_MEMBER_VERIFICATION_ENABLED") === "true";
+    const [storedSettings, storedInvite, pendingResult] = await Promise.all([
+      admin.from("telegram_community_settings").select("verification_enabled").eq("workspace_id",workspaceId).eq("group_connection_id",group.id).maybeSingle(),
+      admin.from("telegram_member_verification_invites").select("invite_link,created_at,rotated_at").eq("workspace_id",workspaceId).eq("group_connection_id",group.id).maybeSingle(),
+      admin.from("telegram_member_verification_challenges").select("id",{count:"exact",head:true})
+        .eq("workspace_id",workspaceId).eq("group_connection_id",group.id)
+        .in("status",["pending","needs_review","delivery_failed","approving"]),
+    ]);
+    if (storedSettings.error || storedInvite.error || pendingResult.error) {
+      return respond({ error: "VERIFICATION_SCHEMA_UNAVAILABLE", message: "Member verification is not installed in the database. Existing group operations are unaffected." }, 503);
+    }
+    let botCanInvite = false;
+    let groupIsPublic = false;
+    let groupApprovalRequired: boolean | null = null;
+    let webhookSubscribed = false;
+    let telegramStatusKnown = false;
+    try {
+      const me = await telegramJson(TELEGRAM_BOT_TOKEN,"getMe");
+      const [member,chat,hook] = await Promise.all([
+        telegramJson(TELEGRAM_BOT_TOKEN,"getChatMember",{chat_id:String(group.telegram_chat_id),user_id:me.id}),
+        telegramJson(TELEGRAM_BOT_TOKEN,"getChat",{chat_id:String(group.telegram_chat_id)}),
+        telegramJson(TELEGRAM_BOT_TOKEN,"getWebhookInfo"),
+      ]);
+      telegramStatusKnown = true;
+      botCanInvite = member?.status === "creator" || (member?.status === "administrator" && member?.can_invite_users === true);
+      groupIsPublic = typeof chat?.username === "string" && chat.username.length > 0;
+      groupApprovalRequired = typeof chat?.join_by_request === "boolean" ? chat.join_by_request : null;
+      webhookSubscribed = Array.isArray(hook?.allowed_updates) && hook.allowed_updates.includes("chat_join_request");
+    } catch {
+      if (action !== "member_verification_status") {
+        return respond({ error: "TELEGRAM_PREFLIGHT_UNAVAILABLE", message: "Cannot verify Telegram administrator permissions right now. No change made." }, 503);
+      }
+    }
+    const enabled = storedSettings.data?.verification_enabled === true;
+    const inviteLink = typeof storedInvite.data?.invite_link === "string" ? storedInvite.data.invite_link : null;
+    const status = {
+      enabled, inviteLink, configured:!!inviteLink, rolloutReady, botCanInvite,
+      webhookSubscribed, telegramStatusKnown, groupIsPublic, groupApprovalRequired,
+      pendingCount:pendingResult.count ?? 0,
+      // Public/private alternatives can bypass a bot-managed link.
+      wholeGroupVerified:false,
+      groupName:String(group.title??"Telegram community"),
+    };
+    if (action === "member_verification_status") return respond({ status, canManage:true });
+    if (!rolloutReady) {
+      return respond({ error:"FEATURE_NOT_ENABLED", message:"Member verification rollout is not enabled on the server. No changes made." },409);
+    }
+    if (!telegramStatusKnown || !botCanInvite || !webhookSubscribed) {
+      return respond({error:"MISSING_TELEGRAM_READINESS",message:"The bot needs Invite Users permission and the webhook must subscribe to join requests. No changes made."},409);
+    }
+    if (groupIsPublic && groupApprovalRequired !== true) {
+      return respond({error:"PUBLIC_ADMISSION_NOT_GATED",message:"Enable Approve New Members for this public group in Telegram first. No changes made."},409);
+    }
+    if (action === "member_verification_set_enabled") {
+      const enable = body.enabled === true;
+      if (enable && !inviteLink) {
+        return respond({error:"INVITE_LINK_REQUIRED",message:"Prepare the approval-required invite link first."},409);
+      }
+      if (enable && body.reviewedAllJoinRoutes !== true) {
+        return respond({error:"JOIN_ROUTES_REVIEW_REQUIRED",message:"Review other active Telegram invite links and admission paths before enabling."},400);
+      }
+      // UPDATE if existing to preserve every welcome setting; INSERT only if missing.
+      const write = storedSettings.data
+        ? await admin.from("telegram_community_settings").update({verification_enabled:enable})
+            .eq("group_connection_id",group.id).eq("workspace_id",workspaceId)
+        : await admin.from("telegram_community_settings").insert({group_connection_id:group.id,workspace_id:workspaceId,verification_enabled:enable});
+      if (write.error) return respond({error:"SAVE_FAILED",message:"Could not save member verification. No Telegram group permissions were modified."},503);
+      return respond({ saved:true, status:{...status,enabled:enable} });
+    }
+    if (action === "member_verification_prepare_link" && inviteLink) {
+      return respond({ error:"LINK_ALREADY_CONFIGURED",message:"This community already has a managed invite link. Rotate only after confirming." },409);
+    }
+    const rotating = action === "member_verification_rotate_link";
+    if (rotating && (!inviteLink || body.confirmRotate !== true)) {
+      return respond({error:"ROTATION_CONFIRMATION_REQUIRED",message:"Confirm link rotation; previously shared links may stop working."},400);
+    }
+    if (action === "member_verification_prepare_link" || rotating) {
+      // An extra link; never replace the chat's primary invite link.
+      let created: any;
+      try {
+        created = await telegramJson(TELEGRAM_BOT_TOKEN,"createChatInviteLink",{
+          chat_id:String(group.telegram_chat_id),
+          name:"Cartel HQ verification",
+          creates_join_request:true,
+        });
+      } catch {
+        return respond({error:"TELEGRAM_LINK_FAILED",message:"Telegram did not confirm a new invite link. No saved link was changed."},503);
+      }
+      const next = typeof created?.invite_link === "string" ? created.invite_link : "";
+      if (!created?.creates_join_request || !/^https:\/\/(t\.me|telegram\.me)\//.test(next)) {
+        return respond({error:"INVALID_TELEGRAM_LINK",message:"Telegram did not confirm an approval-required invite link. Contact support before retrying."},503);
+      }
+      const write = rotating
+        ? await admin.from("telegram_member_verification_invites").update({invite_link:next,rotated_at:new Date().toISOString()})
+            .eq("group_connection_id",group.id).eq("workspace_id",workspaceId).eq("invite_link",inviteLink).select("group_connection_id").maybeSingle()
+        : await admin.from("telegram_member_verification_invites").insert({
+            group_connection_id:group.id,workspace_id:workspaceId,invite_link:next,created_by:user.id,
+          }).select("group_connection_id").maybeSingle();
+      if (write.error || !write.data) {
+        // Revoke only the new link this call created; never revoke other links.
+        try { await telegramJson(TELEGRAM_BOT_TOKEN,"revokeChatInviteLink",{chat_id:String(group.telegram_chat_id),invite_link:next}); } catch {}
+        return respond({error:"LINK_SAVE_FAILED",message:"Could not persist the new invite link. Existing link was preserved."},503);
+      }
+      let priorRevokeFailed = false;
+      if (rotating && inviteLink) {
+        try { await telegramJson(TELEGRAM_BOT_TOKEN,"revokeChatInviteLink",{chat_id:String(group.telegram_chat_id),invite_link:inviteLink}); }
+        catch { priorRevokeFailed = true; }
+      }
+      return respond({created:true, priorRevokeFailed, status:{...status,inviteLink:next,configured:true,
+        // Even when new link was generated, other routes remain unverified.
+        wholeGroupVerified:false}});
+    }
+    return respond({error:"UNKNOWN_ACTION",message:"Unknown member verification action."},400);
+  }
 
   try {
     if (action === "status") {
