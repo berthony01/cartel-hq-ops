@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
 import { toast } from "sonner";
-import { Copy, Loader2, MessageSquarePlus, Radio, Users } from "lucide-react";
+import { Copy, Loader2, MessageSquarePlus, Radio, ShieldCheck, Users } from "lucide-react";
 
 import { useWorkspace } from "@/lib/workspace-context";
 import { useTelegramLauncher } from "@/hooks/useTelegramLauncher";
@@ -25,6 +25,7 @@ import {
   type TelegramGroupStatusResult,
 } from "@/lib/telegram-group";
 import { CommunityWelcomeDialog } from "@/components/cartel/CommunityWelcomeDialog";
+import { CommunityVerificationDialog } from "@/components/cartel/CommunityVerificationDialog";
 import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -382,6 +383,11 @@ function GroupRow({
   workspaceId: string | null | undefined;
 }) {
   const [welcomeOpen, setWelcomeOpen] = useState(false);
+  const [verificationOpen, setVerificationOpen] = useState(false);
+  const { workspace } = useWorkspace();
+  const { user } = useSession();
+  const isProjectOwner = !!workspaceId && workspace?.id === workspaceId &&
+    !!user?.id && workspace.owner_id === user.id;
   const g = r.group;
   const inputId = `tg-group-${g.id}`;
   return (
@@ -450,6 +456,15 @@ function GroupRow({
               <MessageSquarePlus className="size-4" aria-hidden="true" />
               Welcome &amp; onboarding
             </Button>
+            {isProjectOwner ? (
+              <Button
+                type="button" variant="outline" size="sm" className="min-h-11"
+                onClick={() => setVerificationOpen(true)}
+              >
+                <ShieldCheck className="size-4" aria-hidden="true" />
+                Member Verification
+              </Button>
+            ) : null}
             <Button asChild type="button" variant="outline" size="sm" className="min-h-11">
               <Link to="/distribution">
                 <Radio className="size-4" aria-hidden="true" />
@@ -473,6 +488,14 @@ function GroupRow({
             <CommunityWelcomeDialog
               open={welcomeOpen}
               onOpenChange={setWelcomeOpen}
+              workspaceId={workspaceId}
+              group={g}
+            />
+          ) : null}
+          {isProjectOwner && verificationOpen ? (
+            <CommunityVerificationDialog
+              open={verificationOpen}
+              onOpenChange={setVerificationOpen}
               workspaceId={workspaceId}
               group={g}
             />
