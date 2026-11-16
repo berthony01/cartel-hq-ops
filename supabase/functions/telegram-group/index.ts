@@ -350,18 +350,26 @@ Deno.serve(async (req: Request) => {
       return respond({ error: "VERIFICATION_SCHEMA_UNAVAILABLE", message: "Member verification is not installed in the database. Existing group operations are unaffected." }, 503);
     }
     let botCanInvite = false;
+    let actorIsTelegramAdmin = false;
     let groupIsPublic = false;
     let groupApprovalRequired: boolean | null = null;
     let webhookSubscribed = false;
     let telegramStatusKnown = false;
     try {
       const me = await telegramJson(TELEGRAM_BOT_TOKEN,"getMe");
-      const [member,chat,hook] = await Promise.all([
+      const {data:actorTelegram,error:actorError} = await admin.from("telegram_connections")
+        .select("telegram_user_id").eq("user_id",user.id).maybeSingle();
+      if (actorError || !actorTelegram?.telegram_user_id) throw new Error("Telegram owner identity unavailable");
+      const [member,chat,hook,actorMember] = await Promise.all([
         telegramJson(TELEGRAM_BOT_TOKEN,"getChatMember",{chat_id:String(group.telegram_chat_id),user_id:me.id}),
         telegramJson(TELEGRAM_BOT_TOKEN,"getChat",{chat_id:String(group.telegram_chat_id)}),
         telegramJson(TELEGRAM_BOT_TOKEN,"getWebhookInfo"),
+        telegramJson(TELEGRAM_BOT_TOKEN,"getChatMember",{
+          chat_id:String(group.telegram_chat_id),user_id:Number(actorTelegram.telegram_user_id),
+        }),
       ]);
       telegramStatusKnown = true;
+      actorIsTelegramAdmin = ["administrator","creator"].includes(String(actorMember?.status));
       botCanInvite = member?.status === "creator" || (member?.status === "administrator" && member?.can_invite_users === true);
       groupIsPublic = typeof chat?.username === "string" && chat.username.length > 0;
       groupApprovalRequired = typeof chat?.join_by_request === "boolean" ? chat.join_by_request : null;
@@ -375,6 +383,7 @@ Deno.serve(async (req: Request) => {
     const inviteLink = typeof storedInvite.data?.invite_link === "string" ? storedInvite.data.invite_link : null;
     const status = {
       enabled, inviteLink, configured:!!inviteLink, rolloutReady, botCanInvite,
+      actorIsTelegramAdmin,
       webhookSubscribed, telegramStatusKnown, groupIsPublic, groupApprovalRequired,
       pendingCount:pendingResult.count ?? 0,
       // Public/private alternatives can bypass a bot-managed link.
@@ -397,8 +406,8 @@ Deno.serve(async (req: Request) => {
     if (!rolloutReady) {
       return respond({ error:"FEATURE_NOT_ENABLED", message:"Member verification rollout is not enabled on the server. No changes made." },409);
     }
-    if (!telegramStatusKnown || !botCanInvite || !webhookSubscribed) {
-      return respond({error:"MISSING_TELEGRAM_READINESS",message:"The bot needs Invite Users permission and the webhook must subscribe to join requests. No changes made."},409);
+    if (!telegramStatusKnown || !botCanInvite || !webhookSubscribed || !actorIsTelegramAdmin) {
+      return respond({error:"MISSING_TELEGRAM_READINESS",message:"Current owner Telegram admin status, bot Invite Users permission and join-request webhook subscription are required. No changes made."},409);
     }
     if (groupIsPublic && groupApprovalRequired !== true) {
       return respond({error:"PUBLIC_ADMISSION_NOT_GATED",message:"Enable Approve New Members for this public group in Telegram first. No changes made."},409);
