@@ -85,7 +85,7 @@ export function CommunityVerificationDialog({
   };
 
   const canPrepare = !!status?.rolloutReady && !!status.telegramStatusKnown &&
-    !!status.botCanInvite && !!status.webhookSubscribed &&
+    !!status.botCanInvite && !!status.actorIsTelegramAdmin && !!status.webhookSubscribed &&
     (!status.groupIsPublic || status.groupApprovalRequired === true);
   const canEnable = canPrepare && !!status?.configured;
 
@@ -131,6 +131,7 @@ export function CommunityVerificationDialog({
             ) : null}
 
             <div className="space-y-1 text-xs">
+              <p>Your Telegram administrator status: <strong>{status.actorIsTelegramAdmin ? "Confirmed" : "Missing or unavailable"}</strong></p>
               <p>Telegram bot Invite Users permission: <strong>{status.botCanInvite ? "Confirmed" : "Missing or unavailable"}</strong></p>
               <p>Webhook receives join requests: <strong>{status.webhookSubscribed ? "Confirmed" : "Not confirmed"}</strong></p>
               <p>Group-wide approval: <strong>{status.groupApprovalRequired === true ? "Reported enabled" : "Not confirmed"}</strong></p>
