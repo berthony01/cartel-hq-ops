@@ -62,6 +62,24 @@ const tests = [
       dialog.includes("onClick={() => void perform(() => prepareCommunityVerificationLink")],
   ["no all-paths-protected misstatement",
     () => dialog.includes("other invite links") && group.includes("wholeGroupVerified:false")],
+  ["single SQL definitions, private invoker, fingerprint",
+    () => migration.split("CREATE FUNCTION public.member_verification_attempt").length===2 &&
+      migration.split("CREATE FUNCTION public.member_verification_check_group_scope").length===2 &&
+      migration.split("CREATE TRIGGER member_verification_").length===3 &&
+      migration.includes("SECURITY INVOKER") && !migration.includes("SECURITY DEFINER") &&
+      migration.includes("invite_link_fingerprint text NOT NULL")],
+  ["unrecognized join route cancels stale pending challenge",
+    () => webhook.includes('last_error_code:"alternate_join_route"') &&
+      webhook.includes('usedLink!==managed.invite_link') &&
+      webhook.includes('.eq("status","pending")')],
+  ["PR18 single connect CTA retained in stacked branch",
+    () => groupCard.includes("showConnectButton = true") &&
+      groupCard.includes("useImperativeHandle") &&
+      groupCard.includes("<CommunityVerificationDialog")],
+  ["Live Telegram admin and global flag required",
+    () => group.includes("actorIsTelegramAdmin") &&
+      group.includes("CARTEL_MEMBER_VERIFICATION_ENABLED")],
+
 ];
 
 let passed=0;
