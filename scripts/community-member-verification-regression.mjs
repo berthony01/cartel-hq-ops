@@ -72,6 +72,14 @@ const tests = [
     () => webhook.includes('last_error_code:"alternate_join_route"') &&
       webhook.includes('usedLink!==managed.invite_link') &&
       webhook.includes('.eq("status","pending")')],
+  ["failed DM and manual-review rows do not permanently block new challenges",
+    () => migration.includes("WHERE status IN ('pending','approving');") &&
+      !migration.includes("WHERE status IN ('pending','approving','delivery_failed','needs_review');")],
+  ["new same-link join invalidates previous challenge",
+    () => webhook.includes('telegram_update_id").eq("group_connection_id"') &&
+      webhook.includes('Number(active.telegram_update_id)===updateId') &&
+      webhook.includes('"superseded_join_request"')],
+
   ["PR18 single connect CTA retained in stacked branch",
     () => groupCard.includes("showConnectButton = true") &&
       groupCard.includes("useImperativeHandle") &&
