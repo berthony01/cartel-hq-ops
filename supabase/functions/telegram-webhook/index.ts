@@ -3112,8 +3112,17 @@ Deno.serve(async (req: Request) => {
         admin.from("telegram_member_verification_invites").select("invite_link")
           .eq("group_connection_id",group.id).eq("workspace_id",group.workspace_id).maybeSingle(),
       ]);
-      if (settingsError||managedError||settings?.verification_enabled!==true||
-        !managed?.invite_link||usedLink!==managed.invite_link) return json({ok:true});
+      if (settingsError||managedError||settings?.verification_enabled!==true) return json({ok:true});
+      if (!managed?.invite_link||usedLink!==managed.invite_link) {
+        // A newer join request through an unrecognized/rotated invitation
+        // invalidates any old pending challenge for this applicant and group.
+        // Never approve someone based on a challenge for an earlier entry path.
+        await admin.from("telegram_member_verification_challenges")
+          .update({status:"needs_review",last_error_code:"alternate_join_route",resolved_at:new Date().toISOString()})
+          .eq("group_connection_id",group.id).eq("telegram_user_id",userId)
+          .eq("status","pending");
+        return json({ok:true});
+      }
       // Cheap per-user cap plus per-group cap. No polling or unbounded logs.
       const oneHourAgo=new Date(Date.now()-3600_000).toISOString();
       const oneMinuteAgo=new Date(Date.now()-60_000).toISOString();
