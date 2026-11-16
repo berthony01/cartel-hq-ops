@@ -1,9 +1,10 @@
-import { useCallback } from "react";
+import { useCallback, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
   CalendarClock,
+  Loader2,
   Radio,
 } from "lucide-react";
 
@@ -40,6 +41,7 @@ import { useTelegramSetup } from "@/components/cartel/TelegramConnectionCard";
 import {
   TelegramGroupCard,
   useTelegramGroupSetup,
+  type TelegramGroupConnectHandle,
 } from "@/components/cartel/TelegramGroupCard";
 
 /**
@@ -322,6 +324,8 @@ function PartnerInboxPage() {
 }
 
 function TelegramPage() {
+  const connectRef = useRef<TelegramGroupConnectHandle>(null);
+  const [connectBusy, setConnectBusy] = useState(false);
   const setup = useTelegramSetup();
   const groupSetup = useTelegramGroupSetup();
   const { workspaceId } = useWorkspace();
@@ -478,23 +482,31 @@ function TelegramPage() {
           </div>
           <Button
             className="min-h-11 w-full lg:w-auto"
-            disabled={checking}
+            disabled={checking || connectBusy || (!serviceError && !groupsError && (!workspaceId || !setup.botConfigured))}
             onClick={() => {
-              if (serviceError) void setup.configQuery.refetch();
-              if (groupsError) void groupSetup.groupQuery.refetch();
-              if (!serviceError && !groupsError) setTab("communities");
+              if (serviceError || groupsError) {
+                if (serviceError) void setup.configQuery.refetch();
+                if (groupsError) void groupSetup.groupQuery.refetch();
+                return;
+              }
+              // Communities is force-mounted; invoke the existing connection flow
+              // synchronously inside the user gesture to preserve Telegram popup access.
+              if (tab !== "communities") setTab("communities");
+              connectRef.current?.connect();
             }}
           >
             {checking
               ? "Checking community state…"
               : serviceError || groupsError
                 ? "Retry status"
-                : groupCount === 0
-                  ? "Connect a community"
-                  : attentionCount > 0
-                    ? "Resolve community setup"
-                    : "Review communities"}
-            {!checking ? <ArrowRight className="size-4" aria-hidden="true" /> : null}
+                : connectBusy
+                  ? "Connecting Telegram…"
+                  : groupCount === 0
+                    ? "Connect Telegram Community"
+                    : "Connect another community"}
+            {connectBusy
+              ? <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              : !checking ? <ArrowRight className="size-4" aria-hidden="true" /> : null}
           </Button>
         </div>
         <dl className="mt-5 grid min-w-0 grid-cols-2 gap-2.5 sm:grid-cols-4">
@@ -731,10 +743,13 @@ function TelegramPage() {
           />
 
           <TelegramGroupCard
+            ref={connectRef}
             setup={groupSetup}
             personalConnected={setup.ownerConnected}
             botConfigured={setup.botConfigured}
             selectable={false}
+            showConnectButton={false}
+            onConnectBusyChange={setConnectBusy}
           />
 
           <details className="rounded-md border border-border/60 bg-background/40 p-3">
