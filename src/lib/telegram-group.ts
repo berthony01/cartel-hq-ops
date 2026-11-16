@@ -401,6 +401,88 @@ export function sendCommunityWelcomeTest(params: {
 }
 
 /* ------------------------------------------------------------------ */
+/* Member Verification — per-connected-group opt-in, OFF by default.   */
+/* ------------------------------------------------------------------ */
+
+export type CommunityVerificationStatus = {
+  enabled: boolean;
+  configured: boolean;
+  inviteLink: string | null;
+  rolloutReady: boolean;
+  botCanInvite: boolean;
+  webhookSubscribed: boolean;
+  telegramStatusKnown: boolean;
+  groupIsPublic: boolean;
+  groupApprovalRequired: boolean | null;
+  /** Cannot be inferred from a bot-managed link alone. */
+  wholeGroupVerified: false;
+  groupName: string;
+  pendingCount: number;
+};
+
+export type CommunityVerificationResult = {
+  status: CommunityVerificationStatus;
+  canManage?: boolean;
+  saved?: boolean;
+  created?: boolean;
+  priorRevokeFailed?: boolean;
+};
+
+/** Lazily fetches exact group readiness; no background polling or auto links. */
+export function fetchCommunityVerificationStatus(params: {
+  workspaceId: string;
+  groupConnectionId: string;
+}): Promise<CommunityVerificationResult> {
+  return invoke<CommunityVerificationResult>({
+    action: "member_verification_status",
+    workspaceId: params.workspaceId,
+    groupConnectionId: params.groupConnectionId,
+  });
+}
+
+/** Explicit owner gesture. Creates an additional join-approval Telegram link. */
+export function prepareCommunityVerificationLink(params: {
+  workspaceId: string;
+  groupConnectionId: string;
+}): Promise<CommunityVerificationResult> {
+  return invoke<CommunityVerificationResult>({
+    action: "member_verification_prepare_link",
+    workspaceId: params.workspaceId,
+    groupConnectionId: params.groupConnectionId,
+  });
+}
+
+/** Never rotate without separate explicit confirmation. */
+export function rotateCommunityVerificationLink(params: {
+  workspaceId: string;
+  groupConnectionId: string;
+  confirmRotate: true;
+}): Promise<CommunityVerificationResult> {
+  return invoke<CommunityVerificationResult>({
+    action: "member_verification_rotate_link",
+    workspaceId: params.workspaceId,
+    groupConnectionId: params.groupConnectionId,
+    confirmRotate: params.confirmRotate,
+  });
+}
+
+/** Server verifies owner, scope, bot rights, webhook subscription and opt-in. */
+export function setCommunityVerificationEnabled(params: {
+  workspaceId: string;
+  groupConnectionId: string;
+  enabled: boolean;
+  reviewedAllJoinRoutes: boolean;
+}): Promise<CommunityVerificationResult> {
+  return invoke<CommunityVerificationResult>({
+    action: "member_verification_set_enabled",
+    workspaceId: params.workspaceId,
+    groupConnectionId: params.groupConnectionId,
+    enabled: params.enabled,
+    reviewedAllJoinRoutes: params.reviewedAllJoinRoutes,
+  });
+}
+
+/* ------------------------------------------------------------------ */
 /* Community announcements (C7 — telegram-group)                       */
 /* ------------------------------------------------------------------ */
 
