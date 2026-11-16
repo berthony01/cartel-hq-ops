@@ -36,7 +36,9 @@ CREATE TABLE public.telegram_member_verification_challenges (
 );
 CREATE UNIQUE INDEX telegram_member_verification_one_open_request
   ON public.telegram_member_verification_challenges(group_connection_id, telegram_user_id)
-  WHERE status IN ('pending','approving','delivery_failed','needs_review');
+  -- Only in-flight challenges should block a fresh request. Failed delivery and
+  -- manual review are terminal, retained for audit but not permanent lockouts.
+  WHERE status IN ('pending','approving');
 CREATE INDEX telegram_member_verification_pending_expiry
   ON public.telegram_member_verification_challenges(expires_at)
   WHERE status IN ('pending','approving');
