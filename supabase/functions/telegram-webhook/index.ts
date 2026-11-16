@@ -640,6 +640,11 @@ async function memberVerificationAnswerHash(botToken: string, challengeId: strin
   return Array.from(new Uint8Array(signed)).map((n) => n.toString(16).padStart(2,"0")).join("");
 }
 
+async function memberVerificationInviteFingerprint(invite: string): Promise<string> {
+  const bytes=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(invite));
+  return Array.from(new Uint8Array(bytes)).map(n=>n.toString(16).padStart(2,"0")).join("");
+}
+
 function memberVerificationChoices() {
   const bytes = new Uint32Array(6);
   crypto.getRandomValues(bytes);
@@ -3137,11 +3142,12 @@ Deno.serve(async (req: Request) => {
       }
       const challengeId=crypto.randomUUID(), quiz=memberVerificationChoices();
       const hash=await memberVerificationAnswerHash(TELEGRAM_BOT_TOKEN,challengeId,quiz.correctIndex);
+      const inviteFingerprint=await memberVerificationInviteFingerprint(usedLink);
       const expiresAt=new Date(Date.now()+4*60_000).toISOString();
       const {data:inserted,error:insertError}=await admin.from("telegram_member_verification_challenges")
         .insert({id:challengeId,group_connection_id:group.id,workspace_id:group.workspace_id,
           telegram_user_id:userId,user_chat_id:Number.isSafeInteger(privateChatId)&&privateChatId>0?privateChatId:null,
-          telegram_update_id:updateId,answer_hash:hash,expires_at:expiresAt,
+          telegram_update_id:updateId,answer_hash:hash,invite_link_fingerprint:inviteFingerprint,expires_at:expiresAt,
         }).select("id").maybeSingle();
       if (insertError||!inserted?.id) return json({ok:true});
       const keys=quiz.choices.map((n,i)=>[{text:String(n),callback_data:"mv_"+challengeId+"_"+i}]);
@@ -3192,7 +3198,7 @@ Deno.serve(async (req: Request) => {
           return json({ok:true});
         }
         const {data:row,error:rowError}=await admin.from("telegram_member_verification_challenges")
-          .select("id,telegram_user_id,group_connection_id,workspace_id,status")
+          .select("id,telegram_user_id,group_connection_id,workspace_id,status,invite_link_fingerprint")
           .eq("id",challengeId).eq("status","approving").maybeSingle();
         if (rowError||!row||Number(row.telegram_user_id)!==actorId) {
           await answerCallback(TELEGRAM_BOT_TOKEN,callback.id,"Ask an admin to review this request.");
@@ -3206,7 +3212,9 @@ Deno.serve(async (req: Request) => {
           admin.from("telegram_member_verification_invites").select("invite_link")
             .eq("group_connection_id",row.group_connection_id).eq("workspace_id",row.workspace_id).maybeSingle(),
         ]);
-        if (!group?.telegram_chat_id||settings?.verification_enabled!==true||!link?.invite_link) {
+        const matchedInvite = typeof link?.invite_link === "string" &&
+          row.invite_link_fingerprint === await memberVerificationInviteFingerprint(link.invite_link);
+        if (!group?.telegram_chat_id||settings?.verification_enabled!==true||!matchedInvite) {
           await admin.from("telegram_member_verification_challenges").update({
             status:"needs_review",last_error_code:"group_not_ready",
           }).eq("id",challengeId).eq("status","approving");
