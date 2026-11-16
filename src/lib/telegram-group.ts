@@ -410,6 +410,7 @@ export type CommunityVerificationStatus = {
   inviteLink: string | null;
   rolloutReady: boolean;
   botCanInvite: boolean;
+  actorIsTelegramAdmin: boolean;
   webhookSubscribed: boolean;
   telegramStatusKnown: boolean;
   groupIsPublic: boolean;
