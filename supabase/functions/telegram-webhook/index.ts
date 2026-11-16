@@ -3153,8 +3153,8 @@ Deno.serve(async (req: Request) => {
       const keys=quiz.choices.map((n,i)=>[{text:String(n),callback_data:"mv_"+challengeId+"_"+i}]);
       const outcome=Number.isSafeInteger(privateChatId)&&privateChatId>0
         ? await sendMessageWithOutcome(TELEGRAM_BOT_TOKEN,String(privateChatId),
-          "<b>Cartel HQ: membership check</b>\\n\\n"+escapeHtml(String(join?.chat?.title??"Your community"))+
-          "\\n"+quiz.question+"\\nSelect the correct answer to request admission. Expires in 4 minutes.",
+          "<b>Cartel HQ: membership check</b>\n\n"+escapeHtml(String(join?.chat?.title??"Your community"))+
+          "\n"+quiz.question+"\nSelect the correct answer to request admission. Expires in 4 minutes.",
           {parse_mode:"HTML",reply_markup:{inline_keyboard:keys}})
         : {status:"failed" as const,errorClass:"no_temporary_dm",detail:"No private chat available"};
       if (outcome.status!=="sent") {
