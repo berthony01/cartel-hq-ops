@@ -127,7 +127,10 @@ Deno.serve(async (req: Request) => {
     send_official_contract_correction_broadcast: "official_broadcasts",
   };
   // A partner broadcast already passed the partner-specific identity + client-plan gate above.
-  if (PROJECT_IDENTITY_GATED_ACTIONS.has(action) && !partnerBroadcastAuthorized && !partnerCommunityAuthorized) {
+  // Emergency opt-out must remain possible if commercial/identity readiness
+  // later changes. Owner+group authorization is still verified below.
+  const memberVerificationDisable = action === "member_verification_set_enabled" && body.enabled === false;
+  if (PROJECT_IDENTITY_GATED_ACTIONS.has(action) && !memberVerificationDisable && !partnerBroadcastAuthorized && !partnerCommunityAuthorized) {
     const identityGate = await requireProjectToolAccess(admin, user.id, workspaceId);
     if (!identityGate.allowed) return respond(identityGate.body, identityGate.status);
     const featureKey = COMMERCIAL_ACTION_FEATURES[action];
@@ -379,6 +382,18 @@ Deno.serve(async (req: Request) => {
       groupName:String(group.title??"Telegram community"),
     };
     if (action === "member_verification_status") return respond({ status, canManage:true });
+    // Fail-safe OFF works without Telegram admin rights or the rollout flag.
+    // Never prevent an owner from disabling a group because of bot removal.
+    if (action === "member_verification_set_enabled" && body.enabled === false) {
+      const result = storedSettings.data
+        ? await admin.from("telegram_community_settings").update({verification_enabled:false})
+            .eq("group_connection_id",group.id).eq("workspace_id",workspaceId)
+        : await admin.from("telegram_community_settings").insert({
+            group_connection_id:group.id,workspace_id:workspaceId,verification_enabled:false,
+          });
+      if (result.error) return respond({error:"SAVE_FAILED",message:"Could not disable verification. Ask a Telegram admin to review pending requests."},503);
+      return respond({saved:true,status:{...status,enabled:false}});
+    }
     if (!rolloutReady) {
       return respond({ error:"FEATURE_NOT_ENABLED", message:"Member verification rollout is not enabled on the server. No changes made." },409);
     }
