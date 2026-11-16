@@ -61,7 +61,7 @@ import { StatusBadge } from "@/components/cartel/StatusBadge";
 import { CreateWorkspaceDialog } from "@/components/cartel/WorkspaceSwitcher";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { useWorkspaceGoal } from "@/lib/workspace-goal";
+import { isNonCartelLaunchPath, useWorkspaceSetup } from "@/lib/workspace-goal";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
@@ -157,7 +157,7 @@ function HqDashboard() {
   const { workspace, workspaceId, loading: workspaceLoading } = useWorkspace();
   const [createOpen, setCreateOpen] = useState(false);
   const journeyQuery = useProjectJourney(workspaceId);
-  const goalQuery = useWorkspaceGoal(workspaceId);
+  const setupQuery = useWorkspaceSetup(workspaceId);
 
   const packsQuery = useQuery({
     queryKey: ["recent-packs", workspaceId],
@@ -246,9 +246,13 @@ function HqDashboard() {
   const contractRegistered = Boolean(primaryLaunch?.official_contract_address);
   const scheduleSet = primaryLaunch ? hasSchedule(primaryLaunch) : false;
   const journey = journeyQuery.data ?? null;
-  // Display-only: community goal with no real launch uses community wording; any
-  // real primary launch, unset goal, or unavailable goal keeps legacy launch copy.
-  const communityOnly = goalQuery.data === "community" && !!journey && !journey.primaryLaunchId;
+  // Read-only display: do not hide existing launch obligations or infer an
+  // absent launch from an unavailable query.
+  const noKnownLaunch = !primaryLaunch && !!journey && !journey.primaryLaunchId &&
+    !launchesQuery.isError && !launchesQuery.isPending;
+  const externalNoLaunch = noKnownLaunch && isNonCartelLaunchPath(setupQuery.data?.launchPath);
+  const communityOnly = noKnownLaunch &&
+    (setupQuery.data?.goal === "community" || externalNoLaunch);
   const nextStage = journey?.nextAction.stage ?? null;
   const blockedStage = journey?.stages.find((stage) => stage.status !== "complete") ?? null;
   const dominantStage = nextStage ?? blockedStage;
@@ -343,7 +347,7 @@ function HqDashboard() {
             <Sparkles className="mt-0.5 size-5 shrink-0 text-gold" aria-hidden="true" />
             <div className="min-w-0">
               <p className="text-sm font-semibold text-foreground">New here? Take the guided setup.</p>
-              <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">Four steps, about ten minutes — identity, community, launch, review.</p>
+              <p className="mt-0.5 text-xs leading-relaxed text-muted-foreground">Choose your launch path and follow the setup steps that fit this project.</p>
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-2">
@@ -421,12 +425,12 @@ function HqDashboard() {
             ) : !primaryLaunch ? (
               <div className="grid min-h-64 gap-5 px-5 py-7 sm:px-7 lg:grid-cols-[minmax(0,1fr)_minmax(17rem,0.55fr)] lg:items-center">
                 <div className="min-w-0">
-                  <p className="type-eyebrow text-gold">Launch status</p>
-                  <h2 id="active-launch-heading" className="mt-2 font-display text-3xl uppercase text-foreground">No launch created yet</h2>
-                  <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">The project journey shows the first available requirement and preserves every dependency before launch creation.</p>
+                  <p className="type-eyebrow text-gold">{communityOnly ? "Project management" : "Launch status"}</p>
+                  <h2 id="active-launch-heading" className="mt-2 font-display text-3xl uppercase text-foreground">{communityOnly ? workspace?.name ?? "Your project" : "No launch created yet"}</h2>
+                  <p className="mt-2 max-w-xl text-sm leading-relaxed text-muted-foreground">{communityOnly ? "No Cartel HQ launch draft is required for this project. Continue using your profile, brand and community tools." : "The project journey shows the first available requirement and preserves every dependency before launch creation."}</p>
                 </div>
                 <div className="border border-gold/25 bg-surface-raised/55 p-4">
-                  <p className="type-meta text-gold">Next required action</p>
+                  <p className="type-meta text-gold">{communityOnly ? "Next project step" : "Next required action"}</p>
                   <p className="mt-2 text-base font-semibold text-foreground [overflow-wrap:anywhere]">{journeyQuery.isPending ? "Checking project journey…" : journey?.nextAction.headline ?? "Review your project journey"}</p>
                   {dominantStage ? <JourneyLink stage={dominantStage} primaryLaunchId={journey?.primaryLaunchId ?? null} label={journeyBlocked ? (dominantStage.reviewLabel ?? `Review ${dominantStage.title}`) : dominantStage.actionLabel} linkClassName={cn(buttonVariants({ variant: journeyBlocked ? "outline" : "default" }), "mt-4 h-auto min-h-11 w-full min-w-0 whitespace-normal text-center")} /> : null}
                 </div>
@@ -459,18 +463,18 @@ function HqDashboard() {
           </section>
 
           <section aria-label="Live project metrics" className="grid gap-3 md:grid-cols-3 [&>*]:min-w-0">
-             <MetricSurface icon={Radio} label="Launch Watch" value={watchValue} detail={watchDetail} status={watchStatus} tone={watchPending || watchUnavailable || !watchToken ? "muted" : "green"} to="/launch-control" />
+             {!communityOnly ? <MetricSurface icon={Radio} label="Launch Watch" value={watchValue} detail={watchDetail} status={watchStatus} tone={watchPending || watchUnavailable || !watchToken ? "muted" : "green"} to="/launch-control" /> : null}
              <MetricSurface icon={Users} label="Communities" value={communityValue} detail={communityDetail} status={communityStatus} tone={telegramQuery.isPending || telegramQuery.isError || groupCount === 0 ? "muted" : healthyGroups === groupCount ? "green" : "gold"} to="/telegram" />
              <MetricSurface icon={Send} label="Sticker Drops" value={dropValue} detail={dropDetail} status={dropStatus} tone={dropsQuery.isPending || dropsQuery.isError ? "muted" : killSwitch ? "red" : activeSchedules > 0 ? "green" : "muted"} to="/distribution" />
           </section>
 
           <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(18rem,1fr)]">
-             <Section variant="surface" title={communityOnly ? "Community readiness" : "Launch readiness"} description={communityOnly ? "Your project setup checklist, in order — the prioritized next action above is what matters most right now." : "The full checklist, in dependency order — the prioritized next action above is what matters most right now."} actions={journey ? <StatusBadge tone={journey.allComplete ? "green" : "gold"}>{journey.completedCount}/{journey.totalCount}</StatusBadge> : undefined} className="min-w-0" contentClassName="min-w-0">
+             <Section variant="surface" title={communityOnly ? "Project readiness" : "Launch readiness"} description={communityOnly ? "Your project setup checklist, in order — the prioritized next action above is what matters most right now." : "The full checklist, in dependency order — the prioritized next action above is what matters most right now."} actions={journey ? <StatusBadge tone={journey.allComplete ? "green" : "gold"}>{journey.completedCount}/{journey.totalCount}</StatusBadge> : undefined} className="min-w-0" contentClassName="min-w-0">
               <ProjectJourneyPanel workspaceId={workspaceId} />
             </Section>
             <div className="grid content-start gap-4">
               <Section variant="surface" title="Operator focus" leading={<Activity className="size-4" aria-hidden="true" />} contentClassName="space-y-3">
-                <p className="text-sm font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">{criticalCount > 0 ? `${criticalCount} critical ${criticalCount === 1 ? "item needs" : "items need"} immediate action.` : attention.length > 0 ? `${attention.length} operational ${attention.length === 1 ? "item needs" : "items need"} review.` : journey?.allComplete ? (communityOnly ? "Community foundation is ready." : "Launch foundation is ready.") : dominantStage ? dominantStage.title : "Keep the project journey moving."}</p>
+                <p className="text-sm font-semibold leading-snug text-foreground [overflow-wrap:anywhere]">{criticalCount > 0 ? `${criticalCount} critical ${criticalCount === 1 ? "item needs" : "items need"} immediate action.` : attention.length > 0 ? `${attention.length} operational ${attention.length === 1 ? "item needs" : "items need"} review.` : journey?.allComplete ? (communityOnly ? "Project foundation is ready." : "Launch foundation is ready.") : dominantStage ? dominantStage.title : "Keep the project journey moving."}</p>
                  <p className="text-xs leading-relaxed text-muted-foreground">{criticalCount > 0 ? "Critical items affect your watchers or live operations — resolve them first, then follow the prioritized next action." : attention.length > 0 ? "Resolve operational warnings before routine work. The prioritized action is the authoritative next project step." : journeyBlocked && blockedStage ? journeyStageGuidance(blockedStage) : journey?.nextAction.explanation ?? "Live project state will guide the next action when available."}</p>
               </Section>
               <Section variant="surface" title="Live operations" leading={<Clock3 className="size-4" aria-hidden="true" />} contentClassName="divide-y divide-border-subtle">

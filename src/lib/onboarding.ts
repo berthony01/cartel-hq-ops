@@ -2,9 +2,9 @@ import { useQuery } from "@tanstack/react-query";
 
 import { supabase } from "@/integrations/supabase/client";
 import { getProjectProfile } from "@/lib/project-profile";
-import { hasSchedule, listLaunches } from "@/lib/launch-control";
+import { hasSchedule, isProjectLaunch, listLaunches } from "@/lib/launch-control";
 import { groupIsOperational } from "@/lib/launch-readiness";
-import type { ProjectGoal } from "@/lib/workspace-goal";
+import { isNonCartelLaunchPath, type LaunchPath, type ProjectGoal } from "@/lib/workspace-goal";
 
 /**
  * Guided first-run setup: four steps, about ten minutes.
@@ -110,6 +110,7 @@ export function deriveOnboardingLoadState(input: {
 export function useOnboardingProgress(
   workspaceId: string | null | undefined,
   goal: ProjectGoal | null,
+  launchPath: LaunchPath | null = null,
 ): OnboardingProgress {
   const profileQuery = useQuery({
     queryKey: ["onboarding-profile", workspaceId],
@@ -157,7 +158,7 @@ export function useOnboardingProgress(
   ).length;
   const communityDone = operationalCount > 0;
 
-  const launches = launchesQuery.data ?? [];
+  const launches = (launchesQuery.data ?? []).filter(isProjectLaunch);
   const launchDone = launches.some((launch) => hasSchedule(launch));
 
   const allSteps: OnboardingStepState[] = [
@@ -186,11 +187,25 @@ export function useOnboardingProgress(
     { key: "review", complete: false, detail: null },
   ];
 
-  return { ...summarizeOnboardingSteps(allSteps, goal), isPending, isError };
+  return { ...summarizeOnboardingSteps(allSteps, goal, launchPath, launches.length > 0), isPending, isError };
 }
 
 /** Which guided steps a goal shows. NULL keeps the legacy four-step guide. */
-export function onboardingStepKeysForGoal(goal: ProjectGoal | null): OnboardingStepKey[] {
+export function onboardingStepKeysForGoal(
+  goal: ProjectGoal | null,
+  launchPath: LaunchPath | null = null,
+  hasExistingProjectLaunch = false,
+): OnboardingStepKey[] {
+  // Existing launch records retain visible schedule/watch obligations regardless
+  // of presentation preference. INTERNAL_TEST rows are excluded by the caller.
+  if (hasExistingProjectLaunch) {
+    return goal === "launch"
+      ? ["identity", "launch", "review"]
+      : ["identity", "community", "launch", "review"];
+  }
+  if (isNonCartelLaunchPath(launchPath)) {
+    return goal === "launch" ? ["identity", "review"] : ["identity", "community", "review"];
+  }
   if (goal === "community") return ["identity", "community", "review"];
   if (goal === "launch") return ["identity", "launch", "review"];
   return ["identity", "community", "launch", "review"];
@@ -200,8 +215,10 @@ export function onboardingStepKeysForGoal(goal: ProjectGoal | null): OnboardingS
 export function summarizeOnboardingSteps(
   allSteps: OnboardingStepState[],
   goal: ProjectGoal | null,
+  launchPath: LaunchPath | null = null,
+  hasExistingProjectLaunch = false,
 ): Omit<OnboardingProgress, "isPending" | "isError"> {
-  const keys = onboardingStepKeysForGoal(goal);
+  const keys = onboardingStepKeysForGoal(goal, launchPath, hasExistingProjectLaunch);
   const stepDefs = keys.map((k) => ONBOARDING_STEPS.find((d) => d.key === k)!);
   const steps = keys.map((k) => allSteps.find((s) => s.key === k)!);
   const working = steps.filter((s) => s.key !== "review");

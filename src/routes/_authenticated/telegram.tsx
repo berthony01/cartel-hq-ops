@@ -1,9 +1,10 @@
-import { useCallback } from "react";
+import { useCallback, useRef, useState } from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowRight,
   CalendarClock,
+  Loader2,
   Radio,
 } from "lucide-react";
 
@@ -40,6 +41,7 @@ import { useTelegramSetup } from "@/components/cartel/TelegramConnectionCard";
 import {
   TelegramGroupCard,
   useTelegramGroupSetup,
+  type TelegramGroupConnectHandle,
 } from "@/components/cartel/TelegramGroupCard";
 
 /**
@@ -322,6 +324,8 @@ function PartnerInboxPage() {
 }
 
 function TelegramPage() {
+  const connectRef = useRef<TelegramGroupConnectHandle>(null);
+  const [connectBusy, setConnectBusy] = useState(false);
   const setup = useTelegramSetup();
   const groupSetup = useTelegramGroupSetup();
   const { workspaceId } = useWorkspace();
@@ -478,23 +482,31 @@ function TelegramPage() {
           </div>
           <Button
             className="min-h-11 w-full lg:w-auto"
-            disabled={checking}
+            disabled={checking || connectBusy || (!serviceError && !groupsError && (!workspaceId || !setup.botConfigured))}
             onClick={() => {
-              if (serviceError) void setup.configQuery.refetch();
-              if (groupsError) void groupSetup.groupQuery.refetch();
-              if (!serviceError && !groupsError) setTab("communities");
+              if (serviceError || groupsError) {
+                if (serviceError) void setup.configQuery.refetch();
+                if (groupsError) void groupSetup.groupQuery.refetch();
+                return;
+              }
+              // Communities is force-mounted; invoke the existing connection flow
+              // synchronously inside the user gesture to preserve Telegram popup access.
+              if (tab !== "communities") setTab("communities");
+              connectRef.current?.connect();
             }}
           >
             {checking
               ? "Checking community state…"
               : serviceError || groupsError
                 ? "Retry status"
-                : groupCount === 0
-                  ? "Connect a community"
-                  : attentionCount > 0
-                    ? "Resolve community setup"
-                    : "Review communities"}
-            {!checking ? <ArrowRight className="size-4" aria-hidden="true" /> : null}
+                : connectBusy
+                  ? "Connecting Telegram…"
+                  : groupCount === 0
+                    ? "Connect Telegram Community"
+                    : "Connect another community"}
+            {connectBusy
+              ? <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              : !checking ? <ArrowRight className="size-4" aria-hidden="true" /> : null}
           </Button>
         </div>
         <dl className="mt-5 grid min-w-0 grid-cols-2 gap-2.5 sm:grid-cols-4">
@@ -542,6 +554,29 @@ function TelegramPage() {
         {/* ---------------------------------------------------------------- */}
         <TabsContent value="overview" className="mt-0 flex min-w-0 flex-col gap-4 sm:gap-6">
           <LaunchReadinessCallout workspaceId={workspaceId} />
+
+          {/* A visible entry point, even when no Telegram group is connected.
+              Configuration remains owned by the existing per-group editor. */}
+          <Section
+            variant="surface"
+            title="Welcome message setup"
+            description={
+              groupsPending
+                ? "Checking which Telegram communities are connected to this project."
+                : groupsError
+                  ? "Connected communities could not be loaded. Open Telegram and retry before configuring welcomes."
+                  : groupCount === 0
+                    ? "Connect a Telegram community first, then write and enable its new-member welcome."
+                    : "Customize the welcome for each connected Telegram community."
+            }
+            actions={
+              <Button type="button" size="sm" variant="outline" className="min-h-11" onClick={() => setTab("communities")}>
+                Open Telegram setup
+                <ArrowRight className="size-4" aria-hidden="true" />
+              </Button>
+            }
+          />
+
 
           {/* C6 — unnotified schedule changes need an explicit operator decision. */}
           {pendingScheduleQuery.isError ? (
@@ -693,11 +728,28 @@ function TelegramPage() {
             </dl>
           </Section>
 
+          <Section
+            variant="surface"
+            title="Welcome message setup"
+            description={
+              groupsPending
+                ? "Checking connected Telegram communities. Welcome settings will appear with each group."
+                : groupsError
+                  ? "Community status is unavailable. Use Retry in Your communities below."
+                  : groupCount === 0
+                    ? "No Telegram community is connected to this project. Connect one using Your communities below; then select Welcome & onboarding on that group's row."
+                    : "In Your communities below, select Welcome & onboarding under the group you want to configure. Each community has its own welcome message, enable switch, and test option."
+            }
+          />
+
           <TelegramGroupCard
+            ref={connectRef}
             setup={groupSetup}
             personalConnected={setup.ownerConnected}
             botConfigured={setup.botConfigured}
             selectable={false}
+            showConnectButton={false}
+            onConnectBusyChange={setConnectBusy}
           />
 
           <details className="rounded-md border border-border/60 bg-background/40 p-3">
