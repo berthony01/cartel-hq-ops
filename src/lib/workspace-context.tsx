@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useMemo, type ReactNode } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useSession } from "@/hooks/useSession";
 import {
@@ -72,8 +72,16 @@ type WorkspaceContextValue = {
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null);
 
 export function WorkspaceProvider({ children }: { children: ReactNode }) {
-  const queryClient = useQueryClient();
   const { user } = useSession();
+  // Initialize the persisted choice after hydration, then update React state
+  // synchronously whenever a project is selected. localStorage alone does not
+  // notify React that the active workspace has changed.
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
+  const [selectionRestored, setSelectionRestored] = useState(false);
+  useEffect(() => {
+    setSelectedWorkspaceId(readStoredWorkspaceId());
+    setSelectionRestored(true);
+  }, []);
   const userId = user?.id ?? null;
   const { data, isLoading, error, refetch } = useWorkspacesQuery();
   // SP-A: fails closed to [] when the RPC is absent or errors.
@@ -102,16 +110,24 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     return [...own, ...managed];
   }, [data, managedQuery.data]);
 
-  // Validate the persisted selection against what the user can actually access.
-  const stored = typeof window === "undefined" ? null : readStoredWorkspaceId();
+  // The displayed workspace follows React state, not a storage read in render.
+  // Query keys on project pages already include workspaceId, so data refreshes
+  // for the selected project without refetching unrelated application queries.
   const workspace =
-    workspaces.find((w) => w.id === stored) ?? workspaces[0] ?? null;
+    workspaces.find((w) => w.id === selectedWorkspaceId) ?? workspaces[0] ?? null;
 
   useEffect(() => {
-    if (managedQuery.isPending && !!userId) return; // don't discard a managed selection mid-load
-    if (workspace && workspace.id !== stored) writeStoredWorkspaceId(workspace.id);
-    if (!workspace && stored) writeStoredWorkspaceId(null);
-  }, [workspace, stored, managedQuery.isPending, userId]);
+    if (!selectionRestored || isLoading || (managedQuery.isPending && !!userId)) return;
+    // Retain the previous fallback behavior when a stored project is no longer
+    // accessible, but wait until access checks finish before replacing it.
+    if (workspace && workspace.id !== selectedWorkspaceId) {
+      setSelectedWorkspaceId(workspace.id);
+      writeStoredWorkspaceId(workspace.id);
+    } else if (!workspace && selectedWorkspaceId) {
+      setSelectedWorkspaceId(null);
+      writeStoredWorkspaceId(null);
+    }
+  }, [workspace, selectedWorkspaceId, selectionRestored, isLoading, managedQuery.isPending, userId]);
 
   const value: WorkspaceContextValue = {
     workspaces,
@@ -122,8 +138,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     error: (error as Error | null) ?? null,
     selectWorkspace: (id: string) => {
       if (!workspaces.some((w) => w.id === id)) return;
+      // Trigger a synchronous state update. Project-specific queries observe
+      // the new workspaceId and fetch only the new project's own data.
+      setSelectedWorkspaceId(id);
       writeStoredWorkspaceId(id);
-      queryClient.invalidateQueries();
     },
     refresh: () => {
       void refetch();
