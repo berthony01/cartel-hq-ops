@@ -543,6 +543,29 @@ function TelegramPage() {
         <TabsContent value="overview" className="mt-0 flex min-w-0 flex-col gap-4 sm:gap-6">
           <LaunchReadinessCallout workspaceId={workspaceId} />
 
+          {/* A visible entry point, even when no Telegram group is connected.
+              Configuration remains owned by the existing per-group editor. */}
+          <Section
+            variant="surface"
+            title="Welcome message setup"
+            description={
+              groupsPending
+                ? "Checking which Telegram communities are connected to this project."
+                : groupsError
+                  ? "Connected communities could not be loaded. Open Telegram and retry before configuring welcomes."
+                  : groupCount === 0
+                    ? "Connect a Telegram community first, then write and enable its new-member welcome."
+                    : "Customize the welcome for each connected Telegram community."
+            }
+            actions={
+              <Button type="button" size="sm" variant="outline" className="min-h-11" onClick={() => setTab("communities")}>
+                Open Telegram setup
+                <ArrowRight className="size-4" aria-hidden="true" />
+              </Button>
+            }
+          />
+
+
           {/* C6 — unnotified schedule changes need an explicit operator decision. */}
           {pendingScheduleQuery.isError ? (
             <Section variant="surface" title="Schedule changes">
@@ -692,6 +715,20 @@ function TelegramPage() {
               <StateMetric label="Needs attention" value={metricValue(attentionCount)} />
             </dl>
           </Section>
+
+          <Section
+            variant="surface"
+            title="Welcome message setup"
+            description={
+              groupsPending
+                ? "Checking connected Telegram communities. Welcome settings will appear with each group."
+                : groupsError
+                  ? "Community status is unavailable. Use Retry in Your communities below."
+                  : groupCount === 0
+                    ? "No Telegram community is connected to this project. Connect one using Your communities below; then select Welcome & onboarding on that group's row."
+                    : "In Your communities below, select Welcome & onboarding under the group you want to configure. Each community has its own welcome message, enable switch, and test option."
+            }
+          />
 
           <TelegramGroupCard
             setup={groupSetup}
