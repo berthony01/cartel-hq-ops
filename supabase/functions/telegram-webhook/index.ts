@@ -3135,19 +3135,29 @@ Deno.serve(async (req: Request) => {
           .select("id",{count:"exact",head:true}).eq("group_connection_id",group.id)
           .gte("created_at",oneMinuteAgo),
         admin.from("telegram_member_verification_challenges")
-          .select("id,status,expires_at").eq("group_connection_id",group.id)
-          .eq("telegram_user_id",userId).in("status",["pending","approving","delivery_failed","needs_review"])
+          .select("id,status,expires_at,telegram_update_id").eq("group_connection_id",group.id)
+          .eq("telegram_user_id",userId).in("status",["pending","approving"])
           .limit(1).maybeSingle(),
       ]);
       if (userCapError||groupCapError||activeError) return json({ok:true});
       if ((userHour??0)>=5||(groupMinute??0)>=20) return json({ok:true});
       if (active?.id) {
-        if (active.status==="pending"&&new Date(active.expires_at).getTime()<=Date.now()) {
-          // Bounded cleanup on demand. Concurrent inserts still fail the UNIQUE
-          // active request index, never delivering two challenges.
-          await admin.from("telegram_member_verification_challenges").update({status:"expired",resolved_at:new Date().toISOString()})
-            .eq("id",active.id).eq("status","pending");
-        } else return json({ok:true});
+        // A Telegram webhook replay is not a fresh join request.
+        if (Number(active.telegram_update_id)===updateId) return json({ok:true});
+        // An in-flight approval cannot be safely reused for another join.
+        if (active.status==="approving") return json({ok:true});
+        // A new join request must never reuse an old challenge, even when the
+        // applicant joins through the same managed invite link.
+        const isExpired=new Date(active.expires_at).getTime()<=Date.now();
+        const {data:closed,error:closeError}=await admin.from("telegram_member_verification_challenges")
+          .update({
+            status:isExpired?"expired":"needs_review",
+            resolved_at:new Date().toISOString(),
+            last_error_code:isExpired?"expired":"superseded_join_request",
+          })
+          .eq("id",active.id).eq("status","pending")
+          .select("id").maybeSingle();
+        if (closeError||!closed?.id) return json({ok:true});
       }
       const challengeId=crypto.randomUUID(), quiz=memberVerificationChoices();
       const hash=await memberVerificationAnswerHash(TELEGRAM_BOT_TOKEN,challengeId,quiz.correctIndex);
