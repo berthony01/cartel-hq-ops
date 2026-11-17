@@ -20,6 +20,15 @@ const tests = [
     () => ["\"message\"","\"my_chat_member\"","\"callback_query\""].every(e=>webhook.includes(e))],
   ["join event gated by global rollout flag",
     () => webhook.includes('CARTEL_MEMBER_VERIFICATION_ENABLED') && webhook.includes('["chat_join_request"]')],
+  ["OFF blocks all join-query Telegram calls",
+    () => {
+      const start=webhook.indexOf("const join = update?.chat_join_request;");
+      const guard=webhook.indexOf('if (Deno.env.get("CARTEL_MEMBER_VERIFICATION_ENABLED") !== "true") return json({ok:true});',start);
+      const query=webhook.indexOf('"answerChatJoinRequestQuery"',start);
+      const approve=webhook.indexOf('"approveChatJoinRequest"',start);
+      return start >= 0 && guard > start && query > guard && approve > query;
+    }],
+
   ["Telegram webhook secret still validated",
     () => webhook.includes('X-Telegram-Bot-Api-Secret-Token') &&
       webhook.indexOf('if (!supplied || supplied !== expected)') < webhook.indexOf("const join = update?.chat_join_request")],

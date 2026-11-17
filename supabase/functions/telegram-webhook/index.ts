@@ -3085,6 +3085,9 @@ Deno.serve(async (req: Request) => {
     // remain unchanged. Any unknown or disabled group fails closed.
     const join = update?.chat_join_request;
     if (join) {
+      // Absolute off-switch: do not make any Telegram API calls, even for
+      // guard-bot join-query updates, when verification is disabled globally.
+      if (Deno.env.get("CARTEL_MEMBER_VERIFICATION_ENABLED") !== "true") return json({ok:true});
       if (join.query_id) {
         // Telegram Bot API 10.4: query-style join requests must be resolved
         // promptly. "queue" explicitly delegates to human administrators.
@@ -3094,7 +3097,6 @@ Deno.serve(async (req: Request) => {
           });
         } catch {}
       }
-      if (Deno.env.get("CARTEL_MEMBER_VERIFICATION_ENABLED") !== "true") return json({ok:true});
       const userId=Number(join?.from?.id),chatId=Number(join?.chat?.id),updateId=Number(update?.update_id);
       const privateChatId=Number(join?.user_chat_id);
       if (!Number.isSafeInteger(userId)||userId<=0||!Number.isSafeInteger(chatId)||
