@@ -84,7 +84,7 @@ const tests = [
   ["no all-paths-protected misstatement",
     () => dialog.includes("other invite links") && group.includes("wholeGroupVerified:false")],
   ["preview does not request an uninstalled verification backend",
-    () => dialog.includes('import.meta.env.VITE_CARTEL_MEMBER_VERIFICATION_BACKEND_READY === "true"') &&
+    () => dialog.includes("import.meta.env['VITE_CARTEL_MEMBER_VERIFICATION_BACKEND_READY'] === \"true\"") &&
       dialog.includes("if (!open || !workspaceId || !VERIFICATION_BACKEND_READY) return;") &&
       dialog.includes("{!VERIFICATION_BACKEND_READY ? (") &&
       dialog.includes("const canPrepare = VERIFICATION_BACKEND_READY &&")],
