@@ -19,8 +19,11 @@ import {
 } from "@/lib/onboarding";
 import {
   PROJECT_GOAL_OPTIONS,
+  LAUNCH_PATH_OPTIONS,
   useSetWorkspaceGoal,
-  useWorkspaceGoal,
+  useSetWorkspaceLaunchPath,
+  useWorkspaceSetup,
+  type LaunchPath,
   type ProjectGoal,
 } from "@/lib/workspace-goal";
 import { PageHeader } from "@/components/cartel/PageHeader";
@@ -188,11 +191,60 @@ function GoalChooser({
   );
 }
 
+/** Owner preference only: selecting a path never creates or deploys a token. */
+function LaunchPathChooser({
+  workspaceId,
+  isOwner,
+  current,
+}: {
+  workspaceId: string;
+  isOwner: boolean;
+  current: LaunchPath | null;
+}) {
+  const setPath = useSetWorkspaceLaunchPath(workspaceId);
+  return (
+    <Section
+      variant="surface"
+      title="Where will this project's token launch?"
+      description="This changes only your Cartel HQ setup guidance. It never launches a token, verifies a contract, or removes an existing launch. You can change it later."
+    >
+      <div className="grid gap-2 sm:grid-cols-2">
+        {LAUNCH_PATH_OPTIONS.map((option) => (
+          <button
+            key={option.value}
+            type="button"
+            aria-pressed={current === option.value}
+            disabled={!isOwner || setPath.isPending}
+            onClick={() => setPath.mutate(option.value)}
+            className={cn(
+              "flex min-h-24 flex-col items-start gap-1 border px-4 py-3 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-60",
+              current === option.value
+                ? "border-gold/60 bg-gold/5"
+                : "border-border-subtle bg-surface hover:border-gold/30",
+            )}
+          >
+            <span className="text-sm font-semibold text-foreground">{option.label}</span>
+            <span className="text-xs leading-relaxed text-muted-foreground">{option.description}</span>
+          </button>
+        ))}
+      </div>
+      {!isOwner ? <p className="mt-3 text-xs text-muted-foreground">Only the project owner can change the launch path.</p> : null}
+      {setPath.isPending ? <p className="mt-3 text-xs text-muted-foreground">Saving launch path…</p> : null}
+      {setPath.isError ? (
+        <p className="mt-3 text-xs text-signal" role="alert">
+          {setPath.error instanceof Error ? setPath.error.message : "Could not save launch path."}
+        </p>
+      ) : null}
+    </Section>
+  );
+}
+
 function OnboardingPage() {
   const { workspace, workspaceId, loading: workspaceLoading } = useWorkspace();
   const { user } = useSession();
-  const goalQuery = useWorkspaceGoal(workspaceId);
-  const goal = goalQuery.data ?? null;
+  const setupQuery = useWorkspaceSetup(workspaceId);
+  const goal = setupQuery.data?.goal ?? null;
+  const launchPath = setupQuery.data?.launchPath ?? null;
   const isOwner =
     !!workspace && workspace.access !== "managed" && !!user && workspace.owner_id === user.id;
 
@@ -209,6 +261,16 @@ function OnboardingPage() {
         description="Choose your goal, then follow the steps that fit it. Each step opens where the work happens — this guide tracks your progress live."
         status="Private Beta"
       />
+
+      {workspaceId && !setupQuery.isPending && !setupQuery.isError && setupQuery.data?.launchPathAvailable ? (
+        <LaunchPathChooser workspaceId={workspaceId} isOwner={isOwner} current={launchPath} />
+      ) : null}
+      {workspaceId && !setupQuery.isPending && !setupQuery.isError && !setupQuery.data?.launchPathAvailable ? (
+        <p className="text-xs text-muted-foreground" role="status">
+          External-launch preferences are pending a reviewed database migration.
+          Existing project setup remains available; no token launch is required to use project management tools.
+        </p>
+      ) : null}
 
       {!workspaceId ? (
         <Section
@@ -227,20 +289,20 @@ function OnboardingPage() {
             )
           }
         />
-      ) : goalQuery.isPending ? (
+      ) : setupQuery.isPending ? (
         <Section variant="surface">
           <div className="flex items-center gap-3 py-8 text-sm text-muted-foreground">
             <Loader2 className="size-4 animate-spin text-gold" aria-hidden="true" />
             <span>Checking your project goal…</span>
           </div>
         </Section>
-      ) : goalQuery.isError ? (
+      ) : setupQuery.isError ? (
         <Section
           variant="surface"
           title="Project goal unavailable"
           description="Your project goal could not be loaded right now."
           actions={
-            <Button variant="outline" className="min-h-11" onClick={() => void goalQuery.refetch()}>
+            <Button variant="outline" className="min-h-11" onClick={() => void setupQuery.refetch()}>
               <RefreshCw className="size-4" aria-hidden="true" />
               Retry
             </Button>
@@ -256,9 +318,10 @@ function OnboardingPage() {
         />
       ) : (
         <OnboardingWizard
-          key={`${workspaceId}:${goal ?? "legacy"}`}
+          key={`${workspaceId}:${goal ?? "legacy"}:${launchPath ?? "legacy"}`}
           workspaceId={workspaceId}
           goal={goal}
+          launchPath={launchPath}
           canChangeGoal={isOwner}
           onChangeGoal={() => setChanging(true)}
         />
@@ -270,15 +333,17 @@ function OnboardingPage() {
 function OnboardingWizard({
   workspaceId,
   goal,
+  launchPath,
   canChangeGoal,
   onChangeGoal,
 }: {
   workspaceId: string;
   goal: ProjectGoal | null;
+  launchPath: LaunchPath | null;
   canChangeGoal: boolean;
   onChangeGoal: () => void;
 }) {
-  const progress = useOnboardingProgress(workspaceId, goal);
+  const progress = useOnboardingProgress(workspaceId, goal, launchPath);
   const { openHelp } = useSetupHelp();
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
 

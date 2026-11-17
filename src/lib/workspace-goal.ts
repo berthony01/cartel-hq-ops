@@ -32,6 +32,97 @@ export function parseProjectGoal(value: unknown): ProjectGoal | null {
   return value === "community" || value === "launch" || value === "both" ? value : null;
 }
 
+/**
+ * How this project uses token-launch tools. This is self-reported guidance only,
+ * NOT evidence of on-chain launch, verified contract or deployment permission.
+ */
+export type LaunchPath =
+  | "external_planned"
+  | "external_live"
+  | "cartel_supported"
+  | "management_only";
+
+export const LAUNCH_PATH_OPTIONS: ReadonlyArray<{ value: LaunchPath; label: string; description: string }> = [
+  { value: "external_planned", label: "Launching somewhere else", description: "Use a launchpad or independent contract. No Cartel HQ launch draft is required." },
+  { value: "external_live", label: "Already launched elsewhere", description: "Manage an existing token. This is self-reported and is not contract verification." },
+  { value: "cartel_supported", label: "Use Cartel HQ's supported launch workflow", description: "Prepare a Cartel HQ launch using supported deployment permissions and evidence." },
+  { value: "management_only", label: "Project management only", description: "Run your project and community without a token-launch checklist." },
+];
+
+export function parseLaunchPath(value: unknown): LaunchPath | null {
+  return value === "external_planned" ||
+    value === "external_live" ||
+    value === "cartel_supported" ||
+    value === "management_only"
+    ? value : null;
+}
+
+export function isNonCartelLaunchPath(value: LaunchPath | null | undefined): boolean {
+  return value === "external_planned" || value === "external_live" || value === "management_only";
+}
+
+export type WorkspaceSetup = { goal: ProjectGoal | null; launchPath: LaunchPath | null; launchPathAvailable: boolean };
+
+export function workspaceSetupQueryKey(workspaceId: string | null | undefined) {
+  return ["workspace-setup", workspaceId ?? null] as const;
+}
+
+export async function fetchWorkspaceSetup(workspaceId: string): Promise<WorkspaceSetup> {
+  const { data, error } = await supabase
+    .from("workspaces")
+    .select("project_goal,launch_path")
+    .eq("id", workspaceId)
+    .maybeSingle();
+  // Lovable Preview may share production schema while the reviewed migration is
+  // deliberately unapplied. Preserve legacy setup without silently broadening
+  // access or treating unrelated permission/network failures as success.
+  if (error?.code === "42703") {
+    const legacy = await supabase
+      .from("workspaces")
+      .select("project_goal")
+      .eq("id", workspaceId)
+      .maybeSingle();
+    if (legacy.error) throw legacy.error;
+    return { goal: parseProjectGoal(legacy.data?.project_goal), launchPath: null, launchPathAvailable: false };
+  }
+  if (error) throw error;
+  return {
+    goal: parseProjectGoal(data?.project_goal),
+    launchPath: parseLaunchPath(data?.launch_path),
+    launchPathAvailable: true,
+  };
+}
+
+export function useWorkspaceSetup(workspaceId: string | null | undefined) {
+  return useQuery({
+    queryKey: workspaceSetupQueryKey(workspaceId),
+    enabled: !!workspaceId,
+    queryFn: () => fetchWorkspaceSetup(workspaceId!),
+  });
+}
+
+export function useSetWorkspaceLaunchPath(workspaceId: string | null | undefined) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (launchPath: LaunchPath) => {
+      if (!workspaceId) throw new Error("No active project.");
+      const { data, error } = await supabase
+        .from("workspaces")
+        .update({ launch_path: launchPath })
+        .eq("id", workspaceId)
+        .select("launch_path")
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) throw new Error("Only the project owner can choose the launch path.");
+      return parseLaunchPath(data.launch_path);
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: workspaceSetupQueryKey(workspaceId) });
+      void queryClient.invalidateQueries({ queryKey: ["launch-readiness", workspaceId] });
+    },
+  });
+}
+
 export function workspaceGoalQueryKey(workspaceId: string | null | undefined) {
   return ["workspace-goal", workspaceId ?? null] as const;
 }
@@ -73,6 +164,7 @@ export function useSetWorkspaceGoal(workspaceId: string | null | undefined) {
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: workspaceGoalQueryKey(workspaceId) });
+      void queryClient.invalidateQueries({ queryKey: workspaceSetupQueryKey(workspaceId) });
       void queryClient.invalidateQueries({ queryKey: ["launch-readiness", workspaceId] });
     },
   });

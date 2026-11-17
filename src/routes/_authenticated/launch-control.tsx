@@ -19,6 +19,7 @@ import {
 
 import { toast } from "sonner";
 import { useWorkspace } from "@/lib/workspace-context";
+import { isNonCartelLaunchPath, useWorkspaceSetup } from "@/lib/workspace-goal";
 import { getProjectProfile } from "@/lib/project-profile";
 import {
   isProjectLaunch,
@@ -468,6 +469,7 @@ function LaunchControlPage() {
   const profile = profileQuery.data ?? null;
 
   const projectJourneyQuery = useProjectJourney(workspaceId);
+  const setupQuery = useWorkspaceSetup(workspaceId);
 
   const launchesQuery = useQuery({
     queryKey: ["launches", workspaceId, profile?.id ?? null],
@@ -477,6 +479,10 @@ function LaunchControlPage() {
   const launches = useMemo(() => launchesQuery.data ?? [], [launchesQuery.data]);
   /** Customer-facing launches. INTERNAL_TEST rows never appear here. */
   const projectLaunches = useMemo(() => launches.filter(isProjectLaunch), [launches]);
+  const externalWithoutLaunch =
+    !launchesQuery.isPending && !launchesQuery.isError &&
+    projectLaunches.length === 0 &&
+    isNonCartelLaunchPath(setupQuery.data?.launchPath);
   /** Owner-only internal chain-test records. */
   const internalTestLaunches = useMemo(
     () => launches.filter(isInternalTestLaunch),
@@ -1530,6 +1536,14 @@ function LaunchControlPage() {
             </Section>
           ) : null}
 
+          {externalWithoutLaunch ? (
+            <Section
+              variant="quiet"
+              title="No Cartel HQ launch required"
+              description="Your project can use Cartel HQ while its token launches elsewhere or is already live outside the platform. Creating a Cartel HQ launch record is optional. Its current official-contract workflow does not verify arbitrary external contracts."
+            />
+          ) : null}
+
           <Section
             variant="quiet"
             title="Project launches"
@@ -1539,7 +1553,7 @@ function LaunchControlPage() {
               canManage ? (
                 <Button size="sm" className="min-h-11" onClick={startCreate}>
                   <Plus className="size-4" aria-hidden="true" />
-                  New launch
+                  {externalWithoutLaunch ? "Optional draft launch" : "New launch"}
                 </Button>
               ) : null
             }
@@ -1561,7 +1575,9 @@ function LaunchControlPage() {
               </div>
             ) : projectLaunches.length === 0 ? (
               <p className="text-sm text-muted-foreground">
-                No launches yet. Create a draft launch to begin the lifecycle.
+                {externalWithoutLaunch
+                  ? "No Cartel HQ launch record is needed to manage this project."
+                  : "No launches yet. Create a draft launch to begin the lifecycle."}
               </p>
             ) : (
               <ul className="grid gap-2.5 sm:grid-cols-2 [&>*]:min-w-0">
