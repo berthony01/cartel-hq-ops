@@ -23,7 +23,7 @@ import {
  * This is not an authorization flag; backend owner and rollout checks still apply.
  */
 const VERIFICATION_BACKEND_READY =
-  import.meta.env.VITE_CARTEL_MEMBER_VERIFICATION_BACKEND_READY === "true";
+  import.meta.env['VITE_CARTEL_MEMBER_VERIFICATION_BACKEND_READY'] === "true";
 
 /**
  * Owner-only, connected-group verification control. All reads are lazy;
