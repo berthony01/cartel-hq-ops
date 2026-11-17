@@ -18,6 +18,14 @@ import {
 } from "@/components/ui/dialog";
 
 /**
+ * Frontend compatibility gate. Keep OFF while Preview still calls the deployed
+ * telegram-group v52 backend, which has no member_verification_* actions.
+ * This is not an authorization flag; backend owner and rollout checks still apply.
+ */
+const VERIFICATION_BACKEND_READY =
+  import.meta.env.VITE_CARTEL_MEMBER_VERIFICATION_BACKEND_READY === "true";
+
+/**
  * Owner-only, connected-group verification control. All reads are lazy;
  * the dialog never auto-creates links or changes Telegram group settings.
  * The server remains the authority for group/actor identity and rights.
@@ -39,7 +47,7 @@ export function CommunityVerificationDialog({
   const [oldLinkWarning, setOldLinkWarning] = useState(false);
 
   useEffect(() => {
-    if (!open || !workspaceId) return;
+    if (!open || !workspaceId || !VERIFICATION_BACKEND_READY) return;
     let cancelled = false;
     setStatus(null);
     setLoading(true);
@@ -84,7 +92,7 @@ export function CommunityVerificationDialog({
     }
   };
 
-  const canPrepare = !!status?.rolloutReady && !!status.telegramStatusKnown &&
+  const canPrepare = VERIFICATION_BACKEND_READY && !!status?.rolloutReady && !!status.telegramStatusKnown &&
     !!status.botCanInvite && !!status.actorIsTelegramAdmin && !!status.webhookSubscribed &&
     (!status.groupIsPublic || status.groupApprovalRequired === true);
   const canEnable = canPrepare && !!status?.configured;
@@ -103,7 +111,13 @@ export function CommunityVerificationDialog({
           </DialogDescription>
         </DialogHeader>
 
-        {loading ? (
+        {!VERIFICATION_BACKEND_READY ? (
+          <p className="rounded-md border border-border p-3 text-sm text-muted-foreground" role="status">
+            Member Verification setup is being prepared. No invitation links or approval
+            settings can be changed until the database and Telegram backend are validated
+            and deployed. Your existing community and welcome messages are unaffected.
+          </p>
+        ) : loading ? (
           <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
             <Loader2 className="size-4 animate-spin" /> Checking this community…
           </p>

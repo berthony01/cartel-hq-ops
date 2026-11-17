@@ -62,6 +62,12 @@ const tests = [
       dialog.includes("onClick={() => void perform(() => prepareCommunityVerificationLink")],
   ["no all-paths-protected misstatement",
     () => dialog.includes("other invite links") && group.includes("wholeGroupVerified:false")],
+  ["preview does not request an uninstalled verification backend",
+    () => dialog.includes('import.meta.env.VITE_CARTEL_MEMBER_VERIFICATION_BACKEND_READY === "true"') &&
+      dialog.includes("if (!open || !workspaceId || !VERIFICATION_BACKEND_READY) return;") &&
+      dialog.includes("{!VERIFICATION_BACKEND_READY ? (") &&
+      dialog.includes("const canPrepare = VERIFICATION_BACKEND_READY &&")],
+
   ["single SQL definitions, private invoker, fingerprint",
     () => migration.split("CREATE FUNCTION public.member_verification_attempt").length===2 &&
       migration.split("CREATE FUNCTION public.member_verification_check_group_scope").length===2 &&
