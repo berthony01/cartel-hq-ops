@@ -3088,15 +3088,6 @@ Deno.serve(async (req: Request) => {
       // Absolute off-switch: do not make any Telegram API calls, even for
       // guard-bot join-query updates, when verification is disabled globally.
       if (Deno.env.get("CARTEL_MEMBER_VERIFICATION_ENABLED") !== "true") return json({ok:true});
-      if (join.query_id) {
-        // Telegram Bot API 10.4: query-style join requests must be resolved
-        // promptly. "queue" explicitly delegates to human administrators.
-        try {
-          await telegramJson(TELEGRAM_BOT_TOKEN,"answerChatJoinRequestQuery",{
-            chat_join_request_query_id:String(join.query_id),result:"queue",
-          });
-        } catch {}
-      }
       const userId=Number(join?.from?.id),chatId=Number(join?.chat?.id),updateId=Number(update?.update_id);
       const privateChatId=Number(join?.user_chat_id);
       if (!Number.isSafeInteger(userId)||userId<=0||!Number.isSafeInteger(chatId)||
@@ -3115,6 +3106,15 @@ Deno.serve(async (req: Request) => {
           .eq("group_connection_id",group.id).eq("workspace_id",group.workspace_id).maybeSingle(),
       ]);
       if (settingsError||managedError||settings?.verification_enabled!==true) return json({ok:true});
+      if (join.query_id) {
+        // Telegram Bot API 10.4: query-style join requests must be resolved
+        // promptly. "queue" explicitly delegates to human administrators.
+        try {
+          await telegramJson(TELEGRAM_BOT_TOKEN,"answerChatJoinRequestQuery",{
+            chat_join_request_query_id:String(join.query_id),result:"queue",
+          });
+        } catch {}
+      }
       if (!managed?.invite_link||usedLink!==managed.invite_link) {
         // A newer join request through an unrecognized/rotated invitation
         // invalidates any old pending challenge for this applicant and group.
@@ -3147,7 +3147,15 @@ Deno.serve(async (req: Request) => {
         // A Telegram webhook replay is not a fresh join request.
         if (Number(active.telegram_update_id)===updateId) return json({ok:true});
         // An in-flight approval cannot be safely reused for another join.
-        if (active.status==="approving") return json({ok:true});
+        if (active.status==="approving") {
+          if (new Date(active.expires_at).getTime() > Date.now()) return json({ok:true});
+          const {data:stale,error:staleError}=await admin.from("telegram_member_verification_challenges")
+            .update({status:"needs_review",resolved_at:new Date().toISOString(),
+              last_error_code:"stale_approval_manual_review"})
+            .eq("id",active.id).eq("status","approving")
+            .select("id").maybeSingle();
+          if (staleError||!stale?.id) return json({ok:true});
+        } else {
         // A new join request must never reuse an old challenge, even when the
         // applicant joins through the same managed invite link.
         const isExpired=new Date(active.expires_at).getTime()<=Date.now();
@@ -3160,6 +3168,7 @@ Deno.serve(async (req: Request) => {
           .eq("id",active.id).eq("status","pending")
           .select("id").maybeSingle();
         if (closeError||!closed?.id) return json({ok:true});
+        }
       }
       const challengeId=crypto.randomUUID(), quiz=memberVerificationChoices();
       const hash=await memberVerificationAnswerHash(TELEGRAM_BOT_TOKEN,challengeId,quiz.correctIndex);

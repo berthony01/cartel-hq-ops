@@ -20,6 +20,18 @@ const tests = [
     () => ["\"message\"","\"my_chat_member\"","\"callback_query\""].every(e=>webhook.includes(e))],
   ["join event gated by global rollout flag",
     () => webhook.includes('CARTEL_MEMBER_VERIFICATION_ENABLED') && webhook.includes('["chat_join_request"]')],
+  ["only per-group opt-in handles join request queries",
+    () => {
+      const start=webhook.indexOf("const join = update?.chat_join_request;");
+      const groupGuard=webhook.indexOf("if (settingsError||managedError||settings?.verification_enabled!==true) return json({ok:true});",start);
+      const query=webhook.indexOf('"answerChatJoinRequestQuery"',start);
+      return start>=0 && groupGuard>start && query>groupGuard;
+    }],
+  ["stale approving requests remain reviewable without blocking re-join",
+    () => webhook.includes('last_error_code:"stale_approval_manual_review"') &&
+      webhook.includes('if (active.status==="approving") {') &&
+      webhook.includes('staleError||!stale?.id') &&
+      webhook.includes('.eq("id",active.id).eq("status","approving")')],
   ["OFF blocks all join-query Telegram calls",
     () => {
       const start=webhook.indexOf("const join = update?.chat_join_request;");
