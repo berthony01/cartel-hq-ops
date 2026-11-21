@@ -386,8 +386,8 @@ function GroupRow({
   const [verificationOpen, setVerificationOpen] = useState(false);
   const { workspace } = useWorkspace();
   const { user } = useSession();
-  const isProjectOwner = !!workspaceId && workspace?.id === workspaceId &&
-    !!user?.id && workspace.owner_id === user.id;
+  const isProjectOwner =
+    !!workspaceId && workspace?.id === workspaceId && !!user?.id && workspace.owner_id === user.id;
   const g = r.group;
   const inputId = `tg-group-${g.id}`;
   return (
@@ -457,8 +457,13 @@ function GroupRow({
               Welcome &amp; onboarding
             </Button>
             {isProjectOwner ? (
-              <Button type="button" variant="outline" size="sm" className="min-h-11"
-                onClick={() => setVerificationOpen(true)}>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-11"
+                onClick={() => setVerificationOpen(true)}
+              >
                 <ShieldCheck className="size-4" aria-hidden="true" />
                 Member Verification
               </Button>

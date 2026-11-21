@@ -43,6 +43,12 @@ CREATE INDEX telegram_member_verification_pending_expiry
   ON public.telegram_member_verification_challenges(expires_at)
   WHERE status IN ('pending','approving');
 
+-- Support rolling admission caps and bounded oldest-first cleanup.
+CREATE INDEX telegram_member_verification_group_created
+  ON public.telegram_member_verification_challenges(group_connection_id, created_at);
+CREATE INDEX telegram_member_verification_created
+  ON public.telegram_member_verification_challenges(created_at);
+
 -- Reject cross-workspace group references even if a server caller has service role.
 CREATE FUNCTION public.member_verification_check_group_scope()
 RETURNS trigger LANGUAGE plpgsql SET search_path = public AS $$
@@ -52,6 +58,20 @@ BEGIN
     WHERE g.id = NEW.group_connection_id AND g.workspace_id = NEW.workspace_id
   ) THEN
     RAISE EXCEPTION 'Member verification group/workspace mismatch';
+  END IF;
+  IF TG_TABLE_NAME = 'telegram_member_verification_challenges' AND TG_OP = 'INSERT' THEN
+    -- Count + insert must serialize per group, including different applicants.
+    -- The webhook's cheap preflight counts alone are racy under concurrency.
+    PERFORM pg_advisory_xact_lock(hashtextextended('member_verification:' || NEW.group_connection_id::text, 0));
+    IF (SELECT count(*) FROM public.telegram_member_verification_challenges
+        WHERE group_connection_id = NEW.group_connection_id
+          AND created_at >= now() - interval '1 minute') >= 20
+       OR (SELECT count(*) FROM public.telegram_member_verification_challenges
+        WHERE group_connection_id = NEW.group_connection_id
+          AND telegram_user_id = NEW.telegram_user_id
+          AND created_at >= now() - interval '1 hour') >= 5 THEN
+      RAISE EXCEPTION 'Member verification rate limit reached' USING ERRCODE = 'P0001';
+    END IF;
   END IF;
   RETURN NEW;
 END;
@@ -110,7 +130,7 @@ BEGIN
       last_error_code='incorrect_answer',
       resolved_at=CASE WHEN attempts >= 2 THEN now() ELSE NULL END
     WHERE id=row_.id;
-  RETURN CASE WHEN row_.attempts >= 2 THEN 'incorrect_limit' ELSE 'incorrect'; END;
+  RETURN CASE WHEN row_.attempts >= 2 THEN 'incorrect_limit' ELSE 'incorrect' END;
 END;
 $$;
 REVOKE ALL ON FUNCTION public.member_verification_attempt(uuid,bigint,text) FROM PUBLIC, anon, authenticated;
@@ -118,3 +138,27 @@ GRANT EXECUTE ON FUNCTION public.member_verification_attempt(uuid,bigint,text) T
 
 COMMENT ON COLUMN public.telegram_community_settings.verification_enabled IS
   'Owner opt-in for managed join-request verification. Defaults false; not proof that all group entry routes require approval.';
+
+
+-- Release candidate retention policy: ordinary resolved records 48 hours;
+-- manual-review/failed-delivery and abandoned in-flight records 7 days.
+-- Does not approve/decline Telegram join requests or touch welcome/drop data.
+-- Bounded work: at most 5,000 rows per hourly run; backlog can extend retention.
+-- Reuses the existing pg_cron extension. Do not install/enable new infrastructure.
+SELECT cron.schedule(
+  'telegram-member-verification-retention',
+  '17 * * * *',
+  $cleanup$
+    WITH doomed AS (
+      SELECT id FROM public.telegram_member_verification_challenges
+      WHERE created_at < now() - interval '7 days'
+         OR (status IN ('approved','expired','incorrect_limit')
+             AND created_at < now() - interval '48 hours')
+      ORDER BY created_at
+      LIMIT 5000
+      FOR UPDATE SKIP LOCKED
+    )
+    DELETE FROM public.telegram_member_verification_challenges c
+    USING doomed d WHERE c.id = d.id;
+  $cleanup$
+);

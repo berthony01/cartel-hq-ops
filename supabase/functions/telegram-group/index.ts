@@ -40,13 +40,24 @@ Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: cors });
   if (req.method !== "POST") return respond({ error: "METHOD_NOT_ALLOWED" }, 405);
   const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "", ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY") ?? "", SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "", TELEGRAM_BOT_TOKEN = Deno.env.get("TELEGRAM_BOT_TOKEN") ?? "";
-  if (!TELEGRAM_BOT_TOKEN) return respond({ error: "TELEGRAM_NOT_CONFIGURED", message: "Telegram bot is not configured." }, 503);
   const authHeader = req.headers.get("Authorization") ?? ""; if (!authHeader.startsWith("Bearer ")) return respond({ error: "UNAUTHENTICATED", message: "Sign in to CARTEL HQ first." }, 401);
   const userClient = createClient(SUPABASE_URL, ANON_KEY, { global: { headers: { Authorization: authHeader } }, auth: { persistSession: false, autoRefreshToken: false } });
   const { data: authData, error: authError } = await userClient.auth.getUser(); if (authError || !authData.user) return respond({ error: "UNAUTHENTICATED", message: "Your session expired. Sign in again." }, 401);
   const user = authData.user, admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+  const accessClient = {
+    rpc: (fn: string, args: Record<string, unknown>) => Promise.resolve(admin.rpc(fn, args)),
+  };
   let body: Record<string, unknown> = {}; try { body = await req.json(); } catch { return respond({ error: "INVALID_BODY", message: "Invalid request." }, 400); }
   const action = String(body.action ?? ""), workspaceId = String(body.workspaceId ?? ""), groupConnectionId = String(body.groupConnectionId ?? "");
+  if (
+    !TELEGRAM_BOT_TOKEN &&
+    !(action === "member_verification_set_enabled" && body.enabled === false)
+  ) {
+    return respond(
+      { error: "TELEGRAM_NOT_CONFIGURED", message: "Telegram bot is not configured." },
+      503,
+    );
+  }
   if (!workspaceId) return respond({ error: "WORKSPACE_REQUIRED", message: "Workspace is required." }, 400);
   const { data: membership } = await admin.from("workspace_members").select("user_id,role").eq("workspace_id", workspaceId).eq("user_id", user.id).maybeSingle();
   /**
@@ -111,7 +122,19 @@ Deno.serve(async (req: Request) => {
   // Project Identity Gate B — user-initiated mutating/Telegram-send actions only.
   // Read-only actions (status, distribution_status, welcome_settings,
   // broadcast_launch_options) stay ungated.
-  const PROJECT_IDENTITY_GATED_ACTIONS = new Set(["assign_pack", "distribute_pack", "send_group_test", "save_welcome_settings", "send_welcome_test", "send_group_announcement", "send_official_contract_broadcast", "send_official_contract_correction_broadcast", "member_verification_prepare_link", "member_verification_rotate_link", "member_verification_set_enabled"]);
+  const PROJECT_IDENTITY_GATED_ACTIONS = new Set([
+    "assign_pack",
+    "distribute_pack",
+    "send_group_test",
+    "save_welcome_settings",
+    "send_welcome_test",
+    "send_group_announcement",
+    "send_official_contract_broadcast",
+    "send_official_contract_correction_broadcast",
+    "member_verification_prepare_link",
+    "member_verification_rotate_link",
+    "member_verification_set_enabled",
+  ]);
   // Commercial Foundation B — exact action -> entitlement map, after identity.
   const COMMERCIAL_ACTION_FEATURES: Record<string, CommercialFeatureKey> = {
     assign_pack: "sticker_auto_posting",
@@ -129,13 +152,19 @@ Deno.serve(async (req: Request) => {
   // A partner broadcast already passed the partner-specific identity + client-plan gate above.
   // Emergency opt-out must remain possible if commercial/identity readiness
   // later changes. Owner+group authorization is still verified below.
-  const memberVerificationDisable = action === "member_verification_set_enabled" && body.enabled === false;
-  if (PROJECT_IDENTITY_GATED_ACTIONS.has(action) && !memberVerificationDisable && !partnerBroadcastAuthorized && !partnerCommunityAuthorized) {
-    const identityGate = await requireProjectToolAccess(admin, user.id, workspaceId);
+  const memberVerificationDisable =
+    action === "member_verification_set_enabled" && body.enabled === false;
+  if (
+    PROJECT_IDENTITY_GATED_ACTIONS.has(action) &&
+    !memberVerificationDisable &&
+    !partnerBroadcastAuthorized &&
+    !partnerCommunityAuthorized
+  ) {
+    const identityGate = await requireProjectToolAccess(accessClient, user.id, workspaceId);
     if (!identityGate.allowed) return respond(identityGate.body, identityGate.status);
     const featureKey = COMMERCIAL_ACTION_FEATURES[action];
     const commercialGate = featureKey
-      ? await requireCommercialAccess(admin, user.id, workspaceId, featureKey)
+      ? await requireCommercialAccess(accessClient, user.id, workspaceId, featureKey)
       : { allowed: false as const, status: 403 as const, body: { error: "COMMERCIAL_ACCESS_DENIED", code: "COMMERCIAL_ACCESS_DENIED", message: "This action is not available for this workspace." } };
     if (!commercialGate.allowed) return respond(commercialGate.body, commercialGate.status);
   }
@@ -334,20 +363,47 @@ Deno.serve(async (req: Request) => {
    */
   if (action.startsWith("member_verification_")) {
     if (!membership || membership.role !== "owner") {
-      return respond({ error: "OWNER_ONLY", message: "Only the project owner can manage member verification." }, 403);
+      return respond(
+        { error: "OWNER_ONLY", message: "Only the project owner can manage member verification." },
+        403,
+      );
     }
     const group = await getGroup();
-    if (!group) return respond({ error: "GROUP_NOT_FOUND", message: "Connect a Telegram community first." }, 404);
+    if (!group)
+      return respond(
+        { error: "GROUP_NOT_FOUND", message: "Connect a Telegram community first." },
+        404,
+      );
     const rolloutReady = Deno.env.get("CARTEL_MEMBER_VERIFICATION_ENABLED") === "true";
     const [storedSettings, storedInvite, pendingResult] = await Promise.all([
-      admin.from("telegram_community_settings").select("verification_enabled").eq("workspace_id",workspaceId).eq("group_connection_id",group.id).maybeSingle(),
-      admin.from("telegram_member_verification_invites").select("invite_link,created_at,rotated_at").eq("workspace_id",workspaceId).eq("group_connection_id",group.id).maybeSingle(),
-      admin.from("telegram_member_verification_challenges").select("id",{count:"exact",head:true})
-        .eq("workspace_id",workspaceId).eq("group_connection_id",group.id)
-        .in("status",["pending","needs_review","delivery_failed","approving"]),
+      admin
+        .from("telegram_community_settings")
+        .select("verification_enabled")
+        .eq("workspace_id", workspaceId)
+        .eq("group_connection_id", group.id)
+        .maybeSingle(),
+      admin
+        .from("telegram_member_verification_invites")
+        .select("invite_link,created_at,rotated_at")
+        .eq("workspace_id", workspaceId)
+        .eq("group_connection_id", group.id)
+        .maybeSingle(),
+      admin
+        .from("telegram_member_verification_challenges")
+        .select("id", { count: "exact", head: true })
+        .eq("workspace_id", workspaceId)
+        .eq("group_connection_id", group.id)
+        .in("status", ["pending", "needs_review", "delivery_failed", "approving"]),
     ]);
     if (storedSettings.error || storedInvite.error || pendingResult.error) {
-      return respond({ error: "VERIFICATION_SCHEMA_UNAVAILABLE", message: "Member verification is not installed in the database. Existing group operations are unaffected." }, 503);
+      return respond(
+        {
+          error: "VERIFICATION_SCHEMA_UNAVAILABLE",
+          message:
+            "Member verification is not installed in the database. Existing group operations are unaffected.",
+        },
+        503,
+      );
     }
     let botCanInvite = false;
     let actorIsTelegramAdmin = false;
@@ -355,123 +411,287 @@ Deno.serve(async (req: Request) => {
     let groupApprovalRequired: boolean | null = null;
     let webhookSubscribed = false;
     let telegramStatusKnown = false;
-    try {
-      const me = await telegramJson(TELEGRAM_BOT_TOKEN,"getMe");
-      const {data:actorTelegram,error:actorError} = await admin.from("telegram_connections")
-        .select("telegram_user_id").eq("user_id",user.id).maybeSingle();
-      if (actorError || !actorTelegram?.telegram_user_id) throw new Error("Telegram owner identity unavailable");
-      const [member,chat,hook,actorMember] = await Promise.all([
-        telegramJson(TELEGRAM_BOT_TOKEN,"getChatMember",{chat_id:String(group.telegram_chat_id),user_id:me.id}),
-        telegramJson(TELEGRAM_BOT_TOKEN,"getChat",{chat_id:String(group.telegram_chat_id)}),
-        telegramJson(TELEGRAM_BOT_TOKEN,"getWebhookInfo"),
-        telegramJson(TELEGRAM_BOT_TOKEN,"getChatMember",{
-          chat_id:String(group.telegram_chat_id),user_id:Number(actorTelegram.telegram_user_id),
-        }),
-      ]);
-      telegramStatusKnown = true;
-      actorIsTelegramAdmin = ["administrator","creator"].includes(String(actorMember?.status));
-      botCanInvite = member?.status === "creator" || (member?.status === "administrator" && member?.can_invite_users === true);
-      groupIsPublic = typeof chat?.username === "string" && chat.username.length > 0;
-      groupApprovalRequired = typeof chat?.join_by_request === "boolean" ? chat.join_by_request : null;
-      webhookSubscribed = Array.isArray(hook?.allowed_updates) && hook.allowed_updates.includes("chat_join_request");
-    } catch {
-      if (action !== "member_verification_status") {
-        return respond({ error: "TELEGRAM_PREFLIGHT_UNAVAILABLE", message: "Cannot verify Telegram administrator permissions right now. No change made." }, 503);
+    // Emergency OFF must not depend on Telegram being reachable or linked.
+    if (!memberVerificationDisable) {
+      try {
+        const me = await telegramJson(TELEGRAM_BOT_TOKEN, "getMe");
+        const { data: actorTelegram, error: actorError } = await admin
+          .from("telegram_connections")
+          .select("telegram_user_id")
+          .eq("user_id", user.id)
+          .maybeSingle();
+        if (actorError || !actorTelegram?.telegram_user_id)
+          throw new Error("Telegram owner identity unavailable");
+        const [member, chat, hook, actorMember] = await Promise.all([
+          telegramJson(TELEGRAM_BOT_TOKEN, "getChatMember", {
+            chat_id: String(group.telegram_chat_id),
+            user_id: me.id,
+          }),
+          telegramJson(TELEGRAM_BOT_TOKEN, "getChat", { chat_id: String(group.telegram_chat_id) }),
+          telegramJson(TELEGRAM_BOT_TOKEN, "getWebhookInfo"),
+          telegramJson(TELEGRAM_BOT_TOKEN, "getChatMember", {
+            chat_id: String(group.telegram_chat_id),
+            user_id: Number(actorTelegram.telegram_user_id),
+          }),
+        ]);
+        telegramStatusKnown = true;
+        actorIsTelegramAdmin = ["administrator", "creator"].includes(String(actorMember?.status));
+        botCanInvite =
+          member?.status === "creator" ||
+          (member?.status === "administrator" && member?.can_invite_users === true);
+        groupIsPublic = typeof chat?.username === "string" && chat.username.length > 0;
+        groupApprovalRequired =
+          typeof chat?.join_by_request === "boolean" ? chat.join_by_request : null;
+        webhookSubscribed =
+          Array.isArray(hook?.allowed_updates) &&
+          hook.allowed_updates.includes("chat_join_request");
+      } catch {
+        if (action !== "member_verification_status") {
+          return respond(
+            {
+              error: "TELEGRAM_PREFLIGHT_UNAVAILABLE",
+              message:
+                "Cannot verify Telegram administrator permissions right now. No change made.",
+            },
+            503,
+          );
+        }
       }
     }
     const enabled = storedSettings.data?.verification_enabled === true;
-    const inviteLink = typeof storedInvite.data?.invite_link === "string" ? storedInvite.data.invite_link : null;
+    const inviteLink =
+      typeof storedInvite.data?.invite_link === "string" ? storedInvite.data.invite_link : null;
     const status = {
-      enabled, inviteLink, configured:!!inviteLink, rolloutReady, botCanInvite,
+      enabled,
+      inviteLink,
+      configured: !!inviteLink,
+      rolloutReady,
+      botCanInvite,
       actorIsTelegramAdmin,
-      webhookSubscribed, telegramStatusKnown, groupIsPublic, groupApprovalRequired,
-      pendingCount:pendingResult.count ?? 0,
+      webhookSubscribed,
+      telegramStatusKnown,
+      groupIsPublic,
+      groupApprovalRequired,
+      pendingCount: pendingResult.count ?? 0,
       // Public/private alternatives can bypass a bot-managed link.
-      wholeGroupVerified:false,
-      groupName:String(group.title??"Telegram community"),
+      wholeGroupVerified: false,
+      groupName: String(group.title ?? "Telegram community"),
     };
-    if (action === "member_verification_status") return respond({ status, canManage:true });
+    if (action === "member_verification_status") return respond({ status, canManage: true });
     // Fail-safe OFF works without Telegram admin rights or the rollout flag.
     // Never prevent an owner from disabling a group because of bot removal.
     if (action === "member_verification_set_enabled" && body.enabled === false) {
       const result = storedSettings.data
-        ? await admin.from("telegram_community_settings").update({verification_enabled:false})
-            .eq("group_connection_id",group.id).eq("workspace_id",workspaceId)
+        ? await admin
+            .from("telegram_community_settings")
+            .update({ verification_enabled: false })
+            .eq("group_connection_id", group.id)
+            .eq("workspace_id", workspaceId)
         : await admin.from("telegram_community_settings").insert({
-            group_connection_id:group.id,workspace_id:workspaceId,verification_enabled:false,
+            group_connection_id: group.id,
+            workspace_id: workspaceId,
+            verification_enabled: false,
           });
-      if (result.error) return respond({error:"SAVE_FAILED",message:"Could not disable verification. Ask a Telegram admin to review pending requests."},503);
-      return respond({saved:true,status:{...status,enabled:false}});
+      if (result.error)
+        return respond(
+          {
+            error: "SAVE_FAILED",
+            message:
+              "Could not disable verification. Ask a Telegram admin to review pending requests.",
+          },
+          503,
+        );
+      return respond({ saved: true, status: { ...status, enabled: false } });
     }
     if (!rolloutReady) {
-      return respond({ error:"FEATURE_NOT_ENABLED", message:"Member verification rollout is not enabled on the server. No changes made." },409);
+      return respond(
+        {
+          error: "FEATURE_NOT_ENABLED",
+          message: "Member verification rollout is not enabled on the server. No changes made.",
+        },
+        409,
+      );
     }
     if (!telegramStatusKnown || !botCanInvite || !webhookSubscribed || !actorIsTelegramAdmin) {
-      return respond({error:"MISSING_TELEGRAM_READINESS",message:"Current owner Telegram admin status, bot Invite Users permission and join-request webhook subscription are required. No changes made."},409);
+      return respond(
+        {
+          error: "MISSING_TELEGRAM_READINESS",
+          message:
+            "Current owner Telegram admin status, bot Invite Users permission and join-request webhook subscription are required. No changes made.",
+        },
+        409,
+      );
     }
     if (groupIsPublic && groupApprovalRequired !== true) {
-      return respond({error:"PUBLIC_ADMISSION_NOT_GATED",message:"Enable Approve New Members for this public group in Telegram first. No changes made."},409);
+      return respond(
+        {
+          error: "PUBLIC_ADMISSION_NOT_GATED",
+          message:
+            "Enable Approve New Members for this public group in Telegram first. No changes made.",
+        },
+        409,
+      );
     }
     if (action === "member_verification_set_enabled") {
       const enable = body.enabled === true;
       if (enable && !inviteLink) {
-        return respond({error:"INVITE_LINK_REQUIRED",message:"Prepare the approval-required invite link first."},409);
+        return respond(
+          {
+            error: "INVITE_LINK_REQUIRED",
+            message: "Prepare the approval-required invite link first.",
+          },
+          409,
+        );
       }
       if (enable && body.reviewedAllJoinRoutes !== true) {
-        return respond({error:"JOIN_ROUTES_REVIEW_REQUIRED",message:"Review other active Telegram invite links and admission paths before enabling."},400);
+        return respond(
+          {
+            error: "JOIN_ROUTES_REVIEW_REQUIRED",
+            message:
+              "Review other active Telegram invite links and admission paths before enabling.",
+          },
+          400,
+        );
       }
       // UPDATE if existing to preserve every welcome setting; INSERT only if missing.
       const write = storedSettings.data
-        ? await admin.from("telegram_community_settings").update({verification_enabled:enable})
-            .eq("group_connection_id",group.id).eq("workspace_id",workspaceId)
-        : await admin.from("telegram_community_settings").insert({group_connection_id:group.id,workspace_id:workspaceId,verification_enabled:enable});
-      if (write.error) return respond({error:"SAVE_FAILED",message:"Could not save member verification. No Telegram group permissions were modified."},503);
-      return respond({ saved:true, status:{...status,enabled:enable} });
+        ? await admin
+            .from("telegram_community_settings")
+            .update({ verification_enabled: enable })
+            .eq("group_connection_id", group.id)
+            .eq("workspace_id", workspaceId)
+        : await admin.from("telegram_community_settings").insert({
+            group_connection_id: group.id,
+            workspace_id: workspaceId,
+            verification_enabled: enable,
+          });
+      if (write.error)
+        return respond(
+          {
+            error: "SAVE_FAILED",
+            message:
+              "Could not save member verification. No Telegram group permissions were modified.",
+          },
+          503,
+        );
+      return respond({ saved: true, status: { ...status, enabled: enable } });
     }
     if (action === "member_verification_prepare_link" && inviteLink) {
-      return respond({ error:"LINK_ALREADY_CONFIGURED",message:"This community already has a managed invite link. Rotate only after confirming." },409);
+      return respond(
+        {
+          error: "LINK_ALREADY_CONFIGURED",
+          message:
+            "This community already has a managed invite link. Rotate only after confirming.",
+        },
+        409,
+      );
     }
     const rotating = action === "member_verification_rotate_link";
     if (rotating && (!inviteLink || body.confirmRotate !== true)) {
-      return respond({error:"ROTATION_CONFIRMATION_REQUIRED",message:"Confirm link rotation; previously shared links may stop working."},400);
+      return respond(
+        {
+          error: "ROTATION_CONFIRMATION_REQUIRED",
+          message: "Confirm link rotation; previously shared links may stop working.",
+        },
+        400,
+      );
     }
     if (action === "member_verification_prepare_link" || rotating) {
       // An extra link; never replace the chat's primary invite link.
-      let created: any;
+      let created: { invite_link?: unknown; creates_join_request?: unknown } | null;
       try {
-        created = await telegramJson(TELEGRAM_BOT_TOKEN,"createChatInviteLink",{
-          chat_id:String(group.telegram_chat_id),
-          name:"Cartel HQ verification",
-          creates_join_request:true,
+        created = await telegramJson(TELEGRAM_BOT_TOKEN, "createChatInviteLink", {
+          chat_id: String(group.telegram_chat_id),
+          name: "Cartel HQ verification",
+          creates_join_request: true,
         });
       } catch {
-        return respond({error:"TELEGRAM_LINK_FAILED",message:"Telegram did not confirm a new invite link. No saved link was changed."},503);
+        return respond(
+          {
+            error: "TELEGRAM_LINK_FAILED",
+            message: "Telegram did not confirm a new invite link. No saved link was changed.",
+          },
+          503,
+        );
       }
       const next = typeof created?.invite_link === "string" ? created.invite_link : "";
-      if (!created?.creates_join_request || !/^https:\/\/(t\.me|telegram\.me)\//.test(next)) {
-        return respond({error:"INVALID_TELEGRAM_LINK",message:"Telegram did not confirm an approval-required invite link. Contact support before retrying."},503);
+      if (
+        created?.creates_join_request !== true ||
+        !/^https:\/\/(t\.me|telegram\.me)\//.test(next)
+      ) {
+        return respond(
+          {
+            error: "INVALID_TELEGRAM_LINK",
+            message:
+              "Telegram did not confirm an approval-required invite link. Contact support before retrying.",
+          },
+          503,
+        );
       }
       const write = rotating
-        ? await admin.from("telegram_member_verification_invites").update({invite_link:next,rotated_at:new Date().toISOString()})
-            .eq("group_connection_id",group.id).eq("workspace_id",workspaceId).eq("invite_link",inviteLink).select("group_connection_id").maybeSingle()
-        : await admin.from("telegram_member_verification_invites").insert({
-            group_connection_id:group.id,workspace_id:workspaceId,invite_link:next,created_by:user.id,
-          }).select("group_connection_id").maybeSingle();
+        ? await admin
+            .from("telegram_member_verification_invites")
+            .update({ invite_link: next, rotated_at: new Date().toISOString() })
+            .eq("group_connection_id", group.id)
+            .eq("workspace_id", workspaceId)
+            .eq("invite_link", inviteLink)
+            .select("group_connection_id")
+            .maybeSingle()
+        : await admin
+            .from("telegram_member_verification_invites")
+            .insert({
+              group_connection_id: group.id,
+              workspace_id: workspaceId,
+              invite_link: next,
+              created_by: user.id,
+            })
+            .select("group_connection_id")
+            .maybeSingle();
       if (write.error || !write.data) {
         // Revoke only the new link this call created; never revoke other links.
-        try { await telegramJson(TELEGRAM_BOT_TOKEN,"revokeChatInviteLink",{chat_id:String(group.telegram_chat_id),invite_link:next}); } catch {}
-        return respond({error:"LINK_SAVE_FAILED",message:"Could not persist the new invite link. Existing link was preserved."},503);
+        try {
+          await telegramJson(TELEGRAM_BOT_TOKEN, "revokeChatInviteLink", {
+            chat_id: String(group.telegram_chat_id),
+            invite_link: next,
+          });
+        } catch {
+          /* Preserve the database failure response if cleanup also fails. */
+        }
+        return respond(
+          {
+            error: "LINK_SAVE_FAILED",
+            message: "Could not persist the new invite link. Existing link was preserved.",
+          },
+          503,
+        );
       }
       let priorRevokeFailed = false;
       if (rotating && inviteLink) {
-        try { await telegramJson(TELEGRAM_BOT_TOKEN,"revokeChatInviteLink",{chat_id:String(group.telegram_chat_id),invite_link:inviteLink}); }
-        catch { priorRevokeFailed = true; }
+        try {
+          await telegramJson(TELEGRAM_BOT_TOKEN, "revokeChatInviteLink", {
+            chat_id: String(group.telegram_chat_id),
+            invite_link: inviteLink,
+          });
+        } catch {
+          priorRevokeFailed = true;
+        }
       }
-      return respond({created:true, priorRevokeFailed, status:{...status,inviteLink:next,configured:true,
-        // Even when new link was generated, other routes remain unverified.
-        wholeGroupVerified:false}});
+      return respond({
+        created: true,
+        priorRevokeFailed,
+        status: {
+          ...status,
+          inviteLink: next,
+          configured: true,
+          // Even when new link was generated, other routes remain unverified.
+          wholeGroupVerified: false,
+        },
+      });
     }
-    return respond({error:"UNKNOWN_ACTION",message:"Unknown member verification action."},400);
+    return respond(
+      { error: "UNKNOWN_ACTION", message: "Unknown member verification action." },
+      400,
+    );
   }
 
   try {

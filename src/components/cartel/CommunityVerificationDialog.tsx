@@ -14,7 +14,11 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import {
-  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog";
 
 /**
@@ -23,7 +27,7 @@ import {
  * This is not an authorization flag; backend owner and rollout checks still apply.
  */
 const VERIFICATION_BACKEND_READY =
-  import.meta.env['VITE_CARTEL_MEMBER_VERIFICATION_BACKEND_READY'] === "true";
+  import.meta.env["VITE_CARTEL_MEMBER_VERIFICATION_BACKEND_READY"] === "true";
 
 /**
  * Owner-only, connected-group verification control. All reads are lazy;
@@ -31,7 +35,10 @@ const VERIFICATION_BACKEND_READY =
  * The server remains the authority for group/actor identity and rights.
  */
 export function CommunityVerificationDialog({
-  open, onOpenChange, workspaceId, group,
+  open,
+  onOpenChange,
+  workspaceId,
+  group,
 }: {
   open: boolean;
   onOpenChange: (next: boolean) => void;
@@ -55,13 +62,22 @@ export function CommunityVerificationDialog({
     setJoinRoutesReviewed(false);
     setRotationConfirmed(false);
     setOldLinkWarning(false);
-    fetchCommunityVerificationStatus({workspaceId, groupConnectionId:group.id})
-      .then((result) => { if (!cancelled) setStatus(result.status); })
-      .catch((error: unknown) => {
-        if (!cancelled) setProblem(error instanceof Error ? error.message : "Verification settings are unavailable.");
+    fetchCommunityVerificationStatus({ workspaceId, groupConnectionId: group.id })
+      .then((result) => {
+        if (!cancelled) setStatus(result.status);
       })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => {cancelled = true;};
+      .catch((error: unknown) => {
+        if (!cancelled)
+          setProblem(
+            error instanceof Error ? error.message : "Verification settings are unavailable.",
+          );
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [open, workspaceId, group.id]);
 
   const perform = async (task: () => Promise<CommunityVerificationResult>, done: string) => {
@@ -76,7 +92,9 @@ export function CommunityVerificationDialog({
       setJoinRoutesReviewed(false);
       toast.success(done);
     } catch (error) {
-      setProblem(error instanceof Error ? error.message : "Telegram verification could not be changed.");
+      setProblem(
+        error instanceof Error ? error.message : "Telegram verification could not be changed.",
+      );
     } finally {
       setBusy(false);
     }
@@ -92,8 +110,13 @@ export function CommunityVerificationDialog({
     }
   };
 
-  const canPrepare = VERIFICATION_BACKEND_READY && !!status?.rolloutReady && !!status.telegramStatusKnown &&
-    !!status.botCanInvite && !!status.actorIsTelegramAdmin && !!status.webhookSubscribed &&
+  const canPrepare =
+    VERIFICATION_BACKEND_READY &&
+    !!status?.rolloutReady &&
+    !!status.telegramStatusKnown &&
+    !!status.botCanInvite &&
+    !!status.actorIsTelegramAdmin &&
+    !!status.webhookSubscribed &&
     (!status.groupIsPublic || status.groupApprovalRequired === true);
   const canEnable = canPrepare && !!status?.configured;
 
@@ -112,122 +135,235 @@ export function CommunityVerificationDialog({
         </DialogHeader>
 
         {!VERIFICATION_BACKEND_READY ? (
-          <p className="rounded-md border border-border p-3 text-sm text-muted-foreground" role="status">
-            Member Verification setup is being prepared. No invitation links or approval
-            settings can be changed until the database and Telegram backend are validated
-            and deployed. Your existing community and welcome messages are unaffected.
+          <p
+            className="rounded-md border border-border p-3 text-sm text-muted-foreground"
+            role="status"
+          >
+            Member Verification setup is being prepared. No invitation links or approval settings
+            can be changed until the database and Telegram backend are validated and deployed. Your
+            existing community and welcome messages are unaffected.
           </p>
         ) : loading ? (
           <p className="flex items-center gap-2 text-sm text-muted-foreground" role="status">
             <Loader2 className="size-4 animate-spin" /> Checking this community…
           </p>
         ) : problem && !status ? (
-          <p className="rounded-md border border-signal/50 p-3 text-sm text-signal" role="alert">{problem}</p>
+          <p className="rounded-md border border-signal/50 p-3 text-sm text-signal" role="alert">
+            {problem}
+          </p>
         ) : status ? (
           <div className="space-y-4">
             <div className="rounded-md border border-border p-3 text-sm">
-              <p className="font-semibold">Automatic verification: {status.enabled ? "ON" : "OFF"}</p>
+              <p className="font-semibold">
+                Automatic verification: {status.enabled ? "ON" : "OFF"}
+              </p>
               <p className="mt-1 text-xs text-muted-foreground">
                 {status.enabled
                   ? "Only matching managed-link join requests can be approved by the bot after a valid challenge."
                   : "Nothing is automatically approved through Cartel HQ verification."}
               </p>
               {status.pendingCount > 0 ? (
-                <p className="mt-2 text-xs">{status.pendingCount} requests need checking or manual review in Telegram.</p>
+                <p className="mt-2 text-xs">
+                  {status.pendingCount} requests need checking or manual review in Telegram.
+                </p>
               ) : null}
             </div>
 
             {!status.rolloutReady ? (
               <p className="rounded-md border border-gold/40 bg-gold/5 p-3 text-xs leading-relaxed">
-                Member Verification is not activated on this server. No invite links or admission settings
-                can be changed until deployment and the approved security rollout are complete.
+                Member Verification is not activated on this server. No invite links or admission
+                settings can be changed until deployment and the approved security rollout are
+                complete.
               </p>
             ) : null}
 
             <div className="space-y-1 text-xs">
-              <p>Your Telegram administrator status: <strong>{status.actorIsTelegramAdmin ? "Confirmed" : "Missing or unavailable"}</strong></p>
-              <p>Telegram bot Invite Users permission: <strong>{status.botCanInvite ? "Confirmed" : "Missing or unavailable"}</strong></p>
-              <p>Webhook receives join requests: <strong>{status.webhookSubscribed ? "Confirmed" : "Not confirmed"}</strong></p>
-              <p>Group-wide approval: <strong>{status.groupApprovalRequired === true ? "Reported enabled" : "Not confirmed"}</strong></p>
+              <p>
+                Your Telegram administrator status:{" "}
+                <strong>
+                  {status.actorIsTelegramAdmin ? "Confirmed" : "Missing or unavailable"}
+                </strong>
+              </p>
+              <p>
+                Telegram bot Invite Users permission:{" "}
+                <strong>{status.botCanInvite ? "Confirmed" : "Missing or unavailable"}</strong>
+              </p>
+              <p>
+                Webhook receives join requests:{" "}
+                <strong>{status.webhookSubscribed ? "Confirmed" : "Not confirmed"}</strong>
+              </p>
+              <p>
+                Group-wide approval:{" "}
+                <strong>
+                  {status.groupApprovalRequired === true ? "Reported enabled" : "Not confirmed"}
+                </strong>
+              </p>
               <p className="text-muted-foreground">
-                Review any existing invite links and alternate joining methods inside Telegram.
-                A managed link alone cannot secure the whole group.
+                Review any existing invite links and alternate joining methods inside Telegram. A
+                managed link alone cannot secure the whole group.
               </p>
             </div>
 
             <div className="space-y-2 rounded-md border border-border p-3">
-              <Label htmlFor={"verification-link-" + group.id}>Bot-managed verification invite link</Label>
+              <Label htmlFor={"verification-link-" + group.id}>
+                Bot-managed verification invite link
+              </Label>
               {status.inviteLink ? (
                 <div className="space-y-2">
-                  <p id={"verification-link-" + group.id} className="break-all rounded-md bg-surface-raised p-2 text-xs">
+                  <p
+                    id={"verification-link-" + group.id}
+                    className="break-all rounded-md bg-surface-raised p-2 text-xs"
+                  >
                     {status.inviteLink}
                   </p>
-                  <Button type="button" variant="outline" className="min-h-11" onClick={() => void copyInvite()}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-11"
+                    onClick={() => void copyInvite()}
+                  >
                     <Copy className="size-4" /> Copy link
                   </Button>
                 </div>
               ) : (
-                <p className="text-xs text-muted-foreground">No link generated. Preparing a link is an explicit owner action.</p>
+                <p className="text-xs text-muted-foreground">
+                  No link generated. Preparing a link is an explicit owner action.
+                </p>
               )}
               {!status.configured ? (
-                <Button type="button" className="min-h-11" disabled={!canPrepare || busy || !workspaceId}
-                  onClick={() => void perform(() => prepareCommunityVerificationLink({workspaceId:workspaceId!,groupConnectionId:group.id}),"Telegram invite link prepared.")}>
-                  {busy ? <Loader2 className="size-4 animate-spin"/> : null} Prepare approval-required link
+                <Button
+                  type="button"
+                  className="min-h-11"
+                  disabled={!canPrepare || busy || !workspaceId}
+                  onClick={() =>
+                    void perform(
+                      () =>
+                        prepareCommunityVerificationLink({
+                          workspaceId: workspaceId!,
+                          groupConnectionId: group.id,
+                        }),
+                      "Telegram invite link prepared.",
+                    )
+                  }
+                >
+                  {busy ? <Loader2 className="size-4 animate-spin" /> : null} Prepare
+                  approval-required link
                 </Button>
               ) : (
                 <div className="space-y-2">
                   <div className="flex items-start gap-2">
-                    <Checkbox id={"verification-rotate-" + group.id} checked={rotationConfirmed}
-                      onCheckedChange={(value) => setRotationConfirmed(value===true)} />
-                    <Label htmlFor={"verification-rotate-" + group.id} className="text-xs leading-relaxed">
-                      I understand rotating this link invalidates the previous bot-managed link when Telegram confirms revocation.
+                    <Checkbox
+                      id={"verification-rotate-" + group.id}
+                      checked={rotationConfirmed}
+                      onCheckedChange={(value) => setRotationConfirmed(value === true)}
+                    />
+                    <Label
+                      htmlFor={"verification-rotate-" + group.id}
+                      className="text-xs leading-relaxed"
+                    >
+                      I understand rotating this link invalidates the previous bot-managed link when
+                      Telegram confirms revocation.
                     </Label>
                   </div>
-                  <Button type="button" variant="outline" className="min-h-11"
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="min-h-11"
                     disabled={!canPrepare || !rotationConfirmed || busy || !workspaceId}
-                    onClick={() => void perform(
-                      () => rotateCommunityVerificationLink({workspaceId:workspaceId!,groupConnectionId:group.id,confirmRotate:true}),
-                      "New verification link created."
-                    )}>Rotate link</Button>
+                    onClick={() =>
+                      void perform(
+                        () =>
+                          rotateCommunityVerificationLink({
+                            workspaceId: workspaceId!,
+                            groupConnectionId: group.id,
+                            confirmRotate: true,
+                          }),
+                        "New verification link created.",
+                      )
+                    }
+                  >
+                    Rotate link
+                  </Button>
                 </div>
               )}
               {oldLinkWarning ? (
                 <p className="text-xs text-signal" role="alert">
-                  Telegram did not confirm revocation of the previous link. Review and revoke it directly in Telegram.
+                  Telegram did not confirm revocation of the previous link. Review and revoke it
+                  directly in Telegram.
                 </p>
               ) : null}
             </div>
 
             <div className="space-y-3 rounded-md border border-border p-3">
               <div className="flex items-center gap-2">
-                <CheckCircle2 className="size-4" aria-hidden="true"/>
+                <CheckCircle2 className="size-4" aria-hidden="true" />
                 <p className="text-sm font-semibold">Enable automatic verification</p>
               </div>
               <div className="flex items-start gap-2">
-                <Checkbox id={"verification-join-routes-" + group.id}
-                  checked={joinRoutesReviewed} onCheckedChange={(value) => setJoinRoutesReviewed(value===true)} />
-                <Label htmlFor={"verification-join-routes-" + group.id} className="text-xs leading-relaxed">
-                  I reviewed public-group admission settings and other active invite links in Telegram.
-                  I understand Cartel HQ cannot ensure every joining path requires its challenge.
+                <Checkbox
+                  id={"verification-join-routes-" + group.id}
+                  checked={joinRoutesReviewed}
+                  onCheckedChange={(value) => setJoinRoutesReviewed(value === true)}
+                />
+                <Label
+                  htmlFor={"verification-join-routes-" + group.id}
+                  className="text-xs leading-relaxed"
+                >
+                  I reviewed public-group admission settings and other active invite links in
+                  Telegram. I understand Cartel HQ cannot ensure every joining path requires its
+                  challenge.
                 </Label>
               </div>
-              <Button type="button" className="min-h-11"
-                disabled={!canEnable || busy || !joinRoutesReviewed || status.enabled || !workspaceId}
-                onClick={() => void perform(
-                  () => setCommunityVerificationEnabled({workspaceId:workspaceId!,groupConnectionId:group.id,enabled:true,reviewedAllJoinRoutes:true}),
-                  "Member verification enabled for managed-link requests."
-                )}>Enable verification</Button>
-              <Button type="button" variant="outline" className="min-h-11"
+              <Button
+                type="button"
+                className="min-h-11"
+                disabled={
+                  !canEnable || busy || !joinRoutesReviewed || status.enabled || !workspaceId
+                }
+                onClick={() =>
+                  void perform(
+                    () =>
+                      setCommunityVerificationEnabled({
+                        workspaceId: workspaceId!,
+                        groupConnectionId: group.id,
+                        enabled: true,
+                        reviewedAllJoinRoutes: true,
+                      }),
+                    "Member verification enabled for managed-link requests.",
+                  )
+                }
+              >
+                Enable verification
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="min-h-11"
                 disabled={!status.enabled || busy || !workspaceId}
-                onClick={() => void perform(
-                  () => setCommunityVerificationEnabled({workspaceId:workspaceId!,groupConnectionId:group.id,enabled:false,reviewedAllJoinRoutes:false}),
-                  "Member verification disabled."
-                )}>Disable verification</Button>
+                onClick={() =>
+                  void perform(
+                    () =>
+                      setCommunityVerificationEnabled({
+                        workspaceId: workspaceId!,
+                        groupConnectionId: group.id,
+                        enabled: false,
+                        reviewedAllJoinRoutes: false,
+                      }),
+                    "Member verification disabled.",
+                  )
+                }
+              >
+                Disable verification
+              </Button>
             </div>
-            {problem ? <p role="alert" className="text-xs text-signal">{problem}</p> : null}
+            {problem ? (
+              <p role="alert" className="text-xs text-signal">
+                {problem}
+              </p>
+            ) : null}
             <p className="text-xs text-muted-foreground">
-              Incorrect, expired or undeliverable challenges remain pending for administrator review.
-              Cartel HQ will not automatically kick, ban or mute current members.
+              Incorrect, expired or undeliverable challenges remain pending for administrator
+              review. Cartel HQ will not automatically kick, ban or mute current members.
             </p>
           </div>
         ) : null}
