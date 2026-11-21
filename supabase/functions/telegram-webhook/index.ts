@@ -613,7 +613,14 @@ async function ensureWebhookUpdates(token: string, supabaseUrl: string) {
     await telegramJson(token, "setWebhook", {
       url,
       secret_token: secret,
-      allowed_updates: ["message", "my_chat_member", "callback_query"],
+      allowed_updates: [
+        "message",
+        "my_chat_member",
+        "callback_query",
+        ...(Deno.env.get("CARTEL_MEMBER_VERIFICATION_ENABLED") === "true"
+          ? ["chat_join_request"]
+          : []),
+      ],
       drop_pending_updates: false,
     });
   } catch (err) {
@@ -621,6 +628,55 @@ async function ensureWebhookUpdates(token: string, supabaseUrl: string) {
   }
 }
 
+
+/**
+ * Opt-in member verification, source-only draft.
+ * The Telegram identity is authenticated by the existing webhook secret, and
+ * challenge answers are HMAC hashes keyed with the server-only bot token.
+ */
+async function memberVerificationAnswerHash(
+  botToken: string,
+  challengeId: string,
+  option: number,
+): Promise<string> {
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    "raw",
+    encoder.encode(botToken + ":member-verification:v1"),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const signed = await crypto.subtle.sign("HMAC", key, encoder.encode(challengeId + ":" + option));
+  return Array.from(new Uint8Array(signed))
+    .map((n) => n.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function memberVerificationInviteFingerprint(invite: string): Promise<string> {
+  const bytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(invite));
+  return Array.from(new Uint8Array(bytes))
+    .map((n) => n.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function memberVerificationChoices() {
+  const bytes = new Uint32Array(6);
+  crypto.getRandomValues(bytes);
+  const a = 2 + (bytes[0] % 7);
+  const b = 2 + (bytes[1] % 7);
+  const answer = a + b;
+  const choices = [answer, answer + 1, answer - 1, answer + 2];
+  for (let i = choices.length - 1; i > 0; i--) {
+    const j = bytes[i + 1] % (i + 1);
+    [choices[i], choices[j]] = [choices[j], choices[i]];
+  }
+  return {
+    question: "What is " + a + " + " + b + "?",
+    choices,
+    correctIndex: choices.indexOf(answer),
+  };
+}
 
 // --------------------------------------------------------------------------
 // Phase 4 — Launch Watch (opt-in only).
@@ -709,6 +765,9 @@ Deno.serve(async (req: Request) => {
   let update: any;
   try { update = await req.json(); } catch { return json({ ok: true }); }
   const admin = createClient(SUPABASE_URL, SERVICE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+  const accessClient = {
+    rpc: (fn: string, args: Record<string, unknown>) => Promise.resolve(admin.rpc(fn, args)),
+  };
   void ensureCommands(TELEGRAM_BOT_TOKEN);
   void ensureBotProfile(TELEGRAM_BOT_TOKEN);
   void ensureWebhookUpdates(TELEGRAM_BOT_TOKEN, SUPABASE_URL);
@@ -1079,7 +1138,7 @@ Deno.serve(async (req: Request) => {
           }),
           signal: AbortSignal.timeout(30_000),
         });
-        closeTransport = (await response.json().catch(() => null)) as typeof closeTransport;
+        closeTransport = await response.json().catch(() => null);
       } catch {
         closeTransport = null;
       }
@@ -1248,7 +1307,11 @@ Deno.serve(async (req: Request) => {
         await reply("Link your Telegram account to CARTEL HQ before starting a Social Mission.");
         return;
       }
-      const identityGate = await requireProjectToolAccess(admin, actorUserId, connection.workspace_id);
+      const identityGate = await requireProjectToolAccess(
+        accessClient,
+        actorUserId,
+        connection.workspace_id,
+      );
       if (!identityGate.allowed) {
         timing.log(isLinkFinder ? "link_finder_start_blocked" : "mission_command_blocked");
         await reply("Create this project's Project Identity in CARTEL HQ first (project name + URL slug). Token launch is not required.");
@@ -1256,7 +1319,12 @@ Deno.serve(async (req: Request) => {
       }
       // Commercial Foundation B — x_missions quota after identity, before
       // onStartAccepted and create_social_mission_from_telegram_link.
-      const missionCommercialGate = await requireCommercialAccess(admin, actorUserId, connection.workspace_id, "x_missions");
+      const missionCommercialGate = await requireCommercialAccess(
+        accessClient,
+        actorUserId,
+        connection.workspace_id,
+        "x_missions",
+      );
       if (!missionCommercialGate.allowed) {
         timing.log(isLinkFinder ? "link_finder_start_blocked" : "mission_command_blocked");
         await reply(`${missionCommercialGate.body.message} No mission was started.`);
@@ -1400,7 +1468,7 @@ Deno.serve(async (req: Request) => {
         }),
         signal: AbortSignal.timeout(30_000),
       });
-      transport = (await response.json().catch(() => null)) as typeof transport;
+      transport = await response.json().catch(() => null);
     } catch {
       transport = null;
     }
@@ -2059,7 +2127,12 @@ Deno.serve(async (req: Request) => {
     // Free/Pro plan foundation: a genuinely NEW group for this workspace consumes
     // the telegram_groups quota. Same-workspace reconnect/reverify bypasses it.
     if (!claimed) {
-      const groupLimitGate = await requireCommercialAccess(admin, link.user_id, workspaceId, "telegram_groups");
+      const groupLimitGate = await requireCommercialAccess(
+        accessClient,
+        link.user_id,
+        workspaceId,
+        "telegram_groups",
+      );
       if (!groupLimitGate.allowed) {
         await sendMessage(TELEGRAM_BOT_TOKEN, chatId, `CARTEL HQ could not connect this group: ${groupLimitGate.body.message} Upgrade in CARTEL HQ Settings to connect more groups.`);
         return { ok: false, reason: "plan_limit" };
@@ -3044,6 +3117,216 @@ Deno.serve(async (req: Request) => {
   });
 
   try {
+    // Join requests are opt-in. Existing message/welcome and mission callbacks
+    // remain unchanged. Any unknown or disabled group fails closed.
+    const join = update?.chat_join_request;
+    if (join) {
+      // Absolute off-switch: do not make any Telegram API calls, even for
+      // guard-bot join-query updates, when verification is disabled globally.
+      if (Deno.env.get("CARTEL_MEMBER_VERIFICATION_ENABLED") !== "true") return json({ ok: true });
+      const userId = Number(join?.from?.id),
+        chatId = Number(join?.chat?.id),
+        updateId = Number(update?.update_id);
+      const privateChatId = Number(join?.user_chat_id);
+      if (
+        !Number.isSafeInteger(userId) ||
+        userId <= 0 ||
+        !Number.isSafeInteger(chatId) ||
+        !Number.isSafeInteger(updateId) ||
+        updateId <= 0 ||
+        join?.from?.is_bot === true
+      )
+        return json({ ok: true });
+      // Telegram's temporary private-message window starts at the join event,
+      // not webhook receipt. Delayed/replayed events must not get a fresh window.
+      const joinedAtMs = Number(join.date) * 1000;
+      if (
+        !Number.isSafeInteger(joinedAtMs) ||
+        joinedAtMs <= 0 ||
+        joinedAtMs > Date.now() + 30_000 ||
+        Date.now() >= joinedAtMs + 4 * 60_000
+      )
+        return json({ ok: true });
+      // Only the group's bot-created managed invite link is eligible; public
+      // join paths and unrecognized links are left for manual Telegram review.
+      const usedLink = String(join?.invite_link?.invite_link ?? "");
+      const { data: group, error: groupError } = await admin
+        .from("telegram_group_connections")
+        .select("id,workspace_id,telegram_chat_id")
+        .eq("telegram_chat_id", chatId)
+        .maybeSingle();
+      if (groupError || !group?.id) return json({ ok: true });
+      const [{ data: settings, error: settingsError }, { data: managed, error: managedError }] =
+        await Promise.all([
+          admin
+            .from("telegram_community_settings")
+            .select("verification_enabled")
+            .eq("group_connection_id", group.id)
+            .eq("workspace_id", group.workspace_id)
+            .maybeSingle(),
+          admin
+            .from("telegram_member_verification_invites")
+            .select("invite_link")
+            .eq("group_connection_id", group.id)
+            .eq("workspace_id", group.workspace_id)
+            .maybeSingle(),
+        ]);
+      if (settingsError || managedError || settings?.verification_enabled !== true)
+        return json({ ok: true });
+      if (join.query_id) {
+        // Telegram Bot API 10.4: query-style join requests must be resolved
+        // promptly. "queue" explicitly delegates to human administrators.
+        try {
+          await telegramJson(TELEGRAM_BOT_TOKEN, "answerChatJoinRequestQuery", {
+            chat_join_request_query_id: String(join.query_id),
+            result: "queue",
+          });
+        } catch {
+          /* Continue the managed-invite checks if queue acknowledgement fails. */
+        }
+      }
+      if (!managed?.invite_link || usedLink !== managed.invite_link) {
+        // A newer join request through an unrecognized/rotated invitation
+        // invalidates any old pending challenge for this applicant and group.
+        // Never approve someone based on a challenge for an earlier entry path.
+        await admin
+          .from("telegram_member_verification_challenges")
+          .update({
+            status: "needs_review",
+            last_error_code: "alternate_join_route",
+            resolved_at: new Date().toISOString(),
+          })
+          .eq("group_connection_id", group.id)
+          .eq("telegram_user_id", userId)
+          .eq("status", "pending")
+          .lt("telegram_update_id", updateId);
+        return json({ ok: true });
+      }
+      // Cheap per-user cap plus per-group cap. No polling or unbounded logs.
+      const oneHourAgo = new Date(Date.now() - 3600_000).toISOString();
+      const oneMinuteAgo = new Date(Date.now() - 60_000).toISOString();
+      const [
+        { count: userHour, error: userCapError },
+        { count: groupMinute, error: groupCapError },
+        { data: active, error: activeError },
+      ] = await Promise.all([
+        admin
+          .from("telegram_member_verification_challenges")
+          .select("id", { count: "exact", head: true })
+          .eq("group_connection_id", group.id)
+          .eq("telegram_user_id", userId)
+          .gte("created_at", oneHourAgo),
+        admin
+          .from("telegram_member_verification_challenges")
+          .select("id", { count: "exact", head: true })
+          .eq("group_connection_id", group.id)
+          .gte("created_at", oneMinuteAgo),
+        admin
+          .from("telegram_member_verification_challenges")
+          .select("id,status,expires_at,telegram_update_id")
+          .eq("group_connection_id", group.id)
+          .eq("telegram_user_id", userId)
+          .in("status", ["pending", "approving"])
+          .limit(1)
+          .maybeSingle(),
+      ]);
+      if (userCapError || groupCapError || activeError) return json({ ok: true });
+      if ((userHour ?? 0) >= 5 || (groupMinute ?? 0) >= 20) return json({ ok: true });
+      if (active?.id) {
+        // A Telegram webhook replay is not a fresh join request.
+        if (Number(active.telegram_update_id) >= updateId) return json({ ok: true });
+        // An in-flight approval cannot be safely reused for another join.
+        if (active.status === "approving") {
+          if (new Date(active.expires_at).getTime() > Date.now()) return json({ ok: true });
+          const { data: stale, error: staleError } = await admin
+            .from("telegram_member_verification_challenges")
+            .update({
+              status: "needs_review",
+              resolved_at: new Date().toISOString(),
+              last_error_code: "stale_approval_manual_review",
+            })
+            .eq("id", active.id)
+            .eq("status", "approving")
+            .select("id")
+            .maybeSingle();
+          if (staleError || !stale?.id) return json({ ok: true });
+        } else {
+          // A new join request must never reuse an old challenge, even when the
+          // applicant joins through the same managed invite link.
+          const isExpired = new Date(active.expires_at).getTime() <= Date.now();
+          const { data: closed, error: closeError } = await admin
+            .from("telegram_member_verification_challenges")
+            .update({
+              status: isExpired ? "expired" : "needs_review",
+              resolved_at: new Date().toISOString(),
+              last_error_code: isExpired ? "expired" : "superseded_join_request",
+            })
+            .eq("id", active.id)
+            .eq("status", "pending")
+            .select("id")
+            .maybeSingle();
+          if (closeError || !closed?.id) return json({ ok: true });
+        }
+      }
+      const challengeId = crypto.randomUUID(),
+        quiz = memberVerificationChoices();
+      const hash = await memberVerificationAnswerHash(
+        TELEGRAM_BOT_TOKEN,
+        challengeId,
+        quiz.correctIndex,
+      );
+      const inviteFingerprint = await memberVerificationInviteFingerprint(usedLink);
+      const expiresAt = new Date(joinedAtMs + 4 * 60_000).toISOString();
+      const { data: inserted, error: insertError } = await admin
+        .from("telegram_member_verification_challenges")
+        .insert({
+          id: challengeId,
+          group_connection_id: group.id,
+          workspace_id: group.workspace_id,
+          telegram_user_id: userId,
+          user_chat_id:
+            Number.isSafeInteger(privateChatId) && privateChatId > 0 ? privateChatId : null,
+          telegram_update_id: updateId,
+          answer_hash: hash,
+          invite_link_fingerprint: inviteFingerprint,
+          expires_at: expiresAt,
+        })
+        .select("id")
+        .maybeSingle();
+      if (insertError || !inserted?.id) return json({ ok: true });
+      const keys = quiz.choices.map((n, i) => [
+        { text: String(n), callback_data: "mv_" + challengeId + "_" + i },
+      ]);
+      const outcome =
+        Number.isSafeInteger(privateChatId) && privateChatId > 0
+          ? await sendMessageWithOutcome(
+              TELEGRAM_BOT_TOKEN,
+              String(privateChatId),
+              "<b>Cartel HQ: membership check</b>\n\n" +
+                escapeHtml(String(join?.chat?.title ?? "Your community")) +
+                "\n" +
+                quiz.question +
+                "\nSelect the correct answer to request admission. Complete within 4 minutes of your join request.",
+              { parse_mode: "HTML", reply_markup: { inline_keyboard: keys } },
+            )
+          : {
+              status: "failed" as const,
+              errorClass: "no_temporary_dm",
+              detail: "No private chat available",
+            };
+      if (outcome.status !== "sent") {
+        await admin
+          .from("telegram_member_verification_challenges")
+          .update({
+            status: "delivery_failed",
+            resolved_at: new Date().toISOString(),
+            last_error_code: outcome.errorClass.slice(0, 64),
+          })
+          .eq("id", challengeId)
+          .eq("status", "pending");
+      }
+      return json({ ok: true });
+    }
 
 
     const callback = update?.callback_query;
@@ -3053,6 +3336,143 @@ Deno.serve(async (req: Request) => {
       const callbackChat = callback.message?.chat;
       const callbackChatId = callbackChat?.id != null ? String(callbackChat.id) : String(from.id);
       const linked = await getLinkedUser(String(from.id));
+
+      // A verified Telegram button actor may claim exactly one pending challenge.
+      const verificationTap = callbackData.match(/^mv_([a-f0-9-]{36})_([0-3])$/i);
+      if (verificationTap) {
+        if (
+          Deno.env.get("CARTEL_MEMBER_VERIFICATION_ENABLED") !== "true" ||
+          callbackChat?.type !== "private"
+        ) {
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, "Verification is not available.");
+          return json({ ok: true });
+        }
+        const challengeId = verificationTap[1],
+          choice = Number(verificationTap[2]),
+          actorId = Number(from.id);
+        if (!Number.isSafeInteger(actorId) || actorId <= 0) return json({ ok: true });
+        const hash = await memberVerificationAnswerHash(TELEGRAM_BOT_TOKEN, challengeId, choice);
+        const { data: claim, error: claimError } = await admin.rpc("member_verification_attempt", {
+          _challenge_id: challengeId,
+          _telegram_user_id: actorId,
+          _choice_hash: hash,
+        });
+        const result = String(claim ?? "");
+        if (claimError || result !== "correct") {
+          const response =
+            result === "incorrect"
+              ? "Incorrect answer. Try again."
+              : result === "incorrect_limit"
+                ? "Too many attempts; ask an admin to review."
+                : result === "expired"
+                  ? "This verification expired; ask an admin to review."
+                  : "This request is no longer available.";
+          await answerCallback(TELEGRAM_BOT_TOKEN, callback.id, response);
+          return json({ ok: true });
+        }
+        const { data: row, error: rowError } = await admin
+          .from("telegram_member_verification_challenges")
+          .select(
+            "id,telegram_user_id,group_connection_id,workspace_id,status,invite_link_fingerprint",
+          )
+          .eq("id", challengeId)
+          .eq("status", "approving")
+          .maybeSingle();
+        if (rowError || !row || Number(row.telegram_user_id) !== actorId) {
+          await answerCallback(
+            TELEGRAM_BOT_TOKEN,
+            callback.id,
+            "Ask an admin to review this request.",
+          );
+          return json({ ok: true });
+        }
+        const [{ data: group }, { data: settings }, { data: link }] = await Promise.all([
+          admin
+            .from("telegram_group_connections")
+            .select("telegram_chat_id,workspace_id")
+            .eq("id", row.group_connection_id)
+            .eq("workspace_id", row.workspace_id)
+            .maybeSingle(),
+          admin
+            .from("telegram_community_settings")
+            .select("verification_enabled")
+            .eq("group_connection_id", row.group_connection_id)
+            .eq("workspace_id", row.workspace_id)
+            .maybeSingle(),
+          admin
+            .from("telegram_member_verification_invites")
+            .select("invite_link")
+            .eq("group_connection_id", row.group_connection_id)
+            .eq("workspace_id", row.workspace_id)
+            .maybeSingle(),
+        ]);
+        const matchedInvite =
+          typeof link?.invite_link === "string" &&
+          row.invite_link_fingerprint ===
+            (await memberVerificationInviteFingerprint(link.invite_link));
+        if (!group?.telegram_chat_id || settings?.verification_enabled !== true || !matchedInvite) {
+          await admin
+            .from("telegram_member_verification_challenges")
+            .update({
+              status: "needs_review",
+              last_error_code: "group_not_ready",
+            })
+            .eq("id", challengeId)
+            .eq("status", "approving");
+          await answerCallback(
+            TELEGRAM_BOT_TOKEN,
+            callback.id,
+            "Await manual administrator review.",
+          );
+          return json({ ok: true });
+        }
+        let approved = false,
+          confirmedJoined = false;
+        try {
+          const telegramResult = await telegramJson(TELEGRAM_BOT_TOKEN, "approveChatJoinRequest", {
+            chat_id: String(group.telegram_chat_id),
+            user_id: actorId,
+          });
+          approved = telegramResult === true;
+        } catch {
+          // A timeout is ambiguous. Never replay an approval without evidence.
+          try {
+            const membership = await telegramJson(TELEGRAM_BOT_TOKEN, "getChatMember", {
+              chat_id: String(group.telegram_chat_id),
+              user_id: actorId,
+            });
+            confirmedJoined =
+              ["member", "administrator", "creator", "restricted"].includes(
+                String(membership?.status),
+              ) && !(membership?.status === "restricted" && membership?.is_member === false);
+          } catch {
+            /* An unconfirmed membership stays in manual review. */
+          }
+        }
+        await admin
+          .from("telegram_member_verification_challenges")
+          .update({
+            status: approved || confirmedJoined ? "approved" : "needs_review",
+            resolved_at: new Date().toISOString(),
+            last_error_code: approved
+              ? null
+              : confirmedJoined
+                ? "joined_by_unknown_admin"
+                : "telegram_approval_uncertain",
+          })
+          .eq("id", challengeId)
+          .eq("status", "approving");
+        await answerCallback(
+          TELEGRAM_BOT_TOKEN,
+          callback.id,
+          approved
+            ? "Verification passed. Welcome!"
+            : confirmedJoined
+              ? "You have joined. Verification was completed."
+              : "Verification passed; Telegram approval needs administrator review.",
+        );
+        return json({ ok: true });
+      }
 
       // SE-6 Step 1 — X Link Finder decision. STRICT SEQUENCING:
       //   1. READ-ONLY preflight (`peek_...`) — mutates nothing.
@@ -5350,12 +5770,21 @@ Deno.serve(async (req: Request) => {
             await sendMessage(TELEGRAM_BOT_TOKEN, chatId, "That reply could not be queued. Nothing was sent. Try again.");
             return json({ ok: true });
           }
-          const inboxIdentityGate = await requireProjectToolAccess(admin, inboxActorUserId, inboxWorkspaceId);
+          const inboxIdentityGate = await requireProjectToolAccess(
+            accessClient,
+            inboxActorUserId,
+            inboxWorkspaceId,
+          );
           if (!inboxIdentityGate.allowed) {
             await sendMessage(TELEGRAM_BOT_TOKEN, chatId, "Create this project's Project Identity in CARTEL HQ first. Nothing was sent.");
             return json({ ok: true });
           }
-          const inboxCommercialGate = await requireCommercialAccess(admin, inboxActorUserId, inboxWorkspaceId, "project_inbox");
+          const inboxCommercialGate = await requireCommercialAccess(
+            accessClient,
+            inboxActorUserId,
+            inboxWorkspaceId,
+            "project_inbox",
+          );
           if (!inboxCommercialGate.allowed) {
             await sendMessage(TELEGRAM_BOT_TOKEN, chatId, `${inboxCommercialGate.body.message} Nothing was sent.`);
             return json({ ok: true });
